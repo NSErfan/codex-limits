@@ -5,7 +5,7 @@ project_dir=${0:A:h:h}
 app_dir="$project_dir/.build/release/Codex Limits.app"
 
 cd "$project_dir"
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export DEVELOPER_DIR=${DEVELOPER_DIR:-$(xcode-select -p)}
 export CLANG_MODULE_CACHE_PATH=/private/tmp/codex-limits-clang-cache
 export SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/codex-limits-swiftpm-cache
 

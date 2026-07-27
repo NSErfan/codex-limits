@@ -37,4 +37,26 @@ final class CodexClientTests: XCTestCase {
         XCTAssertEqual(result.emergencyResetCount, 3)
         XCTAssertEqual(result.fetchedAt, fetchedAt)
     }
+
+    func testUsageRPCErrorDoesNotDiscardRateLimits() async throws {
+        let serverOutput = Pipe()
+        let clientInput = Pipe()
+        let rateLimits = #"{"id":2,"result":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":20,"windowDurationMins":10080,"resetsAt":2000000}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":20,"windowDurationMins":10080,"resetsAt":2000000}}},"rateLimitResetCredits":{"availableCount":3}}}"#
+        let usageError = #"{"id":3,"error":{"code":-32603,"message":"Usage is temporarily unavailable"}}"#
+        try serverOutput.fileHandleForWriting.write(
+            contentsOf: Data((usageError + "\n" + rateLimits + "\n").utf8)
+        )
+        try serverOutput.fileHandleForWriting.close()
+        let fetchedAt = Date(timeIntervalSince1970: 1_900_000)
+
+        let result = try await CodexClient.readSnapshot(
+            from: serverOutput.fileHandleForReading,
+            writingTo: clientInput.fileHandleForWriting,
+            fetchedAt: fetchedAt
+        )
+
+        XCTAssertEqual(result.mainLimit.window.remainingPercent, 80)
+        XCTAssertEqual(result.tokenHistory, [])
+        XCTAssertEqual(result.fetchedAt, fetchedAt)
+    }
 }

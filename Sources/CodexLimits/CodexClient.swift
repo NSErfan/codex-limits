@@ -1,25 +1,5 @@
 import Foundation
 
-enum CodexClientError: LocalizedError {
-    case cliNotFound
-    case invalidResponse
-    case mainLimitMissing
-    case timedOut
-
-    var errorDescription: String? {
-        switch self {
-        case .cliNotFound:
-            "Codex CLI was not found. Install it with Homebrew, sign in, and try again."
-        case .invalidResponse:
-            "Codex returned data this app could not read. Update Codex CLI and try again."
-        case .mainLimitMissing:
-            "Codex did not return a usable limit. Make sure Codex CLI is signed in."
-        case .timedOut:
-            "Codex took too long to respond. Try refreshing again."
-        }
-    }
-}
-
 enum CodexClient {
     private static let executablePaths = [
         "/opt/homebrew/bin/codex",
@@ -80,13 +60,18 @@ enum CodexClient {
 
     static func decode(
         rateLimitsResponse: Data,
-        usageResponse: Data,
+        usageResponse: Data?,
         fetchedAt: Date
     ) throws -> UsageSnapshot {
         let decoder = JSONDecoder()
-        guard let rateResult = try decoder.decode(RPCResponse<RateLimitsResult>.self, from: rateLimitsResponse).result,
-              let usageResult = try decoder.decode(RPCResponse<UsageResult>.self, from: usageResponse).result else {
+        guard let rateResult = try decoder.decode(
+            RPCResponse<RateLimitsResult>.self,
+            from: rateLimitsResponse
+        ).result else {
             throw CodexClientError.invalidResponse
+        }
+        let usageResult = usageResponse.flatMap {
+            try? decoder.decode(RPCResponse<UsageResult>.self, from: $0).result
         }
 
         let snapshots = rateResult.rateLimitsByLimitId ?? ["codex": rateResult.rateLimits]
@@ -123,7 +108,7 @@ enum CodexClient {
         dateFormatter.calendar = Calendar(identifier: .gregorian)
         dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let tokenHistory = (usageResult.dailyUsageBuckets ?? []).compactMap { bucket -> TokenDay? in
+        let tokenHistory = (usageResult?.dailyUsageBuckets ?? []).compactMap { bucket -> TokenDay? in
             guard let date = dateFormatter.date(from: bucket.startDate) else { return nil }
             return TokenDay(date: date, tokens: bucket.tokens)
         }
@@ -160,13 +145,14 @@ enum CodexClient {
         try handle.write(contentsOf: Data((message + "\n").utf8))
     }
 
-    private static func readSnapshot(
+    static func readSnapshot(
         from output: FileHandle,
         writingTo input: FileHandle,
         fetchedAt: Date
     ) async throws -> UsageSnapshot {
         var rateLimitsResponse: Data?
         var usageResponse: Data?
+        var usageRequestFinished = false
 
         for try await line in output.bytes.lines {
             try Task.checkCancellation()
@@ -174,7 +160,17 @@ enum CodexClient {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let id = object["id"] as? Int else { continue }
 
-            if object["error"] != nil { throw CodexClientError.invalidResponse }
+            if object["error"] != nil {
+                switch id {
+                case 2:
+                    throw CodexClientError.invalidResponse
+                case 3:
+                    usageRequestFinished = true
+                default:
+                    continue
+                }
+            }
+
             switch id {
             case 1:
                 try write(#"{"method":"initialized"}"#, to: input)
@@ -183,12 +179,15 @@ enum CodexClient {
             case 2:
                 rateLimitsResponse = data
             case 3:
-                usageResponse = data
+                if object["error"] == nil {
+                    usageResponse = data
+                    usageRequestFinished = true
+                }
             default:
                 continue
             }
 
-            if let rateLimitsResponse, let usageResponse {
+            if let rateLimitsResponse, usageRequestFinished {
                 return try decode(
                     rateLimitsResponse: rateLimitsResponse,
                     usageResponse: usageResponse,
