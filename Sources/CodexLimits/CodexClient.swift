@@ -26,7 +26,7 @@ enum CodexClient {
         do {
             let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
             try write(
-                #"{"id":1,"method":"initialize","params":{"clientInfo":{"name":"codex-limits","title":"Codex Limits","version":"\#(version)"},"capabilities":{"experimentalApi":true}}}"#,
+                #"{"id":\#(RequestID.initialize.rawValue),"method":"initialize","params":{"clientInfo":{"name":"codex-limits","title":"Codex Limits","version":"\#(version)"},"capabilities":{"experimentalApi":true}}}"#,
                 to: input.fileHandleForWriting
             )
             let fetchedAt = Date()
@@ -170,32 +170,31 @@ enum CodexClient {
                   let rawID = object["id"] as? Int,
                   let id = RequestID(rawValue: rawID) else { continue }
 
-            if object["error"] != nil {
+            if object.keys.contains("error") {
+                guard (try? JSONDecoder().decode(RPCErrorEnvelope.self, from: data)) != nil else {
+                    throw CodexClientError.invalidResponse
+                }
                 switch id {
-                case .rateLimits:
+                case .initialize, .rateLimits:
                     throw CodexClientError.invalidResponse
                 case .usage:
                     usageRequestFinished = true
-                default:
-                    continue
                 }
-            }
-
-            switch id {
-            case .initialize:
-                try write(#"{"method":"initialized"}"#, to: input)
-                try write(
-                    #"{"id":\#(RequestID.rateLimits.rawValue),"method":"account/rateLimits/read"}"#,
-                    to: input
-                )
-                try write(
-                    #"{"id":\#(RequestID.usage.rawValue),"method":"account/usage/read"}"#,
-                    to: input
-                )
-            case .rateLimits:
-                rateLimitsResponse = data
-            case .usage:
-                if object["error"] == nil {
+            } else {
+                switch id {
+                case .initialize:
+                    try write(#"{"method":"initialized"}"#, to: input)
+                    try write(
+                        #"{"id":\#(RequestID.rateLimits.rawValue),"method":"account/rateLimits/read"}"#,
+                        to: input
+                    )
+                    try write(
+                        #"{"id":\#(RequestID.usage.rawValue),"method":"account/usage/read"}"#,
+                        to: input
+                    )
+                case .rateLimits:
+                    rateLimitsResponse = data
+                case .usage:
                     usageResponse = data
                     usageRequestFinished = true
                 }
@@ -217,6 +216,15 @@ private enum RequestID: Int {
     case initialize = 1
     case rateLimits = 2
     case usage = 3
+}
+
+private struct RPCErrorEnvelope: Decodable {
+    let error: RPCError
+}
+
+private struct RPCError: Decodable {
+    let code: Double
+    let message: String
 }
 
 private struct RPCResponse<Result: Decodable>: Decodable {
