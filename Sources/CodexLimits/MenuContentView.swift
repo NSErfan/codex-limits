@@ -258,23 +258,21 @@ enum ChartRange: String, CaseIterable {
     var duration: TimeInterval? {
         switch self {
         case .window: nil
-        case .week: 7 * 86_400
-        case .month: 30 * 86_400
+        case .week, .month: 30 * 86_400
         }
     }
 
     var bucketDuration: TimeInterval {
         switch self {
         case .window: 0
-        case .week: 1_800
-        case .month: 7_200
+        case .week, .month: 1_800
         }
     }
 
     var visibleDuration: TimeInterval? {
         switch self {
-        case .window, .week: nil
-        case .month: 7 * 86_400
+        case .window, .month: nil
+        case .week: 7 * 86_400
         }
     }
 }
@@ -291,8 +289,8 @@ private struct HistoryChart: View {
         HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
     }
 
-    private var isMonth: Bool {
-        range.upperBound.timeIntervalSince(range.lowerBound) > 8 * 86_400
+    private var axisDayStride: Int {
+        visibleDuration == nil ? 5 : 1
     }
 
     private var hoveredPoint: HistorySeriesBuilder.Point? {
@@ -396,18 +394,14 @@ private struct HistoryChart: View {
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: isMonth ? 2 : 1)) { value in
+            AxisMarks(values: .stride(by: .day, count: axisDayStride)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                     .foregroundStyle(Color.secondary.opacity(0.2))
                 AxisTick(length: 3)
                     .foregroundStyle(Color.secondary)
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
-                        if isMonth {
-                            Text(date, format: .dateTime.month(.abbreviated).day())
-                        } else {
-                            Text(date, format: .dateTime.weekday(.abbreviated))
-                        }
+                        Text(date, format: .dateTime.month(.abbreviated).day())
                     }
                 }
                 .foregroundStyle(Color.secondary)
