@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
+    @AppStorage("chartRange") private var chartRange = ChartRange.window
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -55,14 +56,30 @@ struct MenuContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            BurnDownChart(
-                window: snapshot.mainLimit.window,
-                samples: monitor.currentWindowSamples,
-                tokenHistory: snapshot.tokenHistory,
-                fetchedAt: snapshot.fetchedAt,
-                forecast: forecast,
-                safetyBuffer: safetyBuffer
-            )
+            Picker("Chart range", selection: $chartRange) {
+                ForEach(ChartRange.allCases, id: \.self) { range in
+                    Text(range.title)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if let duration = chartRange.duration {
+                HistoryChart(
+                    samples: monitor.samples,
+                    range: snapshot.fetchedAt.addingTimeInterval(-duration) ... snapshot.fetchedAt,
+                    bucketDuration: chartRange.bucketDuration
+                )
+            } else {
+                BurnDownChart(
+                    window: snapshot.mainLimit.window,
+                    samples: monitor.currentWindowSamples,
+                    tokenHistory: snapshot.tokenHistory,
+                    fetchedAt: snapshot.fetchedAt,
+                    forecast: forecast,
+                    safetyBuffer: safetyBuffer
+                )
+            }
 
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 5) {
                 GridRow {
@@ -221,6 +238,131 @@ struct MenuContentView: View {
         }
         let days = Int(seconds / 86_400)
         return "Updated \(days) \(days == 1 ? "day" : "days") ago"
+    }
+}
+
+enum ChartRange: String, CaseIterable {
+    case window
+    case week
+    case month
+
+    var title: String {
+        switch self {
+        case .window: "Window"
+        case .week: "7 days"
+        case .month: "30 days"
+        }
+    }
+
+    var duration: TimeInterval? {
+        switch self {
+        case .window: nil
+        case .week: 7 * 86_400
+        case .month: 30 * 86_400
+        }
+    }
+
+    var bucketDuration: TimeInterval {
+        switch self {
+        case .window: 0
+        case .week: 1_800
+        case .month: 7_200
+        }
+    }
+}
+
+private struct HistoryChart: View {
+    let samples: [UsageSample]
+    let range: ClosedRange<Date>
+    let bucketDuration: TimeInterval
+
+    private var series: [HistorySeriesBuilder.WindowSeries] {
+        HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
+    }
+
+    private var isMonth: Bool {
+        range.upperBound.timeIntervalSince(range.lowerBound) > 8 * 86_400
+    }
+
+    var body: some View {
+        Group {
+            if series.isEmpty {
+                Text("No history yet")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 190)
+            } else {
+                chart
+            }
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private var chart: some View {
+        Chart {
+            ForEach(series) { window in
+                ForEach(window.points, id: \.date) { point in
+                    LineMark(
+                        x: .value("Time", point.date),
+                        y: .value("Remaining", point.remainingPercent),
+                        series: .value("Window", window.resetsAt.timeIntervalSinceReferenceDate)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+
+                if range.contains(window.resetsAt) {
+                    RuleMark(x: .value("Reset", window.resetsAt))
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                }
+            }
+        }
+        .chartXScale(domain: range)
+        .chartYScale(domain: 0 ... 100)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: isMonth ? 5 : 1)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                    .foregroundStyle(Color.secondary.opacity(0.2))
+                AxisTick(length: 3)
+                    .foregroundStyle(Color.secondary)
+                AxisValueLabel {
+                    if let date = value.as(Date.self) {
+                        if isMonth {
+                            Text(date, format: .dateTime.month(.abbreviated).day())
+                        } else {
+                            Text(date, format: .dateTime.weekday(.abbreviated))
+                        }
+                    }
+                }
+                .foregroundStyle(Color.secondary)
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0.0, 25.0, 50.0, 75.0, 100.0]) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                    .foregroundStyle(Color.secondary.opacity(0.2))
+                AxisTick(length: 3)
+                    .foregroundStyle(Color.secondary)
+                AxisValueLabel {
+                    if let percent = value.as(Double.self) {
+                        Text("\(Int(percent))%")
+                    }
+                }
+                .foregroundStyle(Color.secondary)
+            }
+        }
+        .chartLegend(.hidden)
+        .frame(height: 190)
+        .accessibilityLabel("Usage history")
+        .accessibilityValue(accessibilitySummary)
+    }
+
+    private var accessibilitySummary: String {
+        let days = Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
+        guard let latest = series.last?.points.last else {
+            return "No usage history in the last \(days) days."
+        }
+        return "Remaining percentage over the last \(days) days across \(series.count) limit windows, most recently \(Int(latest.remainingPercent.rounded())) percent."
     }
 }
 
