@@ -303,6 +303,14 @@ private struct HistoryChart: View {
             }
     }
 
+    private var hoveredReset: Date? {
+        guard let selectedDate else { return nil }
+        let visible = visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound)
+        return series.resets
+            .min { abs($0.timeIntervalSince(selectedDate)) < abs($1.timeIntervalSince(selectedDate)) }
+            .flatMap { abs($0.timeIntervalSince(selectedDate)) <= visible * 0.015 ? $0 : nil }
+    }
+
     var body: some View {
         Group {
             if series.isEmpty {
@@ -360,30 +368,36 @@ private struct HistoryChart: View {
 
             ForEach(series.resets, id: \.self) { resetDate in
                 RuleMark(x: .value("Reset", resetDate))
-                    .foregroundStyle(Color.green.opacity(0.5))
+                    .foregroundStyle(Color.green.opacity(resetDate == hoveredReset ? 0.9 : 0.45))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .annotation(
-                        position: .bottom,
-                        spacing: 2,
-                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
-                    ) {
-                        HStack(spacing: 2) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 7))
-                            Text(
-                                resetDate,
-                                format: .dateTime.month(.abbreviated).day().hour().minute()
-                            )
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(Color.green)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(.regularMaterial, in: Capsule())
-                    }
             }
 
-            if let hovered = hoveredPoint {
+            if let hoveredReset {
+                PointMark(
+                    x: .value("Reset", hoveredReset),
+                    y: .value("Remaining", 100)
+                )
+                .symbolSize(0)
+                .annotation(
+                    position: .top,
+                    spacing: 4,
+                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                ) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 8))
+                        Text(
+                            hoveredReset,
+                            format: .dateTime.month(.abbreviated).day().hour().minute()
+                        )
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(Color.green)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.regularMaterial, in: Capsule())
+                }
+            } else if let hovered = hoveredPoint {
                 RuleMark(x: .value("Hovered", hovered.date))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
