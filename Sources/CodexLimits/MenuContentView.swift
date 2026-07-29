@@ -276,7 +276,7 @@ private struct HistoryChart: View {
     let range: ClosedRange<Date>
     let bucketDuration: TimeInterval
 
-    private var series: [HistorySeriesBuilder.WindowSeries] {
+    private var series: HistorySeriesBuilder.Series {
         HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
     }
 
@@ -299,21 +299,36 @@ private struct HistoryChart: View {
 
     private var chart: some View {
         Chart {
-            ForEach(series) { window in
-                ForEach(window.points, id: \.date) { point in
+            ForEach(series.connectors) { connector in
+                ForEach([connector.start, connector.end], id: \.date) { point in
                     LineMark(
                         x: .value("Time", point.date),
                         y: .value("Remaining", point.remainingPercent),
-                        series: .value("Window", window.resetsAt.timeIntervalSinceReferenceDate)
+                        series: .value("Series", "gap-\(connector.id)")
+                    )
+                    .foregroundStyle(Color.blue.opacity(0.4))
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                }
+            }
+
+            ForEach(series.runs) { run in
+                if run.points.count == 1, let point = run.points.first {
+                    PointMark(
+                        x: .value("Time", point.date),
+                        y: .value("Remaining", point.remainingPercent)
                     )
                     .foregroundStyle(Color.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                }
-
-                if range.contains(window.resetsAt) {
-                    RuleMark(x: .value("Reset", window.resetsAt))
-                        .foregroundStyle(Color.secondary.opacity(0.35))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .symbolSize(20)
+                } else {
+                    ForEach(run.points, id: \.date) { point in
+                        LineMark(
+                            x: .value("Time", point.date),
+                            y: .value("Remaining", point.remainingPercent),
+                            series: .value("Series", "run-\(run.id)")
+                        )
+                        .foregroundStyle(Color.blue)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                    }
                 }
             }
         }
@@ -359,10 +374,13 @@ private struct HistoryChart: View {
 
     private var accessibilitySummary: String {
         let days = Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
-        guard let latest = series.last?.points.last else {
+        guard let latest = series.latestPoint else {
             return "No usage history in the last \(days) days."
         }
-        return "Remaining percentage over the last \(days) days across \(series.count) limit windows, most recently \(Int(latest.remainingPercent.rounded())) percent."
+        let gaps = series.connectors.isEmpty
+            ? ""
+            : " \(series.connectors.count) gaps are shown as estimated connectors."
+        return "Remaining percentage over the last \(days) days, most recently \(Int(latest.remainingPercent.rounded())) percent.\(gaps)"
     }
 }
 
