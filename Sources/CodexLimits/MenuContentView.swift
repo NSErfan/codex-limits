@@ -276,6 +276,14 @@ private struct GlassSegmentedPicker: View {
     @Namespace private var thumbNamespace
 
     var body: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 2) { track }
+        } else {
+            track
+        }
+    }
+
+    private var track: some View {
         HStack(spacing: 2) {
             ForEach(ChartRange.allCases, id: \.self) { range in
                 segment(for: range)
@@ -316,6 +324,7 @@ private struct GlassSegmentedPicker: View {
             Capsule()
                 .fill(Color.clear)
                 .glassEffect(.regular.interactive(), in: Capsule())
+                .glassEffectID("thumb", in: thumbNamespace)
         } else {
             Capsule()
                 .fill(.regularMaterial)
