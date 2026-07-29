@@ -56,13 +56,7 @@ struct MenuContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Picker("Chart range", selection: $chartRange) {
-                ForEach(ChartRange.allCases, id: \.self) { range in
-                    Text(range.title)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            GlassSegmentedPicker(selection: $chartRange)
 
             if let duration = chartRange.duration {
                 HistoryChart(
@@ -273,6 +267,60 @@ enum ChartRange: String, CaseIterable {
         switch self {
         case .window, .month: nil
         case .week: 7 * 86_400
+        }
+    }
+}
+
+private struct GlassSegmentedPicker: View {
+    @Binding var selection: ChartRange
+    @Namespace private var thumbNamespace
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(ChartRange.allCases, id: \.self) { range in
+                segment(for: range)
+            }
+        }
+        .padding(3)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+        }
+    }
+
+    private func segment(for range: ChartRange) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                selection = range
+            }
+        } label: {
+            Text(range.title)
+                .font(.callout.weight(selection == range ? .semibold : .regular))
+                .foregroundStyle(selection == range ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .contentShape(Capsule())
+                .background {
+                    if selection == range {
+                        thumb.matchedGeometryEffect(id: "thumb", in: thumbNamespace)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == range ? [.isSelected] : [])
+    }
+
+    @ViewBuilder private var thumb: some View {
+        if #available(macOS 26.0, *) {
+            Capsule()
+                .fill(Color.clear)
+                .glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            Capsule()
+                .fill(.regularMaterial)
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
         }
     }
 }
