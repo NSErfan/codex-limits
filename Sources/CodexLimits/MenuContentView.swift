@@ -312,7 +312,8 @@ private struct HistoryChart: View {
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 3) {
+            readout
             if series.isEmpty {
                 Text("No history yet")
                     .foregroundStyle(.secondary)
@@ -329,6 +330,35 @@ private struct HistoryChart: View {
             }
         }
         .padding(.horizontal, 8)
+    }
+
+    private var readout: some View {
+        HStack(spacing: 4) {
+            Spacer()
+            if let hoveredReset {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 8))
+                    .foregroundStyle(Color.green)
+                Text("Reset")
+                    .foregroundStyle(Color.green)
+                Text(
+                    hoveredReset,
+                    format: .dateTime.month(.abbreviated).day().hour().minute()
+                )
+                .foregroundStyle(.secondary)
+            } else if let hovered = hoveredPoint {
+                Text("\(Int(hovered.remainingPercent.rounded()))%")
+                    .fontWeight(.semibold)
+                Text(
+                    hovered.date,
+                    format: .dateTime.month(.abbreviated).day().hour().minute()
+                )
+                .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption2)
+        .monospacedDigit()
+        .frame(height: 12)
     }
 
     private var chart: some View {
@@ -372,32 +402,7 @@ private struct HistoryChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
             }
 
-            if let hoveredReset {
-                PointMark(
-                    x: .value("Reset", hoveredReset),
-                    y: .value("Remaining", 100)
-                )
-                .symbolSize(0)
-                .annotation(
-                    position: .top,
-                    spacing: 4,
-                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
-                ) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 8))
-                        Text(
-                            hoveredReset,
-                            format: .dateTime.month(.abbreviated).day().hour().minute()
-                        )
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(Color.green)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(.regularMaterial, in: Capsule())
-                }
-            } else if let hovered = hoveredPoint {
+            if hoveredReset == nil, let hovered = hoveredPoint {
                 RuleMark(x: .value("Hovered", hovered.date))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
@@ -408,25 +413,6 @@ private struct HistoryChart: View {
                 )
                 .foregroundStyle(Color.blue)
                 .symbolSize(55)
-                .annotation(
-                    position: .top,
-                    spacing: 5,
-                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
-                ) {
-                    HStack(spacing: 4) {
-                        Text("\(Int(hovered.remainingPercent.rounded()))%")
-                            .fontWeight(.semibold)
-                        Text(
-                            hovered.date,
-                            format: .dateTime.month(.abbreviated).day().hour().minute()
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(.regularMaterial, in: Capsule())
-                }
             }
         }
         .chartXSelection(value: $selectedDate)
