@@ -68,7 +68,8 @@ struct MenuContentView: View {
                 HistoryChart(
                     samples: monitor.samples,
                     range: snapshot.fetchedAt.addingTimeInterval(-duration) ... snapshot.fetchedAt,
-                    bucketDuration: chartRange.bucketDuration
+                    bucketDuration: chartRange.bucketDuration,
+                    visibleDuration: chartRange.visibleDuration
                 )
             } else {
                 BurnDownChart(
@@ -269,12 +270,22 @@ enum ChartRange: String, CaseIterable {
         case .month: 7_200
         }
     }
+
+    var visibleDuration: TimeInterval? {
+        switch self {
+        case .window, .week: nil
+        case .month: 7 * 86_400
+        }
+    }
 }
 
 private struct HistoryChart: View {
     let samples: [UsageSample]
     let range: ClosedRange<Date>
     let bucketDuration: TimeInterval
+    let visibleDuration: TimeInterval?
+
+    @State private var selectedDate: Date?
 
     private var series: HistorySeriesBuilder.Series {
         HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
@@ -284,12 +295,29 @@ private struct HistoryChart: View {
         range.upperBound.timeIntervalSince(range.lowerBound) > 8 * 86_400
     }
 
+    private var hoveredPoint: HistorySeriesBuilder.Point? {
+        guard let selectedDate else { return nil }
+        return series.runs
+            .flatMap(\.points)
+            .min {
+                abs($0.date.timeIntervalSince(selectedDate))
+                    < abs($1.date.timeIntervalSince(selectedDate))
+            }
+    }
+
     var body: some View {
         Group {
             if series.isEmpty {
                 Text("No history yet")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 190)
+            } else if let visibleDuration {
+                chart
+                    .chartScrollableAxes(.horizontal)
+                    .chartXVisibleDomain(length: visibleDuration)
+                    .chartScrollPosition(
+                        initialX: range.upperBound.addingTimeInterval(-visibleDuration)
+                    )
             } else {
                 chart
             }
@@ -331,11 +359,44 @@ private struct HistoryChart: View {
                     }
                 }
             }
+
+            if let hovered = hoveredPoint {
+                RuleMark(x: .value("Hovered", hovered.date))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+
+                PointMark(
+                    x: .value("Hovered", hovered.date),
+                    y: .value("Remaining", hovered.remainingPercent)
+                )
+                .foregroundStyle(Color.blue)
+                .symbolSize(55)
+                .annotation(
+                    position: .top,
+                    spacing: 5,
+                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                ) {
+                    HStack(spacing: 4) {
+                        Text("\(Int(hovered.remainingPercent.rounded()))%")
+                            .fontWeight(.semibold)
+                        Text(
+                            hovered.date,
+                            format: .dateTime.month(.abbreviated).day().hour().minute()
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.regularMaterial, in: Capsule())
+                }
+            }
         }
+        .chartXSelection(value: $selectedDate)
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: isMonth ? 5 : 1)) { value in
+            AxisMarks(values: .stride(by: .day, count: isMonth ? 2 : 1)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                     .foregroundStyle(Color.secondary.opacity(0.2))
                 AxisTick(length: 3)
