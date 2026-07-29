@@ -358,6 +358,31 @@ private struct HistoryChart: View {
                 }
             }
 
+            ForEach(series.resets, id: \.self) { resetDate in
+                RuleMark(x: .value("Reset", resetDate))
+                    .foregroundStyle(Color.green.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    .annotation(
+                        position: .bottom,
+                        spacing: 2,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                    ) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 7))
+                            Text(
+                                resetDate,
+                                format: .dateTime.month(.abbreviated).day().hour().minute()
+                            )
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(Color.green)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(.regularMaterial, in: Capsule())
+                    }
+            }
+
             if let hovered = hoveredPoint {
                 RuleMark(x: .value("Hovered", hovered.date))
                     .foregroundStyle(Color.secondary.opacity(0.35))

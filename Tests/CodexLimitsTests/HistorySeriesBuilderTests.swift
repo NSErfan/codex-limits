@@ -106,6 +106,56 @@ final class HistorySeriesBuilderTests: XCTestCase {
         XCTAssertEqual(series.runs[0].points.last?.date, start.addingTimeInterval(3_000))
     }
 
+    func testJumpAtScheduledResetIsAnnotatedAtTheScheduledTime() {
+        let firstReset = start.addingTimeInterval(1_000)
+        let secondReset = start.addingTimeInterval(7 * 86_400)
+        let samples = [
+            UsageSample(observedAt: start, remainingPercent: 5, resetsAt: firstReset),
+            UsageSample(observedAt: start.addingTimeInterval(1_800), remainingPercent: 100, resetsAt: secondReset)
+        ]
+
+        let series = HistorySeriesBuilder.series(
+            from: samples,
+            in: start ... secondReset,
+            bucketDuration: 1_800
+        )
+
+        XCTAssertEqual(series.resets, [firstReset])
+    }
+
+    func testJumpAcrossGapWithoutScheduledResetUsesObservationTime() {
+        let reset = start.addingTimeInterval(30 * 86_400)
+        let observedJump = start.addingTimeInterval(3 * 86_400)
+        let samples = [
+            UsageSample(observedAt: start, remainingPercent: 40, resetsAt: start.addingTimeInterval(-60)),
+            UsageSample(observedAt: observedJump, remainingPercent: 98, resetsAt: reset)
+        ]
+
+        let series = HistorySeriesBuilder.series(
+            from: samples,
+            in: start ... reset,
+            bucketDuration: 1_800
+        )
+
+        XCTAssertEqual(series.resets, [observedJump])
+    }
+
+    func testSmallUpwardJitterIsNotAReset() {
+        let reset = start.addingTimeInterval(7 * 86_400)
+        let samples = [
+            UsageSample(observedAt: start, remainingPercent: 80, resetsAt: reset),
+            UsageSample(observedAt: start.addingTimeInterval(600), remainingPercent: 82, resetsAt: reset)
+        ]
+
+        let series = HistorySeriesBuilder.series(
+            from: samples,
+            in: start ... reset,
+            bucketDuration: 1_800
+        )
+
+        XCTAssertTrue(series.resets.isEmpty)
+    }
+
     func testEmptyInputProducesEmptySeries() {
         let series = HistorySeriesBuilder.series(
             from: [],

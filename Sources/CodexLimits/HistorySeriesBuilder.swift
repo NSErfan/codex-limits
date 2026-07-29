@@ -20,10 +20,13 @@ enum HistorySeriesBuilder {
     struct Series: Equatable, Sendable {
         let runs: [Run]
         let connectors: [Connector]
+        let resets: [Date]
 
         var isEmpty: Bool { runs.isEmpty }
         var latestPoint: Point? { runs.last?.points.last }
     }
+
+    private static let resetJumpThreshold = 5.0
 
     static func series(
         from samples: [UsageSample],
@@ -31,11 +34,10 @@ enum HistorySeriesBuilder {
         bucketDuration: TimeInterval,
         maximumSampleGap: TimeInterval = 45 * 60
     ) -> Series {
-        let points = deduplicated(
-            samples
-                .filter { range.contains($0.observedAt) }
-                .sorted { $0.observedAt < $1.observedAt }
-        )
+        let sorted = samples
+            .filter { range.contains($0.observedAt) }
+            .sorted { $0.observedAt < $1.observedAt }
+        let points = deduplicated(sorted)
 
         var runs: [Run] = []
         var current: [Point] = []
@@ -60,7 +62,19 @@ enum HistorySeriesBuilder {
         let connectors = zip(downsampledRuns, downsampledRuns.dropFirst()).map { earlier, later in
             Connector(id: earlier.id, start: earlier.points.last!, end: later.points.first!)
         }
-        return Series(runs: downsampledRuns, connectors: connectors)
+        return Series(runs: downsampledRuns, connectors: connectors, resets: resets(in: sorted))
+    }
+
+    private static func resets(in sorted: [UsageSample]) -> [Date] {
+        zip(sorted, sorted.dropFirst()).compactMap { earlier, later in
+            guard later.remainingPercent > earlier.remainingPercent + resetJumpThreshold else {
+                return nil
+            }
+            let scheduled = earlier.resetsAt
+            return scheduled > earlier.observedAt && scheduled <= later.observedAt
+                ? scheduled
+                : later.observedAt
+        }
     }
 
     private static func downsampled(
