@@ -774,7 +774,7 @@ private struct BurnDownChart: View {
             Chart {
                 ForEach([
                     BurnPoint(date: window.startsAt, remaining: 100),
-                    BurnPoint(date: paceDeadline, remaining: safetyBuffer)
+                    BurnPoint(date: paceDeadline, remaining: 0)
                 ]) { point in
                     LineMark(
                         x: .value("Time", point.date),
