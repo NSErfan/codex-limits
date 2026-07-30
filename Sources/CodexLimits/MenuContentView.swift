@@ -534,6 +534,16 @@ private struct BurnDownChart: View {
     let forecast: Forecast
     let safetyBuffer: Double
 
+    @State private var selectedDate: Date?
+
+    private var hoveredPoint: BurnPoint? {
+        guard let selectedDate else { return nil }
+        return observed.min {
+            abs($0.date.timeIntervalSince(selectedDate))
+                < abs($1.date.timeIntervalSince(selectedDate))
+        }
+    }
+
     private var observed: [BurnPoint] {
         let current = BurnPoint(date: fetchedAt, remaining: window.remainingPercent)
         let local = samples
@@ -595,11 +605,27 @@ private struct BurnDownChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                ChartLegendItem(label: "Target", color: .green, dash: [3, 3])
-                ChartLegendItem(label: "Actual", color: .blue)
-                ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
-                ChartLegendItem(label: "Historical", color: .secondary, dash: [2, 3])
+                if let hovered = hoveredPoint {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text("\(Int(hovered.remaining.rounded()))%")
+                            .fontWeight(.semibold)
+                        Text(
+                            hovered.date,
+                            format: .dateTime.month(.abbreviated).day().hour().minute()
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .monospacedDigit()
+                } else {
+                    ChartLegendItem(label: "Target", color: .green, dash: [3, 3])
+                    ChartLegendItem(label: "Actual", color: .blue)
+                    ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
+                    ChartLegendItem(label: "Historical", color: .secondary, dash: [2, 3])
+                }
             }
+            .frame(height: 16)
 
             Chart {
                 ForEach([
@@ -669,6 +695,19 @@ private struct BurnDownChart: View {
                 .foregroundStyle(currentColor)
                 .symbolSize(55)
 
+                if let hovered = hoveredPoint {
+                    RuleMark(x: .value("Hovered", hovered.date))
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+
+                    PointMark(
+                        x: .value("Hovered", hovered.date),
+                        y: .value("Remaining", hovered.remaining)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .symbolSize(55)
+                }
+
                 PointMark(
                     x: .value("Reset", window.resetsAt),
                     y: .value("Target", safetyBuffer)
@@ -685,6 +724,7 @@ private struct BurnDownChart: View {
                     .symbolSize(32)
                 }
             }
+            .chartXSelection(value: $selectedDate)
             .chartXScale(domain: window.startsAt ... window.resetsAt)
             .chartYScale(domain: 0 ... 100)
             .chartXAxis {
