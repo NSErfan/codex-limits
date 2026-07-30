@@ -87,6 +87,18 @@ struct MenuContentView: View {
                         .foregroundStyle(.secondary)
                     Text(paceText(forecast: forecast, reset: snapshot.mainLimit.window.resetsAt))
                 }
+                if !snapshot.resetCredits.isEmpty {
+                    GridRow(alignment: .firstTextBaseline) {
+                        Text("Banked resets")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(snapshot.resetCredits.count) available")
+                            Text(bankedResetExpiryText(snapshot.resetCredits))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             .font(.callout)
 
@@ -197,6 +209,15 @@ struct MenuContentView: View {
             let room = max(forecast.expectedRemainingAtReset - safetyBuffer, 0)
             return "You can use about \(Int(room.rounded()))% more before the reset."
         }
+    }
+
+    private func bankedResetExpiryText(_ credits: [ResetCredit]) -> String {
+        let dates = credits.compactMap(\.expiresAt)
+        guard !dates.isEmpty else { return "No expiry" }
+        let formatted = dates
+            .map { $0.formatted(.dateTime.month(.abbreviated).day().hour().minute()) }
+            .joined(separator: " · ")
+        return (dates.count == 1 ? "Expires " : "Expire ") + formatted
     }
 
     private func paceText(forecast: Forecast, reset: Date) -> String {

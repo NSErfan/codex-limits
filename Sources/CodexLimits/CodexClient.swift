@@ -126,9 +126,44 @@ enum CodexClient {
             mainLimit: LimitReading(limitId: "codex", name: "Codex", window: mainWindow),
             otherLimits: others,
             tokenHistory: tokenHistory,
-            emergencyResetCount: rateResult.rateLimitResetCredits?.availableCount ?? 0,
+            resetCredits: resetCredits(from: rateResult.rateLimitResetCredits, fetchedAt: fetchedAt),
             fetchedAt: fetchedAt
         )
+    }
+
+    private static func resetCredits(
+        from payload: ResetCredits?,
+        fetchedAt: Date
+    ) -> [ResetCredit] {
+        guard let payload else { return [] }
+        guard let credits = payload.credits else {
+            // Older CLI versions report only a count.
+            return (0 ..< max(payload.availableCount ?? 0, 0)).map {
+                ResetCredit(id: "unknown-\($0)", title: nil, expiresAt: nil)
+            }
+        }
+        return credits
+            .filter { credit in
+                credit.status == "available"
+                    && credit.expiresAt.map {
+                        Date(timeIntervalSince1970: TimeInterval($0)) > fetchedAt
+                    } ?? true
+            }
+            .map {
+                ResetCredit(
+                    id: $0.id,
+                    title: $0.title,
+                    expiresAt: $0.expiresAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+                )
+            }
+            .sorted {
+                switch ($0.expiresAt, $1.expiresAt) {
+                case let (first?, second?) where first != second: first < second
+                case (.some, .none): true
+                case (.none, .some): false
+                default: $0.id < $1.id
+                }
+            }
     }
 
     private static func windows(from snapshot: RateLimitSnapshot) -> [UsageWindow] {
@@ -238,7 +273,15 @@ private struct RateLimitsResult: Decodable {
 }
 
 private struct ResetCredits: Decodable {
-    let availableCount: Int
+    let availableCount: Int?
+    let credits: [ResetCreditPayload]?
+}
+
+private struct ResetCreditPayload: Decodable {
+    let id: String
+    let status: String?
+    let expiresAt: Int64?
+    let title: String?
 }
 
 private struct RateLimitSnapshot: Decodable {

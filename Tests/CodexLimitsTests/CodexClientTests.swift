@@ -34,8 +34,37 @@ final class CodexClientTests: XCTestCase {
         XCTAssertEqual(result.mainLimit.window.resetsAt, Date(timeIntervalSince1970: 2_000_000))
         XCTAssertEqual(result.otherLimits.map(\.name), ["Example model"])
         XCTAssertEqual(result.tokenHistory.map(\.tokens), [1_000, 250])
-        XCTAssertEqual(result.emergencyResetCount, 3)
+        XCTAssertEqual(result.resetCredits.count, 3)
+        XCTAssertEqual(result.resetCredits.compactMap(\.expiresAt), [])
         XCTAssertEqual(result.fetchedAt, fetchedAt)
+    }
+
+    func testKeepsOnlyAvailableUnexpiredResetCreditsSortedByExpiry() throws {
+        let rateLimits = Data(#"""
+        {"id":2,"result":{
+          "rateLimits":{"limitId":"codex","primary":{"usedPercent":20,"windowDurationMins":10080,"resetsAt":2000000}},
+          "rateLimitResetCredits":{"availableCount":4,"credits":[
+            {"id":"later","status":"available","expiresAt":2600000,"title":"Full reset"},
+            {"id":"sooner","status":"available","expiresAt":2500000,"title":"Full reset"},
+            {"id":"used","status":"used","expiresAt":2600000,"title":"Full reset"},
+            {"id":"expired","status":"available","expiresAt":1000000,"title":"Full reset"},
+            {"id":"open-ended","status":"available"}
+          ]}
+        }}
+        """#.utf8)
+
+        let result = try CodexClient.decode(
+            rateLimitsResponse: rateLimits,
+            usageResponse: nil,
+            fetchedAt: Date(timeIntervalSince1970: 1_900_000)
+        )
+
+        XCTAssertEqual(result.resetCredits.map(\.id), ["sooner", "later", "open-ended"])
+        XCTAssertEqual(
+            result.resetCredits.first?.expiresAt,
+            Date(timeIntervalSince1970: 2_500_000)
+        )
+        XCTAssertNil(result.resetCredits.last?.expiresAt)
     }
 
     func testUsageRPCErrorDoesNotDiscardRateLimits() async throws {

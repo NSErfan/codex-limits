@@ -57,12 +57,49 @@ struct LimitReading: Codable, Equatable, Identifiable, Sendable {
     var id: String { "\(limitId)-\(window.durationMinutes)" }
 }
 
+struct ResetCredit: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let title: String?
+    let expiresAt: Date?
+}
+
 struct UsageSnapshot: Codable, Equatable, Sendable {
     let mainLimit: LimitReading
     let otherLimits: [LimitReading]
     let tokenHistory: [TokenDay]
-    let emergencyResetCount: Int
+    let resetCredits: [ResetCredit]
     let fetchedAt: Date
+
+    init(
+        mainLimit: LimitReading,
+        otherLimits: [LimitReading],
+        tokenHistory: [TokenDay],
+        resetCredits: [ResetCredit],
+        fetchedAt: Date
+    ) {
+        self.mainLimit = mainLimit
+        self.otherLimits = otherLimits
+        self.tokenHistory = tokenHistory
+        self.resetCredits = resetCredits
+        self.fetchedAt = fetchedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        mainLimit = try container.decode(LimitReading.self, forKey: .mainLimit)
+        otherLimits = try container.decode([LimitReading].self, forKey: .otherLimits)
+        tokenHistory = try container.decode([TokenDay].self, forKey: .tokenHistory)
+        resetCredits = try container.decodeIfPresent([ResetCredit].self, forKey: .resetCredits) ?? []
+        fetchedAt = try container.decode(Date.self, forKey: .fetchedAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mainLimit
+        case otherLimits
+        case tokenHistory
+        case resetCredits
+        case fetchedAt
+    }
 }
 
 enum PaceStatus: String, Codable, Equatable, Sendable {
