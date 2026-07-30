@@ -240,7 +240,6 @@ struct MenuContentView: View {
 
     private func bankedResetsMenu(snapshot: UsageSnapshot) -> some View {
         let window = snapshot.mainLimit.window
-        let nextExpiry = snapshot.resetCredits.compactMap(\.expiresAt).min()
         return Menu {
             ForEach(snapshot.resetCredits) { credit in
                 let qualifies = credit.expiresAt
@@ -259,17 +258,18 @@ struct MenuContentView: View {
             Divider()
             Text(menuHint)
         } label: {
-            HStack(spacing: 4) {
-                Text("\(snapshot.resetCredits.count) available")
-                if let nextExpiry {
-                    Text("· next expires \(creditDateText(nextExpiry))")
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Text(bankedResetsLabel(snapshot.resetCredits))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Pick a banked reset to pace toward its expiry")
+    }
+
+    private func bankedResetsLabel(_ credits: [ResetCredit]) -> String {
+        let head = credits.compactMap(\.expiresAt).min()
+            .map { "Next expires \(creditDateText($0))" } ?? "No expiry"
+        let extra = credits.count - 1
+        return extra > 0 ? "\(head) · +\(extra) more" : head
     }
 
     private var menuHint: String {
