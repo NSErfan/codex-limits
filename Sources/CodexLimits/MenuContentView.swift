@@ -240,35 +240,50 @@ struct MenuContentView: View {
 
     private func bankedResetsMenu(snapshot: UsageSnapshot) -> some View {
         let window = snapshot.mainLimit.window
-        let qualifying = snapshot.resetCredits.filter { credit in
-            credit.expiresAt.map { $0 > snapshot.fetchedAt && $0 < window.resetsAt } == true
-        }
-        let others = snapshot.resetCredits.filter { credit in
-            !qualifying.contains { $0.id == credit.id }
-        }
+        let nextExpiry = snapshot.resetCredits.compactMap(\.expiresAt).min()
         return Menu {
-            Picker("Pace to", selection: $paceTargetCreditID) {
-                Text("Window reset · \(creditDateText(window.resetsAt))")
-                    .tag("")
-                ForEach(qualifying) { credit in
-                    Text("\(credit.title ?? "Banked reset") · expires \(creditDateText(credit.expiresAt))")
-                        .tag(credit.id)
+            ForEach(snapshot.resetCredits) { credit in
+                let qualifies = credit.expiresAt
+                    .map { $0 > snapshot.fetchedAt && $0 < window.resetsAt } == true
+                Button {
+                    paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
+                } label: {
+                    if credit.id == paceTargetCreditID {
+                        Label(creditItemText(credit), systemImage: "checkmark")
+                    } else {
+                        Text(creditItemText(credit))
+                    }
                 }
+                .disabled(!qualifies)
             }
-            .pickerStyle(.inline)
-            if !others.isEmpty {
-                Divider()
-                ForEach(others) { credit in
-                    Button("\(credit.title ?? "Banked reset") · \(othersDetailText(credit))") {}
-                        .disabled(true)
-                }
-            }
+            Divider()
+            Text(menuHint)
         } label: {
-            Text("\(snapshot.resetCredits.count) available")
+            HStack(spacing: 4) {
+                Text("\(snapshot.resetCredits.count) available")
+                if let nextExpiry {
+                    Text("· next expires \(creditDateText(nextExpiry))")
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Choose what to pace toward")
+        .help("Pick a banked reset to pace toward its expiry")
+    }
+
+    private var menuHint: String {
+        paceTargetCreditID.isEmpty
+            ? "Pick a banked reset to pace toward its expiry."
+            : "Pick the checked reset again to pace to the window reset."
+    }
+
+    private func creditItemText(_ credit: ResetCredit) -> String {
+        let title = credit.title ?? "Banked reset"
+        guard let expiresAt = credit.expiresAt else { return "\(title) · no expiry" }
+        let window = monitor.snapshot?.mainLimit.window
+        let suffix = window.map { expiresAt >= $0.resetsAt ? " · after the next reset" : "" } ?? ""
+        return "\(title) · expires \(creditDateText(expiresAt))\(suffix)"
     }
 
     private func creditDateText(_ date: Date?) -> String {
@@ -277,11 +292,6 @@ struct MenuContentView: View {
             .dateTime.month(.abbreviated).day().hour().minute()
                 .locale(Locale(identifier: "en_US"))
         )
-    }
-
-    private func othersDetailText(_ credit: ResetCredit) -> String {
-        guard let expiresAt = credit.expiresAt else { return "no expiry" }
-        return "expires \(creditDateText(expiresAt)), after the next reset"
     }
 
     private func paceText(forecast: Forecast, reset: Date) -> String {
