@@ -580,6 +580,11 @@ private struct HistoryChart: View {
             // readout follows the pointer again instead of freezing.
             DispatchQueue.main.async { selectedDate = nil }
         }
+        .onContinuousHover { phase in
+            // chartXSelection does not reliably clear when the pointer
+            // leaves the plot, which froze the readout in place.
+            if case .ended = phase { selectedDate = nil }
+        }
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100)
         .chartXAxis {
@@ -888,6 +893,11 @@ private struct BurnDownChart: View {
                 // A click pins the chart selection on macOS; release it so the
                 // readout follows the pointer again instead of freezing.
                 DispatchQueue.main.async { selectedDate = nil }
+            }
+            .onContinuousHover { phase in
+                // chartXSelection does not reliably clear when the pointer
+                // leaves the plot, which froze the readout in place.
+                if case .ended = phase { selectedDate = nil }
             }
             .chartXScale(domain: window.startsAt ... window.resetsAt)
             .chartYScale(domain: 0 ... 100)
