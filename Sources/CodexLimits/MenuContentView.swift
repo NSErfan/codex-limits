@@ -575,6 +575,11 @@ private struct HistoryChart: View {
             }
         }
         .chartXSelection(value: $selectedDate)
+        .onTapGesture {
+            // A click pins the chart selection on macOS; release it so the
+            // readout follows the pointer again instead of freezing.
+            DispatchQueue.main.async { selectedDate = nil }
+        }
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100)
         .chartXAxis {
@@ -877,8 +882,12 @@ private struct BurnDownChart: View {
             }
             .chartXSelection(value: $selectedDate)
             .onTapGesture {
-                guard let credit = hoveredCredit else { return }
-                paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
+                if let credit = hoveredCredit {
+                    paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
+                }
+                // A click pins the chart selection on macOS; release it so the
+                // readout follows the pointer again instead of freezing.
+                DispatchQueue.main.async { selectedDate = nil }
             }
             .chartXScale(domain: window.startsAt ... window.resetsAt)
             .chartYScale(domain: 0 ... 100)
