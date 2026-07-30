@@ -72,7 +72,8 @@ struct MenuContentView: View {
                     tokenHistory: snapshot.tokenHistory,
                     fetchedAt: snapshot.fetchedAt,
                     forecast: forecast,
-                    safetyBuffer: safetyBuffer
+                    safetyBuffer: safetyBuffer,
+                    resetCredits: snapshot.resetCredits
                 )
             }
 
@@ -554,6 +555,7 @@ private struct BurnDownChart: View {
     let fetchedAt: Date
     let forecast: Forecast
     let safetyBuffer: Double
+    let resetCredits: [ResetCredit]
 
     @State private var selectedDate: Date?
 
@@ -563,6 +565,24 @@ private struct BurnDownChart: View {
             abs($0.date.timeIntervalSince(selectedDate))
                 < abs($1.date.timeIntervalSince(selectedDate))
         }
+    }
+
+    private var visibleCredits: [ResetCredit] {
+        resetCredits.filter { credit in
+            guard let expiresAt = credit.expiresAt else { return false }
+            return expiresAt > window.startsAt && expiresAt < window.resetsAt
+        }
+    }
+
+    private var hoveredCredit: ResetCredit? {
+        guard let selectedDate else { return nil }
+        let span = window.resetsAt.timeIntervalSince(window.startsAt)
+        return visibleCredits
+            .compactMap { credit in
+                credit.expiresAt.map { (credit: credit, distance: abs($0.timeIntervalSince(selectedDate))) }
+            }
+            .min { $0.distance < $1.distance }
+            .flatMap { $0.distance <= span * 0.015 ? $0.credit : nil }
     }
 
     private var observed: [BurnPoint] {
@@ -626,7 +646,20 @@ private struct BurnDownChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                if let hovered = hoveredPoint {
+                if let credit = hoveredCredit, let expiresAt = credit.expiresAt {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 8))
+                        Text("Banked \(credit.title?.lowercased() ?? "reset")")
+                        Text(
+                            "expires \(expiresAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+                } else if let hovered = hoveredPoint {
                     Spacer()
                     HStack(spacing: 4) {
                         Text("\(Int(hovered.remaining.rounded()))%")
@@ -716,7 +749,17 @@ private struct BurnDownChart: View {
                 .foregroundStyle(currentColor)
                 .symbolSize(55)
 
-                if let hovered = hoveredPoint {
+                ForEach(visibleCredits) { credit in
+                    if let expiresAt = credit.expiresAt {
+                        RuleMark(x: .value("Banked reset", expiresAt))
+                            .foregroundStyle(
+                                Color.orange.opacity(credit.id == hoveredCredit?.id ? 0.9 : 0.45)
+                            )
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
+                }
+
+                if hoveredCredit == nil, let hovered = hoveredPoint {
                     RuleMark(x: .value("Hovered", hovered.date))
                         .foregroundStyle(Color.secondary.opacity(0.35))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
