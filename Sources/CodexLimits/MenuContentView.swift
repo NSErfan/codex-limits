@@ -649,6 +649,18 @@ private struct BurnDownChart: View {
                 RuleMark(x: .value("Now", fetchedAt))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .annotation(
+                        position: .top,
+                        spacing: 2,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                    ) {
+                        Text("Now")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.regularMaterial, in: Capsule())
+                    }
 
                 PointMark(
                     x: .value("Now", fetchedAt),
@@ -656,13 +668,6 @@ private struct BurnDownChart: View {
                 )
                 .foregroundStyle(currentColor)
                 .symbolSize(55)
-                .annotation(position: .top, spacing: 5) {
-                    Text("Now")
-                        .font(.caption2)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.regularMaterial, in: Capsule())
-                }
 
                 PointMark(
                     x: .value("Reset", window.resetsAt),
