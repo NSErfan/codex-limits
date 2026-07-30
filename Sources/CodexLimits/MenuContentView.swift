@@ -861,7 +861,7 @@ private struct BurnDownChart: View {
 
                 PointMark(
                     x: .value("Reset", paceDeadline),
-                    y: .value("Target", safetyBuffer)
+                    y: .value("Target", 0)
                 )
                 .foregroundStyle(Color.green)
                 .symbolSize(38)
@@ -869,7 +869,7 @@ private struct BurnDownChart: View {
                 if let endpoint = currentProjection.last {
                     PointMark(
                         x: .value("Current endpoint", endpoint.date),
-                        y: .value("Current endpoint", endpoint.remaining)
+                        y: .value("Current endpoint", 0)
                     )
                     .foregroundStyle(currentColor)
                     .symbolSize(32)
