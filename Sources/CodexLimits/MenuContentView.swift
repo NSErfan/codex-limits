@@ -258,18 +258,20 @@ struct MenuContentView: View {
             Divider()
             Text(menuHint)
         } label: {
-            Text(bankedResetsLabel(snapshot.resetCredits))
+            bankedResetsLabel(snapshot.resetCredits)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Pick a banked reset to pace toward its expiry")
+        .help("Expiry of the next banked reset. Pick one to pace toward it.")
     }
 
-    private func bankedResetsLabel(_ credits: [ResetCredit]) -> String {
-        let head = credits.compactMap(\.expiresAt).min()
-            .map { "Next expires \(creditDateText($0))" } ?? "No expiry"
+    private func bankedResetsLabel(_ credits: [ResetCredit]) -> Text {
+        let head = Text(
+            credits.compactMap(\.expiresAt).min().map { creditDateText($0) } ?? "No expiry"
+        )
         let extra = credits.count - 1
-        return extra > 0 ? "\(head) · +\(extra) more" : head
+        guard extra > 0 else { return head }
+        return head + Text("  +\(extra) more").foregroundColor(.secondary)
     }
 
     private var menuHint: String {
