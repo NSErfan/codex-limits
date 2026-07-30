@@ -58,12 +58,19 @@ struct MenuContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(statusTitle(forecast.status))
+                Text(StatusText.title(forecast.status))
                     .font(.headline)
                     .foregroundStyle(statusColor(forecast.status))
-                Text(statusMessage(snapshot: snapshot, forecast: forecast, deadline: paceDeadline))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(StatusText.message(
+                    forecast: forecast,
+                    remainingPercent: snapshot.mainLimit.window.remainingPercent,
+                    fetchedAt: snapshot.fetchedAt,
+                    deadline: paceDeadline,
+                    windowReset: snapshot.mainLimit.window.resetsAt,
+                    safetyBuffer: safetyBuffer
+                ))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             GlassSegmentedPicker(selection: $chartRange)
@@ -98,7 +105,11 @@ struct MenuContentView: View {
                 GridRow {
                     Text("Suggested pace")
                         .foregroundStyle(.secondary)
-                    Text(paceText(forecast: forecast, reset: paceDeadline))
+                    Text(StatusText.pace(
+                        recommendedPercentPerDay: forecast.recommendedPercentPerDay,
+                        deadline: paceDeadline,
+                        now: snapshot.fetchedAt
+                    ))
                 }
                 if !snapshot.resetCredits.isEmpty {
                     GridRow(alignment: .firstTextBaseline) {
@@ -155,7 +166,7 @@ struct MenuContentView: View {
             Divider()
             HStack {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
-                    Text(updatedText(snapshot.fetchedAt, now: context.date))
+                    Text(StatusText.updated(snapshot.fetchedAt, now: context.date))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -201,14 +212,6 @@ struct MenuContentView: View {
         .frame(maxWidth: .infinity, minHeight: 150)
     }
 
-    private func statusTitle(_ status: PaceStatus) -> String {
-        switch status {
-        case .slowDown: "Slow down"
-        case .onTrack: "On track"
-        case .roomToUseMore: "Room to use more"
-        }
-    }
-
     private func statusColor(_ status: PaceStatus) -> Color {
         switch status {
         case .slowDown: .red
@@ -217,46 +220,28 @@ struct MenuContentView: View {
         }
     }
 
-    private func statusMessage(snapshot: UsageSnapshot, forecast: Forecast, deadline: Date) -> String {
-        let target = deadline == snapshot.mainLimit.window.resetsAt
-            ? "reset"
-            : "banked reset expiry"
-        switch forecast.status {
-        case .slowDown:
-            let window = snapshot.mainLimit.window
-            let timeLeft = deadline.timeIntervalSince(snapshot.fetchedAt)
-            let timeToEmpty = window.remainingPercent / max(forecast.safetyPercentPerDay, 0.01) * 86_400
-            let early = max(timeLeft - timeToEmpty, 0)
-            return early > 0
-                ? "At this pace, your limit may run out \(durationText(early)) before the \(target)."
-                : "Your current pace is too close to the limit."
-        case .onTrack:
-            return "You’re on track to have \(Int(forecast.expectedRemainingAtReset.rounded()))% left at the \(target)."
-        case .roomToUseMore:
-            let room = max(forecast.expectedRemainingAtReset - safetyBuffer, 0)
-            return "You can use about \(Int(room.rounded()))% more before the \(target)."
-        }
-    }
-
     private func bankedResetsMenu(snapshot: UsageSnapshot) -> some View {
         let window = snapshot.mainLimit.window
         return Menu {
             ForEach(snapshot.resetCredits) { credit in
-                let qualifies = credit.expiresAt
-                    .map { $0 > snapshot.fetchedAt && $0 < window.resetsAt } == true
                 Button {
                     paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
                 } label: {
+                    let text = BankedResetPresentation.itemText(credit, windowReset: window.resetsAt)
                     if credit.id == paceTargetCreditID {
-                        Label(creditItemText(credit), systemImage: "checkmark")
+                        Label(text, systemImage: "checkmark")
                     } else {
-                        Text(creditItemText(credit))
+                        Text(text)
                     }
                 }
-                .disabled(!qualifies)
+                .disabled(!BankedResetPresentation.qualifies(
+                    credit,
+                    now: snapshot.fetchedAt,
+                    windowReset: window.resetsAt
+                ))
             }
             Divider()
-            Text(menuHint)
+            Text(BankedResetPresentation.hint(hasSelection: !paceTargetCreditID.isEmpty))
         } label: {
             bankedResetsLabel(snapshot.resetCredits)
         }
@@ -266,70 +251,10 @@ struct MenuContentView: View {
     }
 
     private func bankedResetsLabel(_ credits: [ResetCredit]) -> Text {
-        let head = Text(
-            credits.compactMap(\.expiresAt).min().map { creditDateText($0) } ?? "No expiry"
-        )
-        let extra = credits.count - 1
-        guard extra > 0 else { return head }
-        return head + Text("  +\(extra) more").foregroundColor(.secondary)
-    }
-
-    private var menuHint: String {
-        paceTargetCreditID.isEmpty
-            ? "Pick a banked reset to pace toward its expiry."
-            : "Pick the checked reset again to pace to the window reset."
-    }
-
-    private func creditItemText(_ credit: ResetCredit) -> String {
-        let title = credit.title ?? "Banked reset"
-        guard let expiresAt = credit.expiresAt else { return "\(title) · no expiry" }
-        let window = monitor.snapshot?.mainLimit.window
-        let suffix = window.map { expiresAt >= $0.resetsAt ? " · after the next reset" : "" } ?? ""
-        return "\(title) · expires \(creditDateText(expiresAt))\(suffix)"
-    }
-
-    private func creditDateText(_ date: Date?) -> String {
-        guard let date else { return "no expiry" }
-        return date.formatted(
-            .dateTime.month(.abbreviated).day().hour().minute()
-                .locale(Locale(identifier: "en_US"))
-        )
-    }
-
-    private func paceText(forecast: Forecast, reset: Date) -> String {
-        if reset.timeIntervalSinceNow <= 86_400 {
-            return "Up to \(oneDecimal(forecast.recommendedPercentPerDay / 24))% an hour"
-        }
-        return "Up to \(oneDecimal(forecast.recommendedPercentPerDay))% a day"
-    }
-
-    private func oneDecimal(_ value: Double) -> String {
-        value.formatted(
-            .number
-                .precision(.fractionLength(1))
-                .locale(Locale(identifier: "en_US"))
-        )
-    }
-
-    private func durationText(_ seconds: TimeInterval) -> String {
-        if seconds >= 86_400 {
-            let days = max(Int((seconds / 86_400).rounded()), 1)
-            return "\(days) \(days == 1 ? "day" : "days")"
-        }
-        let hours = max(Int((seconds / 3_600).rounded()), 1)
-        return "\(hours) \(hours == 1 ? "hour" : "hours")"
-    }
-
-    private func updatedText(_ date: Date, now: Date) -> String {
-        let seconds = max(now.timeIntervalSince(date), 0)
-        if seconds < 60 { return "Updated just now" }
-        if seconds < 3_600 { return "Updated \(Int(seconds / 60)) min ago" }
-        if seconds < 86_400 {
-            let hours = Int(seconds / 3_600)
-            return "Updated \(hours) \(hours == 1 ? "hr" : "hrs") ago"
-        }
-        let days = Int(seconds / 86_400)
-        return "Updated \(days) \(days == 1 ? "day" : "days") ago"
+        let parts = BankedResetPresentation.labelParts(for: credits)
+        let head = Text(parts.head)
+        guard let extra = parts.extra else { return head }
+        return head + Text("  \(extra)").foregroundColor(.secondary)
     }
 }
 
@@ -454,20 +379,21 @@ private struct HistoryChart: View {
 
     private var hoveredPoint: HistorySeriesBuilder.Point? {
         guard let selectedDate else { return nil }
-        return series.runs
-            .flatMap(\.points)
-            .min {
-                abs($0.date.timeIntervalSince(selectedDate))
-                    < abs($1.date.timeIntervalSince(selectedDate))
-            }
+        return ChartInteraction.nearest(
+            to: selectedDate,
+            in: series.runs.flatMap(\.points),
+            date: \.date
+        )
     }
 
     private var hoveredReset: Date? {
         guard let selectedDate else { return nil }
-        let visible = visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound)
-        return series.resets
-            .min { abs($0.timeIntervalSince(selectedDate)) < abs($1.timeIntervalSince(selectedDate)) }
-            .flatMap { abs($0.timeIntervalSince(selectedDate)) <= visible * 0.015 ? $0 : nil }
+        return ChartInteraction.nearest(
+            to: selectedDate,
+            in: series.resets,
+            visibleSpan: visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound),
+            date: { $0 }
+        )
     }
 
     var body: some View {
@@ -618,18 +544,11 @@ private struct HistoryChart: View {
         .chartLegend(.hidden)
         .frame(height: 190)
         .accessibilityLabel("Usage history")
-        .accessibilityValue(accessibilitySummary)
-    }
-
-    private var accessibilitySummary: String {
-        let days = Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
-        guard let latest = series.latestPoint else {
-            return "No usage history in the last \(days) days."
-        }
-        let gaps = series.connectors.isEmpty
-            ? ""
-            : " \(series.connectors.count) gaps are shown as estimated connectors."
-        return "Remaining percentage over the last \(days) days, most recently \(Int(latest.remainingPercent.rounded())) percent.\(gaps)"
+        .accessibilityValue(
+            series.accessibilitySummary(
+                days: Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
+            )
+        )
     }
 }
 
@@ -648,61 +567,29 @@ private struct BurnDownChart: View {
 
     private var hoveredPoint: BurnPoint? {
         guard let selectedDate else { return nil }
-        return observed.min {
-            abs($0.date.timeIntervalSince(selectedDate))
-                < abs($1.date.timeIntervalSince(selectedDate))
-        }
+        return ChartInteraction.nearest(to: selectedDate, in: observed, date: \.date)
     }
 
     private var visibleCredits: [ResetCredit] {
-        resetCredits.filter { credit in
-            guard let expiresAt = credit.expiresAt else { return false }
-            return expiresAt > window.startsAt && expiresAt < window.resetsAt
-        }
+        WindowChartSeries.visibleCredits(resetCredits, window: window)
     }
 
     private var hoveredCredit: ResetCredit? {
         guard let selectedDate else { return nil }
-        let span = window.resetsAt.timeIntervalSince(window.startsAt)
-        return visibleCredits
-            .compactMap { credit in
-                credit.expiresAt.map { (credit: credit, distance: abs($0.timeIntervalSince(selectedDate))) }
-            }
-            .min { $0.distance < $1.distance }
-            .flatMap { $0.distance <= span * 0.015 ? $0.credit : nil }
+        return ChartInteraction.nearest(
+            to: selectedDate,
+            in: visibleCredits,
+            visibleSpan: window.resetsAt.timeIntervalSince(window.startsAt),
+            date: { $0.expiresAt ?? .distantPast }
+        )
     }
 
     private var observed: [BurnPoint] {
-        let current = BurnPoint(date: fetchedAt, remaining: window.remainingPercent)
-        let local = samples
-            .filter { $0.observedAt > window.startsAt && $0.observedAt < fetchedAt }
-            .map { BurnPoint(date: $0.observedAt, remaining: $0.remainingPercent) }
-            .sorted { $0.date < $1.date }
-        let firstKnown = local.first ?? current
-        let buckets = tokenHistory
-            .filter {
-                $0.date.addingTimeInterval(86_400) > window.startsAt && $0.date < firstKnown.date
-            }
-            .sorted { $0.date < $1.date }
-        let totalTokens = buckets.reduce(Int64(0)) { $0 + $1.tokens }
-        var bootstrapped: [BurnPoint] = []
-
-        if totalTokens > 0 {
-            var cumulativeTokens: Int64 = 0
-            for bucket in buckets {
-                cumulativeTokens += bucket.tokens
-                let date = min(
-                    max(bucket.date.addingTimeInterval(86_400), window.startsAt),
-                    firstKnown.date
-                )
-                let used = (100 - firstKnown.remaining) * Double(cumulativeTokens) / Double(totalTokens)
-                bootstrapped.append(BurnPoint(date: date, remaining: 100 - used))
-            }
-        }
-
-        // Daily token buckets seed the curve until percentage samples cover the window.
-        return deduplicated(
-            [BurnPoint(date: window.startsAt, remaining: 100)] + bootstrapped + local + [current]
+        WindowChartSeries.observed(
+            window: window,
+            samples: samples,
+            tokenHistory: tokenHistory,
+            fetchedAt: fetchedAt
         )
     }
 
@@ -711,11 +598,23 @@ private struct BurnDownChart: View {
     }
 
     private var currentProjection: [BurnPoint] {
-        projection(rate: forecast.currentPercentPerDay, remainingAtReset: forecast.expectedRemainingAtReset)
+        WindowChartSeries.projection(
+            window: window,
+            fetchedAt: fetchedAt,
+            deadline: paceDeadline,
+            rate: forecast.currentPercentPerDay,
+            remainingAtDeadline: forecast.expectedRemainingAtReset
+        )
     }
 
     private var historicalProjection: [BurnPoint] {
-        projection(rate: forecast.historicalPercentPerDay, remainingAtReset: forecast.historicalRemainingAtReset)
+        WindowChartSeries.projection(
+            window: window,
+            fetchedAt: fetchedAt,
+            deadline: paceDeadline,
+            rate: forecast.historicalPercentPerDay,
+            remainingAtDeadline: forecast.historicalRemainingAtReset
+        )
     }
 
     private var xAxisDates: [Date] {
@@ -739,10 +638,8 @@ private struct BurnDownChart: View {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 8))
                         Text("Banked \(credit.title?.lowercased() ?? "reset")")
-                        Text(
-                            "expires \(expiresAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
-                        )
-                        .foregroundStyle(.secondary)
+                        Text("expires \(BankedResetPresentation.dateText(expiresAt))")
+                            .foregroundStyle(.secondary)
                         Text(credit.id == paceTargetCreditID ? "· click to stop pacing" : "· click to pace here")
                             .foregroundStyle(.secondary)
                             .italic()
@@ -945,34 +842,6 @@ private struct BurnDownChart: View {
         }
     }
 
-    private func projection(rate: Double, remainingAtReset: Double) -> [BurnPoint] {
-        let current = BurnPoint(date: fetchedAt, remaining: window.remainingPercent)
-        guard rate > 0 else {
-            return [current, BurnPoint(date: paceDeadline, remaining: window.remainingPercent)]
-        }
-        let exhaustion = fetchedAt.addingTimeInterval(window.remainingPercent / rate * 86_400)
-        let endpoint = exhaustion < paceDeadline
-            ? BurnPoint(date: exhaustion, remaining: 0)
-            : BurnPoint(date: paceDeadline, remaining: remainingAtReset)
-        return [current, endpoint]
-    }
-
-    private func deduplicated(_ points: [BurnPoint]) -> [BurnPoint] {
-        points.sorted { $0.date < $1.date }.reduce(into: []) { result, point in
-            if result.last?.date == point.date {
-                result[result.count - 1] = point
-            } else {
-                result.append(point)
-            }
-        }
-    }
-}
-
-private struct BurnPoint: Identifiable {
-    let date: Date
-    let remaining: Double
-
-    var id: Date { date }
 }
 
 private struct ChartLegendItem: View {

@@ -104,3 +104,17 @@ enum HistorySeriesBuilder {
         }
     }
 }
+
+extension HistorySeriesBuilder.Series {
+    func accessibilitySummary(days: Int) -> String {
+        guard let latest = latestPoint else {
+            return "No usage history in the last \(days) days."
+        }
+        let gaps = switch connectors.count {
+        case 0: ""
+        case 1: " 1 gap is shown as an estimated connector."
+        default: " \(connectors.count) gaps are shown as estimated connectors."
+        }
+        return "Remaining percentage over the last \(days) days, most recently \(Int(latest.remainingPercent.rounded())) percent.\(gaps)"
+    }
+}

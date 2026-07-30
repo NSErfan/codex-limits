@@ -56,12 +56,20 @@ final class UsageMonitor: ObservableObject {
     }
 
     var menuBarText: String {
-        guard let remaining = snapshot?.mainLimit.window.remainingPercent else { return "—" }
-        return "\(Int(remaining.rounded()))%"
+        Self.menuBarText(remainingPercent: snapshot?.mainLimit.window.remainingPercent)
     }
 
     var currentWindowSamples: [UsageSample] {
-        guard let reset = snapshot?.mainLimit.window.resetsAt else { return [] }
+        Self.windowSamples(samples, reset: snapshot?.mainLimit.window.resetsAt)
+    }
+
+    nonisolated static func menuBarText(remainingPercent: Double?) -> String {
+        guard let remainingPercent else { return "—" }
+        return "\(Int(remainingPercent.rounded()))%"
+    }
+
+    nonisolated static func windowSamples(_ samples: [UsageSample], reset: Date?) -> [UsageSample] {
+        guard let reset else { return [] }
         return samples.filter { $0.resetsAt == reset }.sorted { $0.observedAt < $1.observedAt }
     }
 

@@ -156,6 +156,39 @@ final class HistorySeriesBuilderTests: XCTestCase {
         XCTAssertTrue(series.resets.isEmpty)
     }
 
+    func testAccessibilitySummaryDescribesLatestValueAndGaps() {
+        let reset = start.addingTimeInterval(7 * 86_400)
+        let samples = [
+            UsageSample(observedAt: start, remainingPercent: 90, resetsAt: reset),
+            UsageSample(observedAt: start.addingTimeInterval(600), remainingPercent: 88, resetsAt: reset),
+            UsageSample(observedAt: start.addingTimeInterval(10 * 3_600), remainingPercent: 70, resetsAt: reset)
+        ]
+
+        let series = HistorySeriesBuilder.series(
+            from: samples,
+            in: start ... reset,
+            bucketDuration: 1_800
+        )
+
+        XCTAssertEqual(
+            series.accessibilitySummary(days: 7),
+            "Remaining percentage over the last 7 days, most recently 70 percent. 1 gap is shown as an estimated connector."
+        )
+    }
+
+    func testAccessibilitySummaryWhenEmpty() {
+        let series = HistorySeriesBuilder.series(
+            from: [],
+            in: start ... start.addingTimeInterval(86_400),
+            bucketDuration: 1_800
+        )
+
+        XCTAssertEqual(
+            series.accessibilitySummary(days: 30),
+            "No usage history in the last 30 days."
+        )
+    }
+
     func testEmptyInputProducesEmptySeries() {
         let series = HistorySeriesBuilder.series(
             from: [],
