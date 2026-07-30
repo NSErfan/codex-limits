@@ -303,33 +303,38 @@ private struct GlassSegmentedPicker: View {
                 selection = range
             }
         } label: {
-            Text(range.title)
-                .font(.callout.weight(selection == range ? .semibold : .regular))
-                .foregroundStyle(selection == range ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity)
-                .contentShape(Capsule())
-                .background {
-                    if selection == range {
-                        thumb.matchedGeometryEffect(id: "thumb", in: thumbNamespace)
-                    }
-                }
+            label(for: range)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selection == range ? [.isSelected] : [])
     }
 
-    @ViewBuilder private var thumb: some View {
+    @ViewBuilder
+    private func label(for range: ChartRange) -> some View {
+        let text = Text(range.title)
+            .font(.callout.weight(selection == range ? .semibold : .regular))
+            .foregroundStyle(selection == range ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .contentShape(Capsule())
         if #available(macOS 26.0, *) {
-            Capsule()
-                .fill(Color.clear)
-                .glassEffect(.regular.interactive(), in: Capsule())
-                .glassEffectID("thumb", in: thumbNamespace)
+            if selection == range {
+                text
+                    .glassEffect(.regular.interactive(), in: Capsule())
+                    .glassEffectID("thumb", in: thumbNamespace)
+            } else {
+                text
+            }
         } else {
-            Capsule()
-                .fill(.regularMaterial)
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+            text.background {
+                if selection == range {
+                    Capsule()
+                        .fill(.regularMaterial)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                        .matchedGeometryEffect(id: "thumb", in: thumbNamespace)
+                }
+            }
         }
     }
 }
