@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 final class UsageMonitor: ObservableObject {
     static let safetyBufferKey = "safetyBuffer"
-    static let paceToBankedResetKey = "paceToBankedReset"
+    static let paceTargetCreditIDKey = "paceTargetCreditID"
 
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var forecast: Forecast?
@@ -188,7 +188,7 @@ final class UsageMonitor: ObservableObject {
                 window: snapshot.mainLimit.window,
                 resetCredits: snapshot.resetCredits,
                 now: snapshot.fetchedAt,
-                paceToBankedReset: UserDefaults.standard.bool(forKey: Self.paceToBankedResetKey)
+                selectedCreditID: UserDefaults.standard.string(forKey: Self.paceTargetCreditIDKey)
             )
         )
         forecast = result

@@ -6,7 +6,7 @@ import SwiftUI
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
-    @AppStorage(UsageMonitor.paceToBankedResetKey) private var paceToBankedReset = false
+    @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
     @Environment(\.openSettings) private var openSettings
 
@@ -21,6 +21,9 @@ struct MenuContentView: View {
         .frame(width: 420)
         .padding(16)
         .task { await monitor.refresh() }
+        .onChange(of: paceTargetCreditID) { _, _ in
+            monitor.updatePaceTarget()
+        }
         .environment(\.locale, Locale(identifier: "en_US"))
     }
 
@@ -29,7 +32,7 @@ struct MenuContentView: View {
             window: snapshot.mainLimit.window,
             resetCredits: snapshot.resetCredits,
             now: snapshot.fetchedAt,
-            paceToBankedReset: paceToBankedReset
+            selectedCreditID: paceTargetCreditID
         )
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
@@ -81,7 +84,8 @@ struct MenuContentView: View {
                     forecast: forecast,
                     safetyBuffer: safetyBuffer,
                     resetCredits: snapshot.resetCredits,
-                    paceDeadline: paceDeadline
+                    paceDeadline: paceDeadline,
+                    paceTargetCreditID: $paceTargetCreditID
                 )
             }
 
@@ -100,23 +104,21 @@ struct MenuContentView: View {
                     GridRow(alignment: .firstTextBaseline) {
                         Text("Banked resets")
                             .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("\(snapshot.resetCredits.count) available")
-                            Text(bankedResetExpiryText(snapshot.resetCredits))
+                        VStack(alignment: .leading, spacing: 2) {
+                            bankedResetsMenu(snapshot: snapshot)
+                            if paceDeadline != snapshot.mainLimit.window.resetsAt {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 8))
+                                    Text("Pacing to banked reset")
+                                    Text(
+                                        paceDeadline,
+                                        format: .dateTime.month(.abbreviated).day().hour().minute()
+                                    )
+                                    .foregroundStyle(.secondary)
+                                }
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
-                            if hasCreditExpiringInWindow(snapshot) {
-                                Toggle("Pace to banked reset expiry", isOn: Binding(
-                                    get: { paceToBankedReset },
-                                    set: { value in
-                                        paceToBankedReset = value
-                                        monitor.updatePaceTarget()
-                                    }
-                                ))
-                                .toggleStyle(.switch)
-                                .controlSize(.mini)
-                                .font(.caption)
-                                .padding(.top, 2)
+                                .foregroundStyle(Color.orange)
                             }
                         }
                     }
@@ -236,22 +238,50 @@ struct MenuContentView: View {
         }
     }
 
-    private func hasCreditExpiringInWindow(_ snapshot: UsageSnapshot) -> Bool {
-        ForecastEngine.paceDeadline(
-            window: snapshot.mainLimit.window,
-            resetCredits: snapshot.resetCredits,
-            now: snapshot.fetchedAt,
-            paceToBankedReset: true
-        ) != snapshot.mainLimit.window.resetsAt
+    private func bankedResetsMenu(snapshot: UsageSnapshot) -> some View {
+        let window = snapshot.mainLimit.window
+        let qualifying = snapshot.resetCredits.filter { credit in
+            credit.expiresAt.map { $0 > snapshot.fetchedAt && $0 < window.resetsAt } == true
+        }
+        let others = snapshot.resetCredits.filter { credit in
+            !qualifying.contains { $0.id == credit.id }
+        }
+        return Menu {
+            Picker("Pace to", selection: $paceTargetCreditID) {
+                Text("Window reset · \(creditDateText(window.resetsAt))")
+                    .tag("")
+                ForEach(qualifying) { credit in
+                    Text("\(credit.title ?? "Banked reset") · expires \(creditDateText(credit.expiresAt))")
+                        .tag(credit.id)
+                }
+            }
+            .pickerStyle(.inline)
+            if !others.isEmpty {
+                Divider()
+                ForEach(others) { credit in
+                    Button("\(credit.title ?? "Banked reset") · \(othersDetailText(credit))") {}
+                        .disabled(true)
+                }
+            }
+        } label: {
+            Text("\(snapshot.resetCredits.count) available")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Choose what to pace toward")
     }
 
-    private func bankedResetExpiryText(_ credits: [ResetCredit]) -> String {
-        let dates = credits.compactMap(\.expiresAt)
-        guard !dates.isEmpty else { return "No expiry" }
-        let formatted = dates
-            .map { $0.formatted(.dateTime.month(.abbreviated).day().hour().minute()) }
-            .joined(separator: " · ")
-        return (dates.count == 1 ? "Expires " : "Expire ") + formatted
+    private func creditDateText(_ date: Date?) -> String {
+        guard let date else { return "no expiry" }
+        return date.formatted(
+            .dateTime.month(.abbreviated).day().hour().minute()
+                .locale(Locale(identifier: "en_US"))
+        )
+    }
+
+    private func othersDetailText(_ credit: ResetCredit) -> String {
+        guard let expiresAt = credit.expiresAt else { return "no expiry" }
+        return "expires \(creditDateText(expiresAt)), after the next reset"
     }
 
     private func paceText(forecast: Forecast, reset: Date) -> String {
@@ -590,6 +620,7 @@ private struct BurnDownChart: View {
     let safetyBuffer: Double
     let resetCredits: [ResetCredit]
     let paceDeadline: Date
+    @Binding var paceTargetCreditID: String
 
     @State private var selectedDate: Date?
 
@@ -690,6 +721,9 @@ private struct BurnDownChart: View {
                             "expires \(expiresAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
                         )
                         .foregroundStyle(.secondary)
+                        Text(credit.id == paceTargetCreditID ? "· click to stop pacing" : "· click to pace here")
+                            .foregroundStyle(.secondary)
+                            .italic()
                     }
                     .font(.caption)
                     .foregroundStyle(Color.orange)
@@ -787,9 +821,16 @@ private struct BurnDownChart: View {
                     if let expiresAt = credit.expiresAt {
                         RuleMark(x: .value("Banked reset", expiresAt))
                             .foregroundStyle(
-                                Color.orange.opacity(credit.id == hoveredCredit?.id ? 0.9 : 0.45)
+                                Color.orange.opacity(
+                                    credit.id == hoveredCredit?.id || credit.id == paceTargetCreditID
+                                        ? 0.9
+                                        : 0.45
+                                )
                             )
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            .lineStyle(StrokeStyle(
+                                lineWidth: credit.id == paceTargetCreditID ? 2 : 1,
+                                dash: [4, 3]
+                            ))
                     }
                 }
 
@@ -823,6 +864,10 @@ private struct BurnDownChart: View {
                 }
             }
             .chartXSelection(value: $selectedDate)
+            .onTapGesture {
+                guard let credit = hoveredCredit else { return }
+                paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
+            }
             .chartXScale(domain: window.startsAt ... window.resetsAt)
             .chartYScale(domain: 0 ... 100)
             .chartXAxis {

@@ -1,19 +1,20 @@
 import Foundation
 
 enum ForecastEngine {
-    /// The date pacing aims at: the next banked reset expiry inside the window
-    /// when that mode is on, the window reset otherwise.
+    /// The date pacing aims at: the selected banked reset's expiry while it
+    /// still falls inside the window, the window reset otherwise.
     static func paceDeadline(
         window: UsageWindow,
         resetCredits: [ResetCredit],
         now: Date,
-        paceToBankedReset: Bool
+        selectedCreditID: String?
     ) -> Date {
-        guard paceToBankedReset else { return window.resetsAt }
-        let expiry = resetCredits.compactMap(\.expiresAt)
-            .filter { $0 > now && $0 < window.resetsAt }
-            .min()
-        return expiry ?? window.resetsAt
+        guard let selectedCreditID, !selectedCreditID.isEmpty,
+              let expiry = resetCredits.first(where: { $0.id == selectedCreditID })?.expiresAt,
+              expiry > now, expiry < window.resetsAt else {
+            return window.resetsAt
+        }
+        return expiry
     }
 
     static func evaluate(
