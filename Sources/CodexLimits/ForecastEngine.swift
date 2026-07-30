@@ -1,15 +1,32 @@
 import Foundation
 
 enum ForecastEngine {
+    /// The date pacing aims at: the next banked reset expiry inside the window
+    /// when that mode is on, the window reset otherwise.
+    static func paceDeadline(
+        window: UsageWindow,
+        resetCredits: [ResetCredit],
+        now: Date,
+        paceToBankedReset: Bool
+    ) -> Date {
+        guard paceToBankedReset else { return window.resetsAt }
+        let expiry = resetCredits.compactMap(\.expiresAt)
+            .filter { $0 > now && $0 < window.resetsAt }
+            .min()
+        return expiry ?? window.resetsAt
+    }
+
     static func evaluate(
         window: UsageWindow,
         samples: [UsageSample],
         tokenHistory: [TokenDay],
         safetyBuffer: Double,
         now: Date,
-        previousStatus: PaceStatus?
+        previousStatus: PaceStatus?,
+        deadline: Date? = nil
     ) -> Forecast {
-        let daysLeft = max(window.resetsAt.timeIntervalSince(now) / 86_400, 0)
+        let target = deadline ?? window.resetsAt
+        let daysLeft = max(target.timeIntervalSince(now) / 86_400, 0)
         let currentSamples = samples
             .filter { $0.resetsAt == window.resetsAt && $0.observedAt <= now }
             .sorted { $0.observedAt < $1.observedAt }

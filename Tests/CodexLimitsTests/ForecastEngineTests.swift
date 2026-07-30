@@ -29,6 +29,65 @@ final class ForecastEngineTests: XCTestCase {
         XCTAssertEqual(result.recommendedPercentPerDay, 8.5, accuracy: 0.01)
     }
 
+    func testEarlierDeadlineRaisesRecommendedPace() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let reset = now.addingTimeInterval(4 * 86_400)
+        let deadline = now.addingTimeInterval(2 * 86_400)
+        let window = UsageWindow(
+            remainingPercent: 43,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        let samples = [
+            UsageSample(observedAt: now.addingTimeInterval(-86_400), remainingPercent: 60, resetsAt: reset),
+            UsageSample(observedAt: now, remainingPercent: 43, resetsAt: reset)
+        ]
+
+        let unconstrained = ForecastEngine.evaluate(
+            window: window, samples: samples, tokenHistory: [],
+            safetyBuffer: 3, now: now, previousStatus: nil
+        )
+        let constrained = ForecastEngine.evaluate(
+            window: window, samples: samples, tokenHistory: [],
+            safetyBuffer: 3, now: now, previousStatus: nil,
+            deadline: deadline
+        )
+
+        XCTAssertEqual(unconstrained.recommendedPercentPerDay, 10, accuracy: 0.01)
+        XCTAssertEqual(constrained.recommendedPercentPerDay, 20, accuracy: 0.01)
+    }
+
+    func testPaceDeadlinePicksNextQualifyingBankedExpiry() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let reset = now.addingTimeInterval(6 * 86_400)
+        let window = UsageWindow(remainingPercent: 50, resetsAt: reset, durationMinutes: 7 * 24 * 60)
+        let credits = [
+            ResetCredit(id: "past", title: nil, expiresAt: now.addingTimeInterval(-3_600)),
+            ResetCredit(id: "in-window", title: nil, expiresAt: now.addingTimeInterval(2 * 86_400)),
+            ResetCredit(id: "after-reset", title: nil, expiresAt: now.addingTimeInterval(9 * 86_400)),
+            ResetCredit(id: "open-ended", title: nil, expiresAt: nil)
+        ]
+
+        XCTAssertEqual(
+            ForecastEngine.paceDeadline(
+                window: window, resetCredits: credits, now: now, paceToBankedReset: true
+            ),
+            now.addingTimeInterval(2 * 86_400)
+        )
+        XCTAssertEqual(
+            ForecastEngine.paceDeadline(
+                window: window, resetCredits: credits, now: now, paceToBankedReset: false
+            ),
+            reset
+        )
+        XCTAssertEqual(
+            ForecastEngine.paceDeadline(
+                window: window, resetCredits: [], now: now, paceToBankedReset: true
+            ),
+            reset
+        )
+    }
+
     func testQuietCurrentPaceLeavesRoomToUseMore() {
         let day: TimeInterval = 86_400
         let now = Date(timeIntervalSince1970: 2_000_000)

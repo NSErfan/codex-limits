@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 final class UsageMonitor: ObservableObject {
     static let safetyBufferKey = "safetyBuffer"
+    static let paceToBankedResetKey = "paceToBankedReset"
 
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var forecast: Forecast?
@@ -135,6 +136,11 @@ final class UsageMonitor: ObservableObject {
         persist()
     }
 
+    func updatePaceTarget() {
+        recalculate()
+        persist()
+    }
+
     func connectHistoryFolder(_ directory: URL) async {
         await prepareHistory()
         let state = await history.connect(to: directory)
@@ -177,7 +183,13 @@ final class UsageMonitor: ObservableObject {
             tokenHistory: snapshot.tokenHistory,
             safetyBuffer: buffer,
             now: snapshot.fetchedAt,
-            previousStatus: previousStatus
+            previousStatus: previousStatus,
+            deadline: ForecastEngine.paceDeadline(
+                window: snapshot.mainLimit.window,
+                resetCredits: snapshot.resetCredits,
+                now: snapshot.fetchedAt,
+                paceToBankedReset: UserDefaults.standard.bool(forKey: Self.paceToBankedResetKey)
+            )
         )
         forecast = result
         previousStatus = result.status

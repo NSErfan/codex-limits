@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
+    @AppStorage(UsageMonitor.paceToBankedResetKey) private var paceToBankedReset = false
     @AppStorage("chartRange") private var chartRange = ChartRange.window
     @Environment(\.openSettings) private var openSettings
 
@@ -24,7 +25,13 @@ struct MenuContentView: View {
     }
 
     private func dashboard(snapshot: UsageSnapshot, forecast: Forecast) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let paceDeadline = ForecastEngine.paceDeadline(
+            window: snapshot.mainLimit.window,
+            resetCredits: snapshot.resetCredits,
+            now: snapshot.fetchedAt,
+            paceToBankedReset: paceToBankedReset
+        )
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 Text(snapshot.mainLimit.window.remainingPercent, format: .number.precision(.fractionLength(0)))
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
@@ -51,7 +58,7 @@ struct MenuContentView: View {
                 Text(statusTitle(forecast.status))
                     .font(.headline)
                     .foregroundStyle(statusColor(forecast.status))
-                Text(statusMessage(snapshot: snapshot, forecast: forecast))
+                Text(statusMessage(snapshot: snapshot, forecast: forecast, deadline: paceDeadline))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -73,7 +80,8 @@ struct MenuContentView: View {
                     fetchedAt: snapshot.fetchedAt,
                     forecast: forecast,
                     safetyBuffer: safetyBuffer,
-                    resetCredits: snapshot.resetCredits
+                    resetCredits: snapshot.resetCredits,
+                    paceDeadline: paceDeadline
                 )
             }
 
@@ -86,7 +94,7 @@ struct MenuContentView: View {
                 GridRow {
                     Text("Suggested pace")
                         .foregroundStyle(.secondary)
-                    Text(paceText(forecast: forecast, reset: snapshot.mainLimit.window.resetsAt))
+                    Text(paceText(forecast: forecast, reset: paceDeadline))
                 }
                 if !snapshot.resetCredits.isEmpty {
                     GridRow(alignment: .firstTextBaseline) {
@@ -97,6 +105,19 @@ struct MenuContentView: View {
                             Text(bankedResetExpiryText(snapshot.resetCredits))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if hasCreditExpiringInWindow(snapshot) {
+                                Toggle("Pace to banked reset expiry", isOn: Binding(
+                                    get: { paceToBankedReset },
+                                    set: { value in
+                                        paceToBankedReset = value
+                                        monitor.updatePaceTarget()
+                                    }
+                                ))
+                                .toggleStyle(.switch)
+                                .controlSize(.mini)
+                                .font(.caption)
+                                .padding(.top, 2)
+                            }
                         }
                     }
                 }
@@ -194,22 +215,34 @@ struct MenuContentView: View {
         }
     }
 
-    private func statusMessage(snapshot: UsageSnapshot, forecast: Forecast) -> String {
+    private func statusMessage(snapshot: UsageSnapshot, forecast: Forecast, deadline: Date) -> String {
+        let target = deadline == snapshot.mainLimit.window.resetsAt
+            ? "reset"
+            : "banked reset expiry"
         switch forecast.status {
         case .slowDown:
             let window = snapshot.mainLimit.window
-            let timeLeft = window.resetsAt.timeIntervalSince(snapshot.fetchedAt)
+            let timeLeft = deadline.timeIntervalSince(snapshot.fetchedAt)
             let timeToEmpty = window.remainingPercent / max(forecast.safetyPercentPerDay, 0.01) * 86_400
             let early = max(timeLeft - timeToEmpty, 0)
             return early > 0
-                ? "At this pace, your limit may run out \(durationText(early)) early."
+                ? "At this pace, your limit may run out \(durationText(early)) before the \(target)."
                 : "Your current pace is too close to the limit."
         case .onTrack:
-            return "You’re on track to have \(Int(forecast.expectedRemainingAtReset.rounded()))% left at reset."
+            return "You’re on track to have \(Int(forecast.expectedRemainingAtReset.rounded()))% left at the \(target)."
         case .roomToUseMore:
             let room = max(forecast.expectedRemainingAtReset - safetyBuffer, 0)
-            return "You can use about \(Int(room.rounded()))% more before the reset."
+            return "You can use about \(Int(room.rounded()))% more before the \(target)."
         }
+    }
+
+    private func hasCreditExpiringInWindow(_ snapshot: UsageSnapshot) -> Bool {
+        ForecastEngine.paceDeadline(
+            window: snapshot.mainLimit.window,
+            resetCredits: snapshot.resetCredits,
+            now: snapshot.fetchedAt,
+            paceToBankedReset: true
+        ) != snapshot.mainLimit.window.resetsAt
     }
 
     private func bankedResetExpiryText(_ credits: [ResetCredit]) -> String {
@@ -556,6 +589,7 @@ private struct BurnDownChart: View {
     let forecast: Forecast
     let safetyBuffer: Double
     let resetCredits: [ResetCredit]
+    let paceDeadline: Date
 
     @State private var selectedDate: Date?
 
@@ -684,7 +718,7 @@ private struct BurnDownChart: View {
             Chart {
                 ForEach([
                     BurnPoint(date: window.startsAt, remaining: 100),
-                    BurnPoint(date: window.resetsAt, remaining: safetyBuffer)
+                    BurnPoint(date: paceDeadline, remaining: safetyBuffer)
                 ]) { point in
                     LineMark(
                         x: .value("Time", point.date),
@@ -773,7 +807,7 @@ private struct BurnDownChart: View {
                 }
 
                 PointMark(
-                    x: .value("Reset", window.resetsAt),
+                    x: .value("Reset", paceDeadline),
                     y: .value("Target", safetyBuffer)
                 )
                 .foregroundStyle(Color.green)
@@ -838,12 +872,12 @@ private struct BurnDownChart: View {
     private func projection(rate: Double, remainingAtReset: Double) -> [BurnPoint] {
         let current = BurnPoint(date: fetchedAt, remaining: window.remainingPercent)
         guard rate > 0 else {
-            return [current, BurnPoint(date: window.resetsAt, remaining: window.remainingPercent)]
+            return [current, BurnPoint(date: paceDeadline, remaining: window.remainingPercent)]
         }
         let exhaustion = fetchedAt.addingTimeInterval(window.remainingPercent / rate * 86_400)
-        let endpoint = exhaustion < window.resetsAt
+        let endpoint = exhaustion < paceDeadline
             ? BurnPoint(date: exhaustion, remaining: 0)
-            : BurnPoint(date: window.resetsAt, remaining: remainingAtReset)
+            : BurnPoint(date: paceDeadline, remaining: remainingAtReset)
         return [current, endpoint]
     }
 
