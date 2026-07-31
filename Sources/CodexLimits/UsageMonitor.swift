@@ -285,7 +285,10 @@ final class UsageMonitor: ObservableObject {
             in: .userDomainMask
         ).first ?? FileManager.default.temporaryDirectory
         return base
-            .appendingPathComponent("com.github.thrr87.CodexLimits", isDirectory: true)
+            .appendingPathComponent(
+                Bundle.main.bundleIdentifier ?? LegacyBundleMigration.legacyIdentifier,
+                isDirectory: true
+            )
             .appendingPathComponent("History", isDirectory: true)
     }
 }

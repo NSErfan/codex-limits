@@ -4,7 +4,7 @@ set -euo pipefail
 MODE="${1:-run}"
 APP_NAME="Codex Limits"
 PROCESS_NAME="CodexLimits"
-BUNDLE_ID="com.github.thrr87.CodexLimits"
+BUNDLE_ID="com.github.nserfan.CodexLimits"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/dist/$APP_NAME.app"

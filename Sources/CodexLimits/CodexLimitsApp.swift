@@ -5,6 +5,8 @@ struct CodexLimitsApp: App {
     @StateObject private var monitor: UsageMonitor
 
     init() {
+        // Must precede any preference or history access.
+        LegacyBundleMigration.run()
         LoginItem.enableByDefault()
         _monitor = StateObject(wrappedValue: UsageMonitor())
     }

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/thrr87/codex-limits/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/thrr87/codex-limits/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/NSErfan/codex-limits/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/NSErfan/codex-limits/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="macOS 14 or later" src="https://img.shields.io/badge/macOS-14%2B-black">
   <img alt="Swift 5.10 or later" src="https://img.shields.io/badge/Swift-5.10%2B-F05138?logo=swift&logoColor=white">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue"></a>
@@ -21,6 +21,9 @@
 
 > [!NOTE]
 > Codex Limits is an independent, unofficial project. It is not affiliated with or endorsed by OpenAI.
+
+> [!NOTE]
+> This is an independently developed fork of [thrr87/codex-limits](https://github.com/thrr87/codex-limits), released under the same MIT license. It follows its own direction and does not track the original.
 
 ## What it tells you
 
