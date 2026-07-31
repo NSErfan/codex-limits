@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum CodexClientError: LocalizedError {
+enum CodexClientError: LocalizedError, Sendable {
     case cliNotFound
     case invalidResponse
     case mainLimitMissing

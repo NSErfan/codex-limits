@@ -4,8 +4,8 @@ import Foundation
 
 @MainActor
 final class UsageMonitor: ObservableObject {
-    static let safetyBufferKey = "safetyBuffer"
-    static let paceTargetCreditIDKey = "paceTargetCreditID"
+    nonisolated static let safetyBufferKey = "safetyBuffer"
+    nonisolated static let paceTargetCreditIDKey = "paceTargetCreditID"
 
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var forecast: Forecast?
@@ -18,6 +18,8 @@ final class UsageMonitor: ObservableObject {
     private static let stateKey = "usageState"
     private static let historyInstallationIDKey = "historyInstallationID"
     private static let historySyncBookmarkKey = "historySyncBookmark"
+    private let defaults: UserDefaults
+    private let fetchUsage: @Sendable () async throws -> UsageSnapshot
     private let history: UsageHistory
     private var previousStatus: PaceStatus?
     private var cancellables: Set<AnyCancellable> = []
@@ -27,8 +29,17 @@ final class UsageMonitor: ObservableObject {
     private var configuredSyncDirectory: URL?
     private var historyConnectionActive = false
 
-    init() {
-        let defaults = UserDefaults.standard
+    init(
+        defaults: UserDefaults = .standard,
+        historyDirectory: URL? = nil,
+        historyNow: @escaping @Sendable () -> Date = { Date() },
+        fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot = {
+            try await CodexClient.fetch()
+        },
+        startsAutomatically: Bool = true
+    ) {
+        self.defaults = defaults
+        self.fetchUsage = fetchUsage
         if let data = defaults.data(forKey: Self.stateKey),
            let state = try? JSONDecoder().decode(StoredState.self, from: data) {
             snapshot = state.snapshot
@@ -45,13 +56,16 @@ final class UsageMonitor: ObservableObject {
             defaults.set(installationID, forKey: Self.historyInstallationIDKey)
         }
         history = UsageHistory(
-            localDirectory: Self.historyDirectory(),
-            installationID: installationID
+            localDirectory: historyDirectory ?? Self.historyDirectory(),
+            installationID: installationID,
+            now: historyNow
         )
         recalculate()
 
-        Task { [weak self] in
-            await self?.start()
+        if startsAutomatically {
+            Task { [weak self] in
+                await self?.start()
+            }
         }
     }
 
@@ -108,7 +122,8 @@ final class UsageMonitor: ObservableObject {
             historyUsesFiles = historyState.errorMessage == nil
         }
 
-        let fetchTask = Task { try await CodexClient.fetch() }
+        let fetchUsage = self.fetchUsage
+        let fetchTask = Task { try await fetchUsage() }
         let historyState = await exchangeHistory()
         apply(historyState, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
         let exchangeErrorMessage = historyState.errorMessage
@@ -162,7 +177,7 @@ final class UsageMonitor: ObservableObject {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            UserDefaults.standard.set(bookmark, forKey: Self.historySyncBookmarkKey)
+            defaults.set(bookmark, forKey: Self.historySyncBookmarkKey)
             configuredSyncDirectory = directory
             syncFolderName = directory.lastPathComponent
         } catch {
@@ -175,7 +190,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     func stopHistorySync() async {
-        UserDefaults.standard.removeObject(forKey: Self.historySyncBookmarkKey)
+        defaults.removeObject(forKey: Self.historySyncBookmarkKey)
         configuredSyncDirectory = nil
         historyConnectionActive = false
         apply(await history.disconnect())
@@ -183,7 +198,7 @@ final class UsageMonitor: ObservableObject {
 
     private func recalculate(safetyBuffer: Double? = nil) {
         guard let snapshot else { return }
-        let storedBuffer = UserDefaults.standard.object(forKey: Self.safetyBufferKey) as? Double
+        let storedBuffer = defaults.object(forKey: Self.safetyBufferKey) as? Double
         let buffer = safetyBuffer ?? storedBuffer ?? 3
         let result = ForecastEngine.evaluate(
             window: snapshot.mainLimit.window,
@@ -196,7 +211,7 @@ final class UsageMonitor: ObservableObject {
                 window: snapshot.mainLimit.window,
                 resetCredits: snapshot.resetCredits,
                 now: snapshot.fetchedAt,
-                selectedCreditID: UserDefaults.standard.string(forKey: Self.paceTargetCreditIDKey)
+                selectedCreditID: defaults.string(forKey: Self.paceTargetCreditIDKey)
             )
         )
         forecast = result
@@ -210,7 +225,7 @@ final class UsageMonitor: ObservableObject {
             previousStatus: previousStatus
         )
         if let data = try? JSONEncoder().encode(state) {
-            UserDefaults.standard.set(data, forKey: Self.stateKey)
+            defaults.set(data, forKey: Self.stateKey)
         }
     }
 
@@ -225,7 +240,7 @@ final class UsageMonitor: ObservableObject {
             persist()
         }
 
-        guard let bookmark = UserDefaults.standard.data(forKey: Self.historySyncBookmarkKey) else {
+        guard let bookmark = defaults.data(forKey: Self.historySyncBookmarkKey) else {
             return
         }
         let directory: URL
@@ -238,7 +253,7 @@ final class UsageMonitor: ObservableObject {
                 bookmarkDataIsStale: &isStale
             )
         } catch {
-            UserDefaults.standard.removeObject(forKey: Self.historySyncBookmarkKey)
+            defaults.removeObject(forKey: Self.historySyncBookmarkKey)
             syncErrorMessage = "Couldn’t reopen the history folder. Choose it again."
             return
         }
@@ -254,7 +269,7 @@ final class UsageMonitor: ObservableObject {
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
-                UserDefaults.standard.set(refreshed, forKey: Self.historySyncBookmarkKey)
+                defaults.set(refreshed, forKey: Self.historySyncBookmarkKey)
             } catch {
                 syncErrorMessage = "Couldn’t update the saved history folder."
             }

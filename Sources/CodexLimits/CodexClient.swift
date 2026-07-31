@@ -1,18 +1,115 @@
+import Darwin
 import Foundation
 
 enum CodexClient {
+    private static let retryDelayNanoseconds: UInt64 = 250_000_000
+    private static let timeoutNanoseconds: UInt64 = 15_000_000_000
     private static let executablePaths = [
         "/opt/homebrew/bin/codex",
         "/usr/local/bin/codex"
     ]
 
     static func fetch() async throws -> UsageSnapshot {
-        guard let executable = executablePaths.first(where: {
-            FileManager.default.isExecutableFile(atPath: $0)
-        }) else {
+        try await fetch(
+            executablePaths: executablePaths,
+            isExecutable: FileManager.default.isExecutableFile(atPath:),
+            retryDelayNanoseconds: retryDelayNanoseconds,
+            timeoutNanoseconds: timeoutNanoseconds,
+            makeConnection: makeLiveConnection(using:)
+        )
+    }
+
+    static func fetch(
+        executablePaths: [String],
+        isExecutable: (String) -> Bool,
+        retryDelayNanoseconds: UInt64,
+        timeoutNanoseconds: UInt64,
+        makeConnection: (String) throws -> CodexAppServerConnection
+    ) async throws -> UsageSnapshot {
+        guard let executable = executablePaths.first(where: isExecutable) else {
             throw CodexClientError.cliNotFound
         }
 
+        return try await retryOnceAfterFailure(
+            delayNanoseconds: retryDelayNanoseconds
+        ) {
+            try await fetchOnce(
+                using: executable,
+                timeoutNanoseconds: timeoutNanoseconds,
+                makeConnection: makeConnection
+            )
+        }
+    }
+
+    static func retryOnceAfterFailure<Result>(
+        delayNanoseconds: UInt64 = 250_000_000,
+        operation: () async throws -> Result
+    ) async throws -> Result {
+        do {
+            return try await operation()
+        } catch let cancellation as CancellationError {
+            throw cancellation
+        } catch {
+            try Task.checkCancellation()
+            if delayNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            return try await operation()
+        }
+    }
+
+    private static func fetchOnce(
+        using executable: String,
+        timeoutNanoseconds: UInt64,
+        makeConnection: (String) throws -> CodexAppServerConnection
+    ) async throws -> UsageSnapshot {
+        try Task.checkCancellation()
+        let connection = try makeConnection(executable)
+        defer { connection.stop() }
+        try connection.start()
+        try Task.checkCancellation()
+
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+        try write(
+            #"{"id":\#(RequestID.initialize.rawValue),"method":"initialize","params":{"clientInfo":{"name":"codex-limits","title":"Codex Limits","version":"\#(version)"},"capabilities":{"experimentalApi":true}}}"#,
+            to: connection.input
+        )
+        let fetchedAt = Date()
+        return try await withTaskCancellationHandler {
+            try await withThrowingTaskGroup(of: FetchAttemptEvent.self) { group in
+                group.addTask {
+                    .snapshot(
+                        try await readSnapshot(
+                            from: connection,
+                            fetchedAt: fetchedAt
+                        )
+                    )
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                    return .timedOut
+                }
+                guard let first = try await group.next() else {
+                    throw CodexClientError.invalidResponse
+                }
+                switch first {
+                case let .snapshot(snapshot):
+                    group.cancelAll()
+                    return snapshot
+                case .timedOut:
+                    connection.stop()
+                    group.cancelAll()
+                    throw CodexClientError.timedOut
+                }
+            }
+        } onCancel: {
+            connection.stop()
+        }
+    }
+
+    private static func makeLiveConnection(
+        using executable: String
+    ) -> CodexAppServerConnection {
         let process = Process()
         let input = Pipe()
         let output = Pipe()
@@ -21,41 +118,19 @@ enum CodexClient {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try process.run()
 
-        do {
-            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
-            try write(
-                #"{"id":\#(RequestID.initialize.rawValue),"method":"initialize","params":{"clientInfo":{"name":"codex-limits","title":"Codex Limits","version":"\#(version)"},"capabilities":{"experimentalApi":true}}}"#,
-                to: input.fileHandleForWriting
-            )
-            let fetchedAt = Date()
-            let snapshot = try await withThrowingTaskGroup(of: UsageSnapshot.self) { group in
-                group.addTask {
-                    try await readSnapshot(
-                        from: output.fileHandleForReading,
-                        writingTo: input.fileHandleForWriting,
-                        fetchedAt: fetchedAt
-                    )
+        return CodexAppServerConnection(
+            input: input.fileHandleForWriting,
+            output: output.fileHandleForReading,
+            start: { try process.run() },
+            stop: {
+                try? input.fileHandleForWriting.close()
+                if process.isRunning {
+                    process.terminate()
                 }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: 15_000_000_000)
-                    throw CodexClientError.timedOut
-                }
-                guard let first = try await group.next() else {
-                    throw CodexClientError.invalidResponse
-                }
-                group.cancelAll()
-                return first
+                try? output.fileHandleForWriting.close()
             }
-            try? input.fileHandleForWriting.close()
-            if process.isRunning { process.terminate() }
-            return snapshot
-        } catch {
-            try? input.fileHandleForWriting.close()
-            if process.isRunning { process.terminate() }
-            throw error
-        }
+        )
     }
 
     static func decode(
@@ -194,13 +269,28 @@ enum CodexClient {
         writingTo input: FileHandle,
         fetchedAt: Date
     ) async throws -> UsageSnapshot {
+        let connection = CodexAppServerConnection(
+            input: input,
+            output: output,
+            start: {},
+            stop: {}
+        )
+        return try await readSnapshot(
+            from: connection,
+            fetchedAt: fetchedAt
+        )
+    }
+
+    private static func readSnapshot(
+        from connection: CodexAppServerConnection,
+        fetchedAt: Date
+    ) async throws -> UsageSnapshot {
         var rateLimitsResponse: Data?
         var usageResponse: Data?
         var usageRequestFinished = false
 
-        for try await line in output.bytes.lines {
+        while let data = try await connection.readLine() {
             try Task.checkCancellation()
-            let data = Data(line.utf8)
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let rawID = object["id"] as? Int,
                   let id = RequestID(rawValue: rawID) else { continue }
@@ -218,14 +308,17 @@ enum CodexClient {
             } else {
                 switch id {
                 case .initialize:
-                    try write(#"{"method":"initialized"}"#, to: input)
+                    try write(
+                        #"{"method":"initialized"}"#,
+                        to: connection.input
+                    )
                     try write(
                         #"{"id":\#(RequestID.rateLimits.rawValue),"method":"account/rateLimits/read"}"#,
-                        to: input
+                        to: connection.input
                     )
                     try write(
                         #"{"id":\#(RequestID.usage.rawValue),"method":"account/usage/read"}"#,
-                        to: input
+                        to: connection.input
                     )
                 case .rateLimits:
                     rateLimitsResponse = data
@@ -244,6 +337,153 @@ enum CodexClient {
             }
         }
         throw CodexClientError.invalidResponse
+    }
+
+    private enum FetchAttemptEvent: Sendable {
+        case snapshot(UsageSnapshot)
+        case timedOut
+    }
+}
+
+final class CodexAppServerConnection: @unchecked Sendable {
+    private static let defaultMaximumLineBytes = 16 * 1_024 * 1_024
+
+    let input: FileHandle
+
+    private let startOperation: () throws -> Void
+    private let stopOperation: () -> Void
+    private let outputDescriptor: Int32
+    private let maximumLineBytes: Int
+    private let lock = NSLock()
+    private var didStop = false
+    private var bufferedOutput = Data()
+
+    init(
+        input: FileHandle,
+        output: FileHandle,
+        maximumLineBytes: Int = defaultMaximumLineBytes,
+        start: @escaping () throws -> Void,
+        stop: @escaping () -> Void
+    ) {
+        self.input = input
+        outputDescriptor = Self.duplicateNonblockingDescriptor(
+            output.fileDescriptor
+        )
+        self.maximumLineBytes = max(maximumLineBytes, 1)
+        startOperation = start
+        stopOperation = stop
+    }
+
+    deinit {
+        if outputDescriptor >= 0 {
+            Darwin.close(outputDescriptor)
+        }
+    }
+
+    func start() throws {
+        try startOperation()
+    }
+
+    func stop() {
+        lock.lock()
+        let shouldStop = !didStop
+        didStop = true
+        lock.unlock()
+
+        if shouldStop {
+            stopOperation()
+        }
+    }
+
+    func readLine() async throws -> Data? {
+        var searchedByteCount = 0
+        while true {
+            try Task.checkCancellation()
+            guard !hasStopped else { return nil }
+            let searchStart = bufferedOutput.index(
+                bufferedOutput.startIndex,
+                offsetBy: min(searchedByteCount, bufferedOutput.count)
+            )
+            if let newline = bufferedOutput[searchStart...].firstIndex(
+                of: 0x0A
+            ) {
+                let lineByteCount = bufferedOutput.distance(
+                    from: bufferedOutput.startIndex,
+                    to: newline
+                )
+                guard lineByteCount <= maximumLineBytes else {
+                    return closeOversizedLine()
+                }
+                let line = bufferedOutput[..<newline]
+                bufferedOutput.removeSubrange(...newline)
+                return Data(line)
+            }
+            searchedByteCount = bufferedOutput.count
+            if bufferedOutput.count > maximumLineBytes {
+                return closeOversizedLine()
+            }
+            switch Self.readChunk(from: outputDescriptor) {
+            case let .data(chunk):
+                bufferedOutput.append(chunk)
+            case .retry:
+                try await Task.sleep(nanoseconds: 5_000_000)
+            case .endOfFile:
+                guard !bufferedOutput.isEmpty else { return nil }
+                defer { bufferedOutput.removeAll() }
+                return bufferedOutput
+            }
+        }
+    }
+
+    private var hasStopped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didStop
+    }
+
+    private func closeOversizedLine() -> Data? {
+        bufferedOutput.removeAll()
+        stop()
+        return nil
+    }
+
+    private static func duplicateNonblockingDescriptor(
+        _ descriptor: Int32
+    ) -> Int32 {
+        let duplicate = Darwin.dup(descriptor)
+        guard duplicate >= 0 else { return -1 }
+        let flags = Darwin.fcntl(duplicate, F_GETFL)
+        guard flags >= 0,
+              Darwin.fcntl(duplicate, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+            Darwin.close(duplicate)
+            return -1
+        }
+        return duplicate
+    }
+
+    private static func readChunk(from descriptor: Int32) -> ReadChunkResult {
+        guard descriptor >= 0 else { return .endOfFile }
+        var data = Data(count: 64 * 1_024)
+        let count = data.withUnsafeMutableBytes {
+            Darwin.read(descriptor, $0.baseAddress, $0.count)
+        }
+        if count > 0 {
+            data.count = count
+            return .data(data)
+        }
+        if count == 0 {
+            return .endOfFile
+        }
+        if errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK {
+            return .retry
+        }
+        return .endOfFile
+    }
+
+    private enum ReadChunkResult {
+        case data(Data)
+        case retry
+        case endOfFile
     }
 }
 
