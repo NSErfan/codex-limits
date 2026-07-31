@@ -6,6 +6,8 @@ import SwiftUI
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
+    @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
+    @AppStorage("chartRange") private var chartRange = ChartRange.window
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -19,11 +21,20 @@ struct MenuContentView: View {
         .frame(width: 420)
         .padding(16)
         .task { await monitor.refresh() }
+        .onChange(of: paceTargetCreditID) { _, _ in
+            monitor.updatePaceTarget()
+        }
         .environment(\.locale, Locale(identifier: "en_US"))
     }
 
     private func dashboard(snapshot: UsageSnapshot, forecast: Forecast) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let paceDeadline = ForecastEngine.paceDeadline(
+            window: snapshot.mainLimit.window,
+            resetCredits: snapshot.resetCredits,
+            now: snapshot.fetchedAt,
+            selectedCreditID: paceTargetCreditID
+        )
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 Text(snapshot.mainLimit.window.remainingPercent, format: .number.precision(.fractionLength(0)))
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
@@ -47,22 +58,43 @@ struct MenuContentView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(statusTitle(forecast.status))
+                Text(StatusText.title(forecast.status))
                     .font(.headline)
                     .foregroundStyle(statusColor(forecast.status))
-                Text(statusMessage(snapshot: snapshot, forecast: forecast))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(StatusText.message(
+                    forecast: forecast,
+                    remainingPercent: snapshot.mainLimit.window.remainingPercent,
+                    fetchedAt: snapshot.fetchedAt,
+                    deadline: paceDeadline,
+                    windowReset: snapshot.mainLimit.window.resetsAt,
+                    safetyBuffer: safetyBuffer
+                ))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
-            BurnDownChart(
-                window: snapshot.mainLimit.window,
-                samples: monitor.currentWindowSamples,
-                tokenHistory: snapshot.tokenHistory,
-                fetchedAt: snapshot.fetchedAt,
-                forecast: forecast,
-                safetyBuffer: safetyBuffer
-            )
+            GlassSegmentedPicker(selection: $chartRange)
+
+            if let duration = chartRange.duration {
+                HistoryChart(
+                    samples: monitor.samples,
+                    range: snapshot.fetchedAt.addingTimeInterval(-duration) ... snapshot.fetchedAt,
+                    bucketDuration: chartRange.bucketDuration,
+                    visibleDuration: chartRange.visibleDuration
+                )
+            } else {
+                BurnDownChart(
+                    window: snapshot.mainLimit.window,
+                    samples: monitor.currentWindowSamples,
+                    tokenHistory: snapshot.tokenHistory,
+                    fetchedAt: snapshot.fetchedAt,
+                    forecast: forecast,
+                    safetyBuffer: safetyBuffer,
+                    resetCredits: snapshot.resetCredits,
+                    paceDeadline: paceDeadline,
+                    paceTargetCreditID: $paceTargetCreditID
+                )
+            }
 
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 5) {
                 GridRow {
@@ -73,7 +105,34 @@ struct MenuContentView: View {
                 GridRow {
                     Text("Suggested pace")
                         .foregroundStyle(.secondary)
-                    Text(paceText(forecast: forecast, reset: snapshot.mainLimit.window.resetsAt))
+                    Text(StatusText.pace(
+                        recommendedPercentPerDay: forecast.recommendedPercentPerDay,
+                        deadline: paceDeadline,
+                        now: snapshot.fetchedAt
+                    ))
+                }
+                if !snapshot.resetCredits.isEmpty {
+                    GridRow(alignment: .firstTextBaseline) {
+                        Text("Banked resets")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            bankedResetsMenu(snapshot: snapshot)
+                            if paceDeadline != snapshot.mainLimit.window.resetsAt {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 8))
+                                    Text("Pacing to banked reset")
+                                    Text(
+                                        paceDeadline,
+                                        format: .dateTime.month(.abbreviated).day().hour().minute()
+                                    )
+                                    .foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(Color.orange)
+                            }
+                        }
+                    }
                 }
             }
             .font(.callout)
@@ -107,7 +166,7 @@ struct MenuContentView: View {
             Divider()
             HStack {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
-                    Text(updatedText(snapshot.fetchedAt, now: context.date))
+                    Text(StatusText.updated(snapshot.fetchedAt, now: context.date))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -153,14 +212,6 @@ struct MenuContentView: View {
         .frame(maxWidth: .infinity, minHeight: 150)
     }
 
-    private func statusTitle(_ status: PaceStatus) -> String {
-        switch status {
-        case .slowDown: "Slow down"
-        case .onTrack: "On track"
-        case .roomToUseMore: "Room to use more"
-        }
-    }
-
     private func statusColor(_ status: PaceStatus) -> Color {
         switch status {
         case .slowDown: .red
@@ -169,58 +220,335 @@ struct MenuContentView: View {
         }
     }
 
-    private func statusMessage(snapshot: UsageSnapshot, forecast: Forecast) -> String {
-        switch forecast.status {
-        case .slowDown:
-            let window = snapshot.mainLimit.window
-            let timeLeft = window.resetsAt.timeIntervalSince(snapshot.fetchedAt)
-            let timeToEmpty = window.remainingPercent / max(forecast.safetyPercentPerDay, 0.01) * 86_400
-            let early = max(timeLeft - timeToEmpty, 0)
-            return early > 0
-                ? "At this pace, your limit may run out \(durationText(early)) early."
-                : "Your current pace is too close to the limit."
-        case .onTrack:
-            return "You’re on track to have \(Int(forecast.expectedRemainingAtReset.rounded()))% left at reset."
-        case .roomToUseMore:
-            let room = max(forecast.expectedRemainingAtReset - safetyBuffer, 0)
-            return "You can use about \(Int(room.rounded()))% more before the reset."
+    private func bankedResetsMenu(snapshot: UsageSnapshot) -> some View {
+        let window = snapshot.mainLimit.window
+        return Menu {
+            ForEach(snapshot.resetCredits) { credit in
+                Button {
+                    paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
+                } label: {
+                    let text = BankedResetPresentation.itemText(credit, windowReset: window.resetsAt)
+                    if credit.id == paceTargetCreditID {
+                        Label(text, systemImage: "checkmark")
+                    } else {
+                        Text(text)
+                    }
+                }
+                .disabled(!BankedResetPresentation.qualifies(
+                    credit,
+                    now: snapshot.fetchedAt,
+                    windowReset: window.resetsAt
+                ))
+            }
+            Divider()
+            Text(BankedResetPresentation.hint(hasSelection: !paceTargetCreditID.isEmpty))
+        } label: {
+            bankedResetsLabel(snapshot.resetCredits)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Expiry of the next banked reset. Pick one to pace toward it.")
+    }
+
+    private func bankedResetsLabel(_ credits: [ResetCredit]) -> Text {
+        let parts = BankedResetPresentation.labelParts(for: credits)
+        let head = Text(parts.head)
+        guard let extra = parts.extra else { return head }
+        return head + Text("  \(extra)").foregroundColor(.secondary)
+    }
+}
+
+enum ChartRange: String, CaseIterable {
+    case window
+    case week
+    case month
+
+    var title: String {
+        switch self {
+        case .window: "Window"
+        case .week: "7 days"
+        case .month: "30 days"
         }
     }
 
-    private func paceText(forecast: Forecast, reset: Date) -> String {
-        if reset.timeIntervalSinceNow <= 86_400 {
-            return "Up to \(oneDecimal(forecast.recommendedPercentPerDay / 24))% an hour"
+    var duration: TimeInterval? {
+        switch self {
+        case .window: nil
+        case .week, .month: 30 * 86_400
         }
-        return "Up to \(oneDecimal(forecast.recommendedPercentPerDay))% a day"
     }
 
-    private func oneDecimal(_ value: Double) -> String {
-        value.formatted(
-            .number
-                .precision(.fractionLength(1))
-                .locale(Locale(identifier: "en_US"))
+    var bucketDuration: TimeInterval {
+        switch self {
+        case .window: 0
+        case .week, .month: 1_800
+        }
+    }
+
+    var visibleDuration: TimeInterval? {
+        switch self {
+        case .window, .month: nil
+        case .week: 7 * 86_400
+        }
+    }
+}
+
+private struct GlassSegmentedPicker: View {
+    @Binding var selection: ChartRange
+    @Namespace private var thumbNamespace
+
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: 2) { track }
+        } else {
+            track
+        }
+    }
+
+    private var track: some View {
+        HStack(spacing: 2) {
+            ForEach(ChartRange.allCases, id: \.self) { range in
+                segment(for: range)
+            }
+        }
+        .padding(3)
+        .background {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+        }
+    }
+
+    private func segment(for range: ChartRange) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                selection = range
+            }
+        } label: {
+            label(for: range)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == range ? [.isSelected] : [])
+    }
+
+    @ViewBuilder
+    private func label(for range: ChartRange) -> some View {
+        let text = Text(range.title)
+            .font(.callout.weight(selection == range ? .semibold : .regular))
+            .foregroundStyle(selection == range ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .contentShape(Capsule())
+        if #available(macOS 26.0, *) {
+            if selection == range {
+                text
+                    .glassEffect(.regular.interactive(), in: Capsule())
+                    .glassEffectID("thumb", in: thumbNamespace)
+            } else {
+                text
+            }
+        } else {
+            text.background {
+                if selection == range {
+                    Capsule()
+                        .fill(.regularMaterial)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                        .matchedGeometryEffect(id: "thumb", in: thumbNamespace)
+                }
+            }
+        }
+    }
+}
+
+private struct HistoryChart: View {
+    let samples: [UsageSample]
+    let range: ClosedRange<Date>
+    let bucketDuration: TimeInterval
+    let visibleDuration: TimeInterval?
+
+    @State private var selectedDate: Date?
+
+    private var series: HistorySeriesBuilder.Series {
+        HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
+    }
+
+    private var axisDayStride: Int {
+        visibleDuration == nil ? 5 : 1
+    }
+
+    private var hoveredPoint: HistorySeriesBuilder.Point? {
+        guard let selectedDate else { return nil }
+        return ChartInteraction.nearest(
+            to: selectedDate,
+            in: series.runs.flatMap(\.points),
+            date: \.date
         )
     }
 
-    private func durationText(_ seconds: TimeInterval) -> String {
-        if seconds >= 86_400 {
-            let days = max(Int((seconds / 86_400).rounded()), 1)
-            return "\(days) \(days == 1 ? "day" : "days")"
-        }
-        let hours = max(Int((seconds / 3_600).rounded()), 1)
-        return "\(hours) \(hours == 1 ? "hour" : "hours")"
+    private var hoveredReset: Date? {
+        guard let selectedDate else { return nil }
+        return ChartInteraction.nearest(
+            to: selectedDate,
+            in: series.resets,
+            visibleSpan: visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound),
+            date: { $0 }
+        )
     }
 
-    private func updatedText(_ date: Date, now: Date) -> String {
-        let seconds = max(now.timeIntervalSince(date), 0)
-        if seconds < 60 { return "Updated just now" }
-        if seconds < 3_600 { return "Updated \(Int(seconds / 60)) min ago" }
-        if seconds < 86_400 {
-            let hours = Int(seconds / 3_600)
-            return "Updated \(hours) \(hours == 1 ? "hr" : "hrs") ago"
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            readout
+            if series.isEmpty {
+                Text("No history yet")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 190)
+            } else if let visibleDuration {
+                chart
+                    .chartScrollableAxes(.horizontal)
+                    .chartXVisibleDomain(length: visibleDuration)
+                    .chartScrollPosition(
+                        initialX: range.upperBound.addingTimeInterval(-visibleDuration)
+                    )
+            } else {
+                chart
+            }
         }
-        let days = Int(seconds / 86_400)
-        return "Updated \(days) \(days == 1 ? "day" : "days") ago"
+        .padding(.horizontal, 8)
+    }
+
+    private var readout: some View {
+        HStack(spacing: 4) {
+            Spacer()
+            if let hoveredReset {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 8))
+                    .foregroundStyle(Color.green)
+                Text("Reset")
+                    .foregroundStyle(Color.green)
+                Text(
+                    hoveredReset,
+                    format: .dateTime.month(.abbreviated).day().hour().minute()
+                )
+                .foregroundStyle(.secondary)
+            } else if let hovered = hoveredPoint {
+                Text("\(Int(hovered.remainingPercent.rounded()))%")
+                    .fontWeight(.semibold)
+                Text(
+                    hovered.date,
+                    format: .dateTime.month(.abbreviated).day().hour().minute()
+                )
+                .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption2)
+        .monospacedDigit()
+        .frame(height: 12)
+    }
+
+    private var chart: some View {
+        Chart {
+            ForEach(series.connectors) { connector in
+                ForEach([connector.start, connector.end], id: \.date) { point in
+                    LineMark(
+                        x: .value("Time", point.date),
+                        y: .value("Remaining", point.remainingPercent),
+                        series: .value("Series", "gap-\(connector.id)")
+                    )
+                    .foregroundStyle(Color.blue.opacity(0.4))
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                }
+            }
+
+            ForEach(series.runs) { run in
+                if run.points.count == 1, let point = run.points.first {
+                    PointMark(
+                        x: .value("Time", point.date),
+                        y: .value("Remaining", point.remainingPercent)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .symbolSize(20)
+                } else {
+                    ForEach(run.points, id: \.date) { point in
+                        LineMark(
+                            x: .value("Time", point.date),
+                            y: .value("Remaining", point.remainingPercent),
+                            series: .value("Series", "run-\(run.id)")
+                        )
+                        .foregroundStyle(Color.blue)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                    }
+                }
+            }
+
+            ForEach(series.resets, id: \.self) { resetDate in
+                RuleMark(x: .value("Reset", resetDate))
+                    .foregroundStyle(Color.green.opacity(resetDate == hoveredReset ? 0.9 : 0.45))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
+
+            if hoveredReset == nil, let hovered = hoveredPoint {
+                RuleMark(x: .value("Hovered", hovered.date))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+
+                PointMark(
+                    x: .value("Hovered", hovered.date),
+                    y: .value("Remaining", hovered.remainingPercent)
+                )
+                .foregroundStyle(Color.blue)
+                .symbolSize(55)
+            }
+        }
+        .chartXSelection(value: $selectedDate)
+        .onTapGesture {
+            // A click pins the chart selection on macOS; release it so the
+            // readout follows the pointer again instead of freezing.
+            DispatchQueue.main.async { selectedDate = nil }
+        }
+        .onContinuousHover { phase in
+            // chartXSelection does not reliably clear when the pointer
+            // leaves the plot, which froze the readout in place.
+            if case .ended = phase { selectedDate = nil }
+        }
+        .chartXScale(domain: range)
+        .chartYScale(domain: 0 ... 100)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day, count: axisDayStride)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                    .foregroundStyle(Color.secondary.opacity(0.2))
+                AxisTick(length: 3)
+                    .foregroundStyle(Color.secondary)
+                AxisValueLabel {
+                    if let date = value.as(Date.self) {
+                        Text(date, format: .dateTime.month(.abbreviated).day())
+                    }
+                }
+                .foregroundStyle(Color.secondary)
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0.0, 25.0, 50.0, 75.0, 100.0]) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+                    .foregroundStyle(Color.secondary.opacity(0.2))
+                AxisTick(length: 3)
+                    .foregroundStyle(Color.secondary)
+                AxisValueLabel {
+                    if let percent = value.as(Double.self) {
+                        Text("\(Int(percent))%")
+                    }
+                }
+                .foregroundStyle(Color.secondary)
+            }
+        }
+        .chartLegend(.hidden)
+        .frame(height: 190)
+        .accessibilityLabel("Usage history")
+        .accessibilityValue(
+            series.accessibilitySummary(
+                days: Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
+            )
+        )
     }
 }
 
@@ -231,38 +559,37 @@ private struct BurnDownChart: View {
     let fetchedAt: Date
     let forecast: Forecast
     let safetyBuffer: Double
+    let resetCredits: [ResetCredit]
+    let paceDeadline: Date
+    @Binding var paceTargetCreditID: String
+
+    @State private var selectedDate: Date?
+
+    private var hoveredPoint: BurnPoint? {
+        guard let selectedDate else { return nil }
+        return ChartInteraction.nearest(to: selectedDate, in: observed, date: \.date)
+    }
+
+    private var visibleCredits: [ResetCredit] {
+        WindowChartSeries.visibleCredits(resetCredits, window: window)
+    }
+
+    private var hoveredCredit: ResetCredit? {
+        guard let selectedDate else { return nil }
+        return ChartInteraction.nearest(
+            to: selectedDate,
+            in: visibleCredits,
+            visibleSpan: window.resetsAt.timeIntervalSince(window.startsAt),
+            date: { $0.expiresAt ?? .distantPast }
+        )
+    }
 
     private var observed: [BurnPoint] {
-        let current = BurnPoint(date: fetchedAt, remaining: window.remainingPercent)
-        let local = samples
-            .filter { $0.observedAt > window.startsAt && $0.observedAt < fetchedAt }
-            .map { BurnPoint(date: $0.observedAt, remaining: $0.remainingPercent) }
-            .sorted { $0.date < $1.date }
-        let firstKnown = local.first ?? current
-        let buckets = tokenHistory
-            .filter {
-                $0.date.addingTimeInterval(86_400) > window.startsAt && $0.date < firstKnown.date
-            }
-            .sorted { $0.date < $1.date }
-        let totalTokens = buckets.reduce(Int64(0)) { $0 + $1.tokens }
-        var bootstrapped: [BurnPoint] = []
-
-        if totalTokens > 0 {
-            var cumulativeTokens: Int64 = 0
-            for bucket in buckets {
-                cumulativeTokens += bucket.tokens
-                let date = min(
-                    max(bucket.date.addingTimeInterval(86_400), window.startsAt),
-                    firstKnown.date
-                )
-                let used = (100 - firstKnown.remaining) * Double(cumulativeTokens) / Double(totalTokens)
-                bootstrapped.append(BurnPoint(date: date, remaining: 100 - used))
-            }
-        }
-
-        // Daily token buckets seed the curve until percentage samples cover the window.
-        return deduplicated(
-            [BurnPoint(date: window.startsAt, remaining: 100)] + bootstrapped + local + [current]
+        WindowChartSeries.observed(
+            window: window,
+            samples: samples,
+            tokenHistory: tokenHistory,
+            fetchedAt: fetchedAt
         )
     }
 
@@ -271,11 +598,23 @@ private struct BurnDownChart: View {
     }
 
     private var currentProjection: [BurnPoint] {
-        projection(rate: forecast.currentPercentPerDay, remainingAtReset: forecast.expectedRemainingAtReset)
+        WindowChartSeries.projection(
+            window: window,
+            fetchedAt: fetchedAt,
+            deadline: paceDeadline,
+            rate: forecast.currentPercentPerDay,
+            remainingAtDeadline: forecast.expectedRemainingAtReset
+        )
     }
 
     private var historicalProjection: [BurnPoint] {
-        projection(rate: forecast.historicalPercentPerDay, remainingAtReset: forecast.historicalRemainingAtReset)
+        WindowChartSeries.projection(
+            window: window,
+            fetchedAt: fetchedAt,
+            deadline: paceDeadline,
+            rate: forecast.historicalPercentPerDay,
+            remainingAtDeadline: forecast.historicalRemainingAtReset
+        )
     }
 
     private var xAxisDates: [Date] {
@@ -293,16 +632,46 @@ private struct BurnDownChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                ChartLegendItem(label: "Target", color: .green, dash: [3, 3])
-                ChartLegendItem(label: "Actual", color: .blue)
-                ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
-                ChartLegendItem(label: "Historical", color: .secondary, dash: [2, 3])
+                if let credit = hoveredCredit, let expiresAt = credit.expiresAt {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 8))
+                        Text("Banked \(credit.title?.lowercased() ?? "reset")")
+                        Text("expires \(BankedResetPresentation.dateText(expiresAt))")
+                            .foregroundStyle(.secondary)
+                        Text(credit.id == paceTargetCreditID ? "· click to stop pacing" : "· click to pace here")
+                            .foregroundStyle(.secondary)
+                            .italic()
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.orange)
+                } else if let hovered = hoveredPoint {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text("\(Int(hovered.remaining.rounded()))%")
+                            .fontWeight(.semibold)
+                        Text(
+                            hovered.date,
+                            format: .dateTime.month(.abbreviated).day().hour().minute()
+                        )
+                        .foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                    .monospacedDigit()
+                } else {
+                    ChartLegendItem(label: "Target", color: .green, dash: [3, 3])
+                    ChartLegendItem(label: "Actual", color: .blue)
+                    ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
+                    ChartLegendItem(label: "Historical", color: .secondary, dash: [2, 3])
+                }
             }
+            .frame(height: 16)
 
             Chart {
                 ForEach([
                     BurnPoint(date: window.startsAt, remaining: 100),
-                    BurnPoint(date: window.resetsAt, remaining: safetyBuffer)
+                    BurnPoint(date: paceDeadline, remaining: 0)
                 ]) { point in
                     LineMark(
                         x: .value("Time", point.date),
@@ -347,6 +716,18 @@ private struct BurnDownChart: View {
                 RuleMark(x: .value("Now", fetchedAt))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    .annotation(
+                        position: .top,
+                        spacing: 2,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                    ) {
+                        Text("Now")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.regularMaterial, in: Capsule())
+                    }
 
                 PointMark(
                     x: .value("Now", fetchedAt),
@@ -354,17 +735,40 @@ private struct BurnDownChart: View {
                 )
                 .foregroundStyle(currentColor)
                 .symbolSize(55)
-                .annotation(position: .top, spacing: 5) {
-                    Text("Now")
-                        .font(.caption2)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(.regularMaterial, in: Capsule())
+
+                ForEach(visibleCredits) { credit in
+                    if let expiresAt = credit.expiresAt {
+                        RuleMark(x: .value("Banked reset", expiresAt))
+                            .foregroundStyle(
+                                Color.orange.opacity(
+                                    credit.id == hoveredCredit?.id || credit.id == paceTargetCreditID
+                                        ? 0.9
+                                        : 0.45
+                                )
+                            )
+                            .lineStyle(StrokeStyle(
+                                lineWidth: credit.id == paceTargetCreditID ? 2 : 1,
+                                dash: [4, 3]
+                            ))
+                    }
+                }
+
+                if hoveredCredit == nil, let hovered = hoveredPoint {
+                    RuleMark(x: .value("Hovered", hovered.date))
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+
+                    PointMark(
+                        x: .value("Hovered", hovered.date),
+                        y: .value("Remaining", hovered.remaining)
+                    )
+                    .foregroundStyle(Color.blue)
+                    .symbolSize(55)
                 }
 
                 PointMark(
-                    x: .value("Reset", window.resetsAt),
-                    y: .value("Target", safetyBuffer)
+                    x: .value("Reset", paceDeadline),
+                    y: .value("Target", 0)
                 )
                 .foregroundStyle(Color.green)
                 .symbolSize(38)
@@ -372,11 +776,25 @@ private struct BurnDownChart: View {
                 if let endpoint = currentProjection.last {
                     PointMark(
                         x: .value("Current endpoint", endpoint.date),
-                        y: .value("Current endpoint", endpoint.remaining)
+                        y: .value("Current endpoint", 0)
                     )
                     .foregroundStyle(currentColor)
                     .symbolSize(32)
                 }
+            }
+            .chartXSelection(value: $selectedDate)
+            .onTapGesture {
+                if let credit = hoveredCredit {
+                    paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
+                }
+                // A click pins the chart selection on macOS; release it so the
+                // readout follows the pointer again instead of freezing.
+                DispatchQueue.main.async { selectedDate = nil }
+            }
+            .onContinuousHover { phase in
+                // chartXSelection does not reliably clear when the pointer
+                // leaves the plot, which froze the readout in place.
+                if case .ended = phase { selectedDate = nil }
             }
             .chartXScale(domain: window.startsAt ... window.resetsAt)
             .chartYScale(domain: 0 ... 100)
@@ -424,34 +842,6 @@ private struct BurnDownChart: View {
         }
     }
 
-    private func projection(rate: Double, remainingAtReset: Double) -> [BurnPoint] {
-        let current = BurnPoint(date: fetchedAt, remaining: window.remainingPercent)
-        guard rate > 0 else {
-            return [current, BurnPoint(date: window.resetsAt, remaining: window.remainingPercent)]
-        }
-        let exhaustion = fetchedAt.addingTimeInterval(window.remainingPercent / rate * 86_400)
-        let endpoint = exhaustion < window.resetsAt
-            ? BurnPoint(date: exhaustion, remaining: 0)
-            : BurnPoint(date: window.resetsAt, remaining: remainingAtReset)
-        return [current, endpoint]
-    }
-
-    private func deduplicated(_ points: [BurnPoint]) -> [BurnPoint] {
-        points.sorted { $0.date < $1.date }.reduce(into: []) { result, point in
-            if result.last?.date == point.date {
-                result[result.count - 1] = point
-            } else {
-                result.append(point)
-            }
-        }
-    }
-}
-
-private struct BurnPoint: Identifiable {
-    let date: Date
-    let remaining: Double
-
-    var id: Date { date }
 }
 
 private struct ChartLegendItem: View {

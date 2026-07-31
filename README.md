@@ -35,12 +35,12 @@ Open the menu to see:
 
 ## How to read the chart
 
-- **Target** runs from 100% to your chosen buffer at reset.
+- **Target** runs from 100% to empty at the pacing deadline.
 - **Actual** shows the samples recorded in the current window.
 - **Current** projects your recent pace through the reset.
 - **Historical** compares it with earlier use.
 
-The default buffer is 3%. You can change it in Settings.
+Forecasts keep a safety buffer, 3% by default. You can change it in Settings.
 
 ## Features
 
