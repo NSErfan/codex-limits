@@ -26,7 +26,7 @@ enum CodexClient {
         do {
             let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
             try write(
-                #"{"id":1,"method":"initialize","params":{"clientInfo":{"name":"codex-limits","title":"Codex Limits","version":"\#(version)"},"capabilities":{"experimentalApi":true}}}"#,
+                #"{"id":\#(RequestID.initialize.rawValue),"method":"initialize","params":{"clientInfo":{"name":"codex-limits","title":"Codex Limits","version":"\#(version)"},"capabilities":{"experimentalApi":true}}}"#,
                 to: input.fileHandleForWriting
             )
             let fetchedAt = Date()
@@ -70,8 +70,17 @@ enum CodexClient {
         ).result else {
             throw CodexClientError.invalidResponse
         }
-        let usageResult = usageResponse.flatMap {
-            try? decoder.decode(RPCResponse<UsageResult>.self, from: $0).result
+        let usageResult: UsageResult?
+        if let usageResponse {
+            guard let result = try decoder.decode(
+                RPCResponse<UsageResult>.self,
+                from: usageResponse
+            ).result else {
+                throw CodexClientError.invalidResponse
+            }
+            usageResult = result
+        } else {
+            usageResult = nil
         }
 
         let snapshots = rateResult.rateLimitsByLimitId ?? ["codex": rateResult.rateLimits]
@@ -158,33 +167,37 @@ enum CodexClient {
             try Task.checkCancellation()
             let data = Data(line.utf8)
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let id = object["id"] as? Int else { continue }
+                  let rawID = object["id"] as? Int,
+                  let id = RequestID(rawValue: rawID) else { continue }
 
-            if object["error"] != nil {
-                switch id {
-                case 2:
+            if object.keys.contains("error") {
+                guard (try? JSONDecoder().decode(RPCErrorEnvelope.self, from: data)) != nil else {
                     throw CodexClientError.invalidResponse
-                case 3:
-                    usageRequestFinished = true
-                default:
-                    continue
                 }
-            }
-
-            switch id {
-            case 1:
-                try write(#"{"method":"initialized"}"#, to: input)
-                try write(#"{"id":2,"method":"account/rateLimits/read"}"#, to: input)
-                try write(#"{"id":3,"method":"account/usage/read"}"#, to: input)
-            case 2:
-                rateLimitsResponse = data
-            case 3:
-                if object["error"] == nil {
+                switch id {
+                case .initialize, .rateLimits:
+                    throw CodexClientError.invalidResponse
+                case .usage:
+                    usageRequestFinished = true
+                }
+            } else {
+                switch id {
+                case .initialize:
+                    try write(#"{"method":"initialized"}"#, to: input)
+                    try write(
+                        #"{"id":\#(RequestID.rateLimits.rawValue),"method":"account/rateLimits/read"}"#,
+                        to: input
+                    )
+                    try write(
+                        #"{"id":\#(RequestID.usage.rawValue),"method":"account/usage/read"}"#,
+                        to: input
+                    )
+                case .rateLimits:
+                    rateLimitsResponse = data
+                case .usage:
                     usageResponse = data
                     usageRequestFinished = true
                 }
-            default:
-                continue
             }
 
             if let rateLimitsResponse, usageRequestFinished {
@@ -197,6 +210,21 @@ enum CodexClient {
         }
         throw CodexClientError.invalidResponse
     }
+}
+
+private enum RequestID: Int {
+    case initialize = 1
+    case rateLimits = 2
+    case usage = 3
+}
+
+private struct RPCErrorEnvelope: Decodable {
+    let error: RPCError
+}
+
+private struct RPCError: Decodable {
+    let code: Double
+    let message: String
 }
 
 private struct RPCResponse<Result: Decodable>: Decodable {
