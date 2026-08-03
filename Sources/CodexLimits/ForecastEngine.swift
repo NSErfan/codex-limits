@@ -35,9 +35,18 @@ enum ForecastEngine {
         let windowRate = max((100 - window.remainingPercent) / elapsedDays, 0)
         let recentRate: Double
 
-        if let first = currentSamples.first,
-           let last = currentSamples.last,
+        // Pace over the trailing day, so stopping or slowing shows up within
+        // hours instead of being averaged away by the whole window.
+        let trailing = currentSamples.filter { $0.observedAt >= now.addingTimeInterval(-86_400) }
+        if trailing.count > 1,
+           let first = trailing.first,
+           let last = trailing.last,
            last.observedAt > first.observedAt {
+            let days = last.observedAt.timeIntervalSince(first.observedAt) / 86_400
+            recentRate = max((first.remainingPercent - last.remainingPercent) / days, 0)
+        } else if let first = currentSamples.first,
+                  let last = currentSamples.last,
+                  last.observedAt > first.observedAt {
             let days = last.observedAt.timeIntervalSince(first.observedAt) / 86_400
             recentRate = max((first.remainingPercent - last.remainingPercent) / days, 0)
         } else {
@@ -54,7 +63,10 @@ enum ForecastEngine {
             guard let first = ordered.first,
                   let last = ordered.last,
                   last.observedAt > first.observedAt else { return nil }
-            let days = last.observedAt.timeIntervalSince(first.observedAt) / 86_400
+            // Spread the drop over at least a day: sampling clusters around
+            // active use, and dividing a burst by its own few hours would
+            // pass it off as a sustained daily pace.
+            let days = max(last.observedAt.timeIntervalSince(first.observedAt) / 86_400, 1)
             return max((first.remainingPercent - last.remainingPercent) / days, 0)
         }
         let historicalRate: Double
@@ -76,8 +88,19 @@ enum ForecastEngine {
         let recommended = daysLeft > 0
             ? max(window.remainingPercent - safetyBuffer, 0) / daysLeft
             : 0
+        // Being at or above the target line means the pace so far is fine,
+        // whatever past windows looked like; a projection built from history
+        // must not raise the alarm on its own.
+        let targetSpan = target.timeIntervalSince(window.startsAt)
+        let elapsedFraction = targetSpan > 0
+            ? min(max(now.timeIntervalSince(window.startsAt) / targetSpan, 0), 1)
+            : 1
+        let onPaceRemaining = 100 - (100 - safetyBuffer) * elapsedFraction
+        let aheadOfTarget = window.remainingPercent >= onPaceRemaining
+
         let status: PaceStatus
-        if safety < safetyBuffer || (previousStatus == .slowDown && safety < safetyBuffer + 1) {
+        if !aheadOfTarget,
+           safety < safetyBuffer || (previousStatus == .slowDown && safety < safetyBuffer + 1) {
             status = .slowDown
         } else if expected > 8 || (previousStatus == .roomToUseMore && expected > 7) {
             status = .roomToUseMore

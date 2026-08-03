@@ -29,6 +29,95 @@ final class ForecastEngineTests: XCTestCase {
         XCTAssertEqual(result.recommendedPercentPerDay, 8.5, accuracy: 0.01)
     }
 
+    func testIdleFreshWindowIsNotSlowedDownByPastBursts() {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(5 * day)
+        let previousReset = now.addingTimeInterval(-2 * day)
+        let window = UsageWindow(
+            remainingPercent: 98,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        // Last window burned 50% in a five-hour burst; this window is nearly untouched.
+        let samples = [
+            UsageSample(observedAt: previousReset.addingTimeInterval(-6 * 3_600), remainingPercent: 90, resetsAt: previousReset),
+            UsageSample(observedAt: previousReset.addingTimeInterval(-3_600), remainingPercent: 40, resetsAt: previousReset),
+            UsageSample(observedAt: now.addingTimeInterval(-day), remainingPercent: 99, resetsAt: reset),
+            UsageSample(observedAt: now, remainingPercent: 98, resetsAt: reset)
+        ]
+
+        let result = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+
+        XCTAssertNotEqual(result.status, .slowDown)
+    }
+
+    func testHistoricalBurstRateIsSpreadOverAtLeastADay() {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(4 * day)
+        let previousReset = now.addingTimeInterval(-day)
+        let window = UsageWindow(
+            remainingPercent: 60,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        // 12% drop over three hours must count as 12%/day, not 96%/day.
+        let samples = [
+            UsageSample(observedAt: previousReset.addingTimeInterval(-4 * 3_600), remainingPercent: 82, resetsAt: previousReset),
+            UsageSample(observedAt: previousReset.addingTimeInterval(-3_600), remainingPercent: 70, resetsAt: previousReset)
+        ]
+
+        let result = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+
+        XCTAssertEqual(result.historicalPercentPerDay, 12, accuracy: 0.01)
+    }
+
+    func testRecentPaceFollowsTheTrailingDayNotTheWholeWindow() {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(3 * day)
+        let window = UsageWindow(
+            remainingPercent: 50,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        // Heavy use three days ago, flat since yesterday.
+        let samples = [
+            UsageSample(observedAt: now.addingTimeInterval(-3.5 * day), remainingPercent: 100, resetsAt: reset),
+            UsageSample(observedAt: now.addingTimeInterval(-3 * day), remainingPercent: 55, resetsAt: reset),
+            UsageSample(observedAt: now.addingTimeInterval(-0.5 * day), remainingPercent: 50, resetsAt: reset),
+            UsageSample(observedAt: now, remainingPercent: 50, resetsAt: reset)
+        ]
+
+        let result = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+
+        // Whole-window average is ~14%/day; the trailing day is flat, so the
+        // blended current pace must sit well below the window average.
+        XCTAssertLessThan(result.currentPercentPerDay, 8)
+    }
+
     func testEarlierDeadlineRaisesRecommendedPace() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let reset = now.addingTimeInterval(4 * 86_400)
@@ -147,22 +236,41 @@ final class ForecastEngineTests: XCTestCase {
     func testSlowDownWaitsForOnePointOfRecovery() {
         let day: TimeInterval = 86_400
         let now = Date(timeIntervalSince1970: 200 * day)
+        let reset = now.addingTimeInterval(3 * day)
+        let previousReset = now.addingTimeInterval(-4 * day)
+        // 40% left with 4 of 7 days elapsed: behind the target line (44.6%).
         let window = UsageWindow(
-            remainingPercent: 49.210526,
-            resetsAt: now.addingTimeInterval(3 * day),
+            remainingPercent: 40,
+            resetsAt: reset,
             durationMinutes: 7 * 24 * 60
         )
+        let samples = [
+            UsageSample(observedAt: previousReset.addingTimeInterval(-3 * day), remainingPercent: 90, resetsAt: previousReset),
+            UsageSample(observedAt: previousReset.addingTimeInterval(-day), remainingPercent: 69.6, resetsAt: previousReset),
+            UsageSample(observedAt: now.addingTimeInterval(-0.9 * day), remainingPercent: 40, resetsAt: reset),
+            UsageSample(observedAt: now, remainingPercent: 40, resetsAt: reset)
+        ]
 
-        let result = ForecastEngine.evaluate(
+        let recovering = ForecastEngine.evaluate(
             window: window,
-            samples: [],
+            samples: samples,
             tokenHistory: [],
             safetyBuffer: 3,
             now: now,
             previousStatus: .slowDown
         )
+        let fresh = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
 
-        XCTAssertEqual(result.safetyRemainingAtReset, 3.5, accuracy: 0.01)
-        XCTAssertEqual(result.status, .slowDown)
+        // The safety margin sits in the recovery band between 3 and 4 points.
+        XCTAssertEqual(recovering.safetyRemainingAtReset, 3.28, accuracy: 0.01)
+        XCTAssertEqual(recovering.status, .slowDown)
+        XCTAssertNotEqual(fresh.status, .slowDown)
     }
 }
