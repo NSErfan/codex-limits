@@ -512,7 +512,7 @@ private struct HistoryChart: View {
             if case .ended = phase { selectedDate = nil }
         }
         .chartXScale(domain: range)
-        .chartYScale(domain: 0 ... 100)
+        .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: axisDayStride)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
@@ -797,7 +797,7 @@ private struct BurnDownChart: View {
                 if case .ended = phase { selectedDate = nil }
             }
             .chartXScale(domain: window.startsAt ... window.resetsAt)
-            .chartYScale(domain: 0 ... 100)
+            .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))
             .chartXAxis {
                 AxisMarks(values: xAxisDates) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
