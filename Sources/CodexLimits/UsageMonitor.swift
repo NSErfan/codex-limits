@@ -219,9 +219,12 @@ final class UsageMonitor: ObservableObject {
     }
 
     private func persist() {
+        // A bounded copy of real samples is always persisted, so a cold launch
+        // renders the charts at full fidelity instead of falling back to the
+        // coarse daily token bootstrap while file history loads.
         let state = StoredState(
             snapshot: snapshot,
-            samples: historyUsesFiles ? [] : samples,
+            samples: Self.samplesForPersistence(samples),
             previousStatus: previousStatus
         )
         if let data = try? JSONEncoder().encode(state) {
@@ -289,9 +292,46 @@ final class UsageMonitor: ObservableObject {
         _ state: UsageHistory.State,
         configuredFolderName: String? = nil
     ) {
-        samples = state.samples
+        // Merge instead of replace: a partial or failed history read must
+        // never shrink what the charts already know within this session.
+        samples = Self.mergedSamples(samples, state.samples)
         syncFolderName = state.folderName ?? configuredFolderName
         syncErrorMessage = state.errorMessage
+    }
+
+    /// Union of both sample sets, deduplicated, restricted to the retention
+    /// window, in the stable order the charts and forecast expect. Retention
+    /// is measured from the newest sample, not the wall clock, so the result
+    /// is self-consistent whatever the clock says.
+    nonisolated static func mergedSamples(
+        _ current: [UsageSample],
+        _ incoming: [UsageSample]
+    ) -> [UsageSample] {
+        let union = Array(Set(current + incoming))
+        guard let newest = union.map(\.observedAt).max() else { return [] }
+        let cutoff = newest.addingTimeInterval(-90 * 86_400)
+        return union
+            .filter { $0.observedAt >= cutoff }
+            .sorted(by: sampleOrder)
+    }
+
+    /// The trailing 30 days (what the charts can show), capped so the stored
+    /// state stays small; the newest samples win when the cap bites.
+    nonisolated static func samplesForPersistence(_ samples: [UsageSample]) -> [UsageSample] {
+        guard let newest = samples.map(\.observedAt).max() else { return [] }
+        let cutoff = newest.addingTimeInterval(-30 * 86_400)
+        let recent = samples
+            .filter { $0.observedAt >= cutoff }
+            .sorted(by: sampleOrder)
+        return Array(recent.suffix(4_000))
+    }
+
+    private nonisolated static func sampleOrder(_ lhs: UsageSample, _ rhs: UsageSample) -> Bool {
+        if lhs.observedAt != rhs.observedAt { return lhs.observedAt < rhs.observedAt }
+        if lhs.remainingPercent != rhs.remainingPercent {
+            return lhs.remainingPercent > rhs.remainingPercent
+        }
+        return lhs.resetsAt < rhs.resetsAt
     }
 
     private static func historyDirectory() -> URL {
