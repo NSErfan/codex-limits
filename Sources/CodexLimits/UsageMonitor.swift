@@ -20,9 +20,12 @@ final class UsageMonitor: ObservableObject {
     private static let historySyncBookmarkKey = "historySyncBookmark"
     private let defaults: UserDefaults
     private let fetchUsage: @Sendable () async throws -> UsageSnapshot
+    private let recoveryDelaysNanoseconds: [UInt64]
+    private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
     private let history: UsageHistory
     private var previousStatus: PaceStatus?
     private var cancellables: Set<AnyCancellable> = []
+    private var recoveryTask: Task<Void, Never>?
     private var started = false
     private var historyPrepared = false
     private var historyUsesFiles = false
@@ -36,10 +39,20 @@ final class UsageMonitor: ObservableObject {
         fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot = {
             try await CodexClient.fetch()
         },
+        recoveryDelaysNanoseconds: [UInt64] = [
+            2_000_000_000,
+            10_000_000_000,
+            30_000_000_000
+        ],
+        sleepBeforeRecovery: @escaping @Sendable (UInt64) async throws -> Void = {
+            try await Task.sleep(nanoseconds: $0)
+        },
         startsAutomatically: Bool = true
     ) {
         self.defaults = defaults
         self.fetchUsage = fetchUsage
+        self.recoveryDelaysNanoseconds = recoveryDelaysNanoseconds
+        self.sleepBeforeRecovery = sleepBeforeRecovery
         if let data = defaults.data(forKey: Self.stateKey),
            let state = try? JSONDecoder().decode(StoredState.self, from: data) {
             snapshot = state.snapshot
@@ -111,6 +124,12 @@ final class UsageMonitor: ObservableObject {
     }
 
     func refresh() async {
+        recoveryTask?.cancel()
+        recoveryTask = nil
+        await refresh(recoveryAttempt: 0)
+    }
+
+    private func refresh(recoveryAttempt: Int) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -149,8 +168,30 @@ final class UsageMonitor: ObservableObject {
             persist()
         } catch let error as CodexClientError {
             errorMessage = error.localizedDescription
+            if error.shouldRetryAutomatically {
+                scheduleRecovery(afterFailedAttempt: recoveryAttempt)
+            }
         } catch {
             errorMessage = "Couldn’t read Codex usage. Try refreshing again."
+            scheduleRecovery(afterFailedAttempt: recoveryAttempt)
+        }
+    }
+
+    private func scheduleRecovery(afterFailedAttempt attempt: Int) {
+        guard attempt < recoveryDelaysNanoseconds.count else { return }
+        let delay = recoveryDelaysNanoseconds[attempt]
+        let sleepBeforeRecovery = self.sleepBeforeRecovery
+        recoveryTask?.cancel()
+        recoveryTask = Task { [weak self] in
+            do {
+                try await sleepBeforeRecovery(delay)
+                try Task.checkCancellation()
+            } catch {
+                return
+            }
+            guard let self else { return }
+            recoveryTask = nil
+            await refresh(recoveryAttempt: attempt + 1)
         }
     }
 

@@ -296,12 +296,15 @@ enum CodexClient {
                   let id = RequestID(rawValue: rawID) else { continue }
 
             if object.keys.contains("error") {
-                guard (try? JSONDecoder().decode(RPCErrorEnvelope.self, from: data)) != nil else {
+                guard let envelope = try? JSONDecoder().decode(
+                    RPCErrorEnvelope.self,
+                    from: data
+                ) else {
                     throw CodexClientError.invalidResponse
                 }
                 switch id {
                 case .initialize, .rateLimits:
-                    throw CodexClientError.invalidResponse
+                    throw CodexClientError.appServerError(envelope.error.message)
                 case .usage:
                     usageRequestFinished = true
                 }

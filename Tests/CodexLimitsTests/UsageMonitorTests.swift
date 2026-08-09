@@ -51,6 +51,165 @@ final class UsageMonitorTests: XCTestCase {
         XCTAssertEqual(fetchCount, 2)
     }
 
+    func testTransientFailureRecoversAutomatically() async throws {
+        let expected = Self.snapshot(remainingPercent: 67)
+        let source = SnapshotSequence(
+            outcomes: [.clientError(.invalidResponse), .snapshot(expected)]
+        )
+        let context = try makeContext(recoveryDelaysNanoseconds: [0]) {
+            try await source.fetch()
+        }
+        defer { context.cleanUp() }
+
+        await context.monitor.refresh()
+        await source.waitForFetchCount(2)
+        while context.monitor.isRefreshing {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(context.monitor.snapshot, expected)
+        XCTAssertNil(context.monitor.errorMessage)
+        XCTAssertEqual(context.monitor.samples.count, 1)
+        let fetchCount = await source.fetchCount
+        XCTAssertEqual(fetchCount, 2)
+    }
+
+    func testAutomaticRecoveryReplacesCachedSnapshotOnlyAfterSuccess() async throws {
+        let cached = Self.snapshot(remainingPercent: 42)
+        let recovered = Self.snapshot(remainingPercent: 69)
+        let source = SnapshotSequence(
+            outcomes: [
+                .snapshot(cached),
+                .clientError(.invalidResponse),
+                .snapshot(recovered)
+            ]
+        )
+        let context = try makeContext(recoveryDelaysNanoseconds: [10_000_000]) {
+            try await source.fetch()
+        }
+        defer { context.cleanUp() }
+
+        await context.monitor.refresh()
+        await context.monitor.refresh()
+
+        XCTAssertEqual(context.monitor.snapshot, cached)
+        XCTAssertEqual(
+            context.monitor.errorMessage,
+            CodexClientError.invalidResponse.localizedDescription
+        )
+
+        await source.waitForFetchCount(3)
+        while context.monitor.isRefreshing {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(context.monitor.snapshot, recovered)
+        XCTAssertNil(context.monitor.errorMessage)
+        XCTAssertEqual(context.monitor.samples.count, 2)
+    }
+
+    func testAutomaticRecoveryStopsAfterConfiguredAttempts() async throws {
+        let source = SnapshotSequence(
+            outcomes: [
+                .clientError(.invalidResponse),
+                .clientError(.invalidResponse),
+                .clientError(.invalidResponse)
+            ]
+        )
+        let context = try makeContext(recoveryDelaysNanoseconds: [0, 0]) {
+            try await source.fetch()
+        }
+        defer { context.cleanUp() }
+
+        await context.monitor.refresh()
+        await source.waitForFetchCount(3)
+        while context.monitor.isRefreshing {
+            await Task.yield()
+        }
+        for _ in 0 ..< 10 {
+            await Task.yield()
+        }
+
+        XCTAssertNil(context.monitor.snapshot)
+        XCTAssertEqual(
+            context.monitor.errorMessage,
+            CodexClientError.invalidResponse.localizedDescription
+        )
+        let fetchCount = await source.fetchCount
+        XCTAssertEqual(fetchCount, 3)
+    }
+
+    func testAutomaticRecoveryUsesConfiguredBackoffOrder() async throws {
+        let expected = Self.snapshot(remainingPercent: 73)
+        let source = SnapshotSequence(
+            outcomes: [
+                .clientError(.invalidResponse),
+                .clientError(.timedOut),
+                .genericError,
+                .snapshot(expected)
+            ]
+        )
+        let delayRecorder = RecoveryDelayRecorder()
+        let context = try makeContext(
+            recoveryDelaysNanoseconds: [3, 5, 8],
+            sleepBeforeRecovery: { await delayRecorder.record($0) }
+        ) {
+            try await source.fetch()
+        }
+        defer { context.cleanUp() }
+
+        await context.monitor.refresh()
+        await source.waitForFetchCount(4)
+        while context.monitor.isRefreshing {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(context.monitor.snapshot, expected)
+        let recordedDelays = await delayRecorder.delays
+        XCTAssertEqual(recordedDelays, [3, 5, 8])
+    }
+
+    func testPermanentClientFailuresDoNotScheduleAutomaticRecovery() async throws {
+        for error in [CodexClientError.cliNotFound, .mainLimitMissing] {
+            let source = SnapshotSequence(
+                outcomes: [.clientError(error), .genericError]
+            )
+            let context = try makeContext(recoveryDelaysNanoseconds: [0]) {
+                try await source.fetch()
+            }
+            defer { context.cleanUp() }
+
+            await context.monitor.refresh()
+            for _ in 0 ..< 10 {
+                await Task.yield()
+            }
+
+            let fetchCount = await source.fetchCount
+            XCTAssertEqual(fetchCount, 1)
+            XCTAssertEqual(context.monitor.errorMessage, error.localizedDescription)
+        }
+    }
+
+    func testManualRefreshCancelsPendingAutomaticRecovery() async throws {
+        let expected = Self.snapshot(remainingPercent: 71)
+        let source = SnapshotSequence(
+            outcomes: [.clientError(.invalidResponse), .snapshot(expected)]
+        )
+        let context = try makeContext(recoveryDelaysNanoseconds: [50_000_000]) {
+            try await source.fetch()
+        }
+        defer { context.cleanUp() }
+
+        await context.monitor.refresh()
+        await context.monitor.refresh()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(context.monitor.snapshot, expected)
+        XCTAssertNil(context.monitor.errorMessage)
+        let fetchCount = await source.fetchCount
+        XCTAssertEqual(fetchCount, 2)
+    }
+
     func testFinalFailurePreservesLastGoodSnapshotAndHistory() async throws {
         let expected = Self.snapshot(remainingPercent: 74)
         let source = SnapshotSequence(
@@ -152,6 +311,10 @@ final class UsageMonitorTests: XCTestCase {
     }
 
     private func makeContext(
+        recoveryDelaysNanoseconds: [UInt64] = [],
+        sleepBeforeRecovery: @escaping @Sendable (UInt64) async throws -> Void = {
+            try await Task.sleep(nanoseconds: $0)
+        },
         fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot
     ) throws -> UsageMonitorTestContext {
         let suiteName = "UsageMonitorTests.\(UUID().uuidString)"
@@ -164,6 +327,8 @@ final class UsageMonitorTests: XCTestCase {
             historyDirectory: historyDirectory,
             historyNow: { Self.fixtureNow },
             fetchUsage: fetchUsage,
+            recoveryDelaysNanoseconds: recoveryDelaysNanoseconds,
+            sleepBeforeRecovery: sleepBeforeRecovery,
             startsAutomatically: false
         )
         return UsageMonitorTestContext(
@@ -217,6 +382,7 @@ private actor SnapshotSequence {
 
     private var outcomes: [Outcome]
     private var storedFetchCount = 0
+    private var fetchCountWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
 
     init(outcomes: [Outcome]) {
         self.outcomes = outcomes
@@ -228,6 +394,9 @@ private actor SnapshotSequence {
 
     func fetch() throws -> UsageSnapshot {
         storedFetchCount += 1
+        let readyWaiters = fetchCountWaiters.filter { storedFetchCount >= $0.0 }
+        fetchCountWaiters.removeAll { storedFetchCount >= $0.0 }
+        readyWaiters.forEach { $0.1.resume() }
         guard !outcomes.isEmpty else {
             throw SnapshotSequenceError.missingOutcome
         }
@@ -240,11 +409,26 @@ private actor SnapshotSequence {
             throw SnapshotSequenceError.genericFailure
         }
     }
+
+    func waitForFetchCount(_ expectedCount: Int) async {
+        guard storedFetchCount < expectedCount else { return }
+        await withCheckedContinuation { continuation in
+            fetchCountWaiters.append((expectedCount, continuation))
+        }
+    }
 }
 
 private enum SnapshotSequenceError: Error, Sendable {
     case genericFailure
     case missingOutcome
+}
+
+private actor RecoveryDelayRecorder {
+    private(set) var delays: [UInt64] = []
+
+    func record(_ delay: UInt64) {
+        delays.append(delay)
+    }
 }
 
 private actor SuspendedSnapshotSource {

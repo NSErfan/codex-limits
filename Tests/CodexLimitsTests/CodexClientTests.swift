@@ -13,6 +13,18 @@ final class CodexClientTests: XCTestCase {
                 "Codex returned data this app could not read. Update Codex CLI and try again."
             ),
             (
+                .appServerError("Rate limits are temporarily unavailable"),
+                "Codex couldn’t load usage: Rate limits are temporarily unavailable. Refresh to try again."
+            ),
+            (
+                .appServerError("  Initialization failed!\n"),
+                "Codex couldn’t load usage: Initialization failed! Refresh to try again."
+            ),
+            (
+                .appServerError(" \n"),
+                "Codex couldn’t load usage. Refresh to try again."
+            ),
+            (
                 .mainLimitMissing,
                 "Codex did not return a usable limit. Make sure Codex CLI is signed in."
             ),
@@ -219,13 +231,14 @@ final class CodexClientTests: XCTestCase {
 
         do {
             _ = try await fetchSnapshot(using: server)
-            XCTFail("Expected invalidResponse")
+            XCTFail("Expected appServerError")
         } catch let error as CodexClientError {
-            guard case .invalidResponse = error else {
-                return XCTFail("Expected invalidResponse, got \(error)")
+            guard case let .appServerError(message) = error else {
+                return XCTFail("Expected appServerError, got \(error)")
             }
+            XCTAssertEqual(message, "Rate limits failed")
         } catch {
-            XCTFail("Expected invalidResponse, got \(error)")
+            XCTFail("Expected appServerError, got \(error)")
         }
 
         XCTAssertEqual(server.connectionCount, 2)
@@ -527,13 +540,19 @@ final class CodexClientTests: XCTestCase {
     func testRateLimitsRPCErrorRemainsFailure() async throws {
         let rateLimitsError = #"{"id":2,"error":{"code":-32603,"message":"Rate limits are temporarily unavailable"}}"#
 
-        try await assertInvalidResponse(responses: [rateLimitsError])
+        try await assertAppServerError(
+            responses: [rateLimitsError],
+            message: "Rate limits are temporarily unavailable"
+        )
     }
 
     func testInitializationRPCErrorRemainsFailure() async throws {
         let initializationError = #"{"id":1,"error":{"code":-32603,"message":"Initialization failed"}}"#
 
-        try await assertInvalidResponse(responses: [initializationError])
+        try await assertAppServerError(
+            responses: [initializationError],
+            message: "Initialization failed"
+        )
     }
 
     func testMalformedUsageRPCErrorRemainsFailure() async throws {
@@ -723,6 +742,30 @@ final class CodexClientTests: XCTestCase {
                     line: line
                 )
             }
+        }
+    }
+
+    private func assertAppServerError(
+        responses: [String],
+        message expectedMessage: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        do {
+            _ = try await readSnapshot(
+                responses: responses,
+                fetchedAt: Self.fetchedAt
+            )
+            XCTFail("Expected appServerError", file: file, line: line)
+        } catch let error as CodexClientError {
+            guard case let .appServerError(message) = error else {
+                return XCTFail(
+                    "Expected appServerError, got \(error)",
+                    file: file,
+                    line: line
+                )
+            }
+            XCTAssertEqual(message, expectedMessage, file: file, line: line)
         }
     }
 
