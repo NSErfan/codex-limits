@@ -39,6 +39,121 @@ final class CodexClientTests: XCTestCase {
         }
     }
 
+    func testSpawnEnvironmentAppendsExecutableDirectoryToPath() {
+        let environment = CodexClient.spawnEnvironment(
+            forExecutableAt: "/opt/homebrew/bin/codex",
+            base: ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": "/Users/test"]
+        )
+
+        XCTAssertEqual(
+            environment["PATH"],
+            "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"
+        )
+        XCTAssertEqual(environment["HOME"], "/Users/test")
+    }
+
+    func testSpawnEnvironmentKeepsPathWithExecutableDirectoryUnchanged() {
+        let environment = CodexClient.spawnEnvironment(
+            forExecutableAt: "/opt/homebrew/bin/codex",
+            base: ["PATH": "/opt/homebrew/bin:/usr/bin:/bin"]
+        )
+
+        XCTAssertEqual(environment["PATH"], "/opt/homebrew/bin:/usr/bin:/bin")
+    }
+
+    func testSpawnEnvironmentSetsPathWhenBaseHasNone() {
+        let environment = CodexClient.spawnEnvironment(
+            forExecutableAt: "/usr/local/bin/codex",
+            base: [:]
+        )
+
+        XCTAssertEqual(environment["PATH"], "/usr/local/bin")
+    }
+
+    func testSpawnEnvironmentAppendsTheSymlinkDirectoryNotItsTarget() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let binDirectory = root.appendingPathComponent("bin", isDirectory: true)
+        let libDirectory = root.appendingPathComponent("lib", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: libDirectory, withIntermediateDirectories: true)
+        try Data("// wrapper\n".utf8).write(to: libDirectory.appendingPathComponent("codex.js"))
+        let symlink = binDirectory.appendingPathComponent("codex")
+        try FileManager.default.createSymbolicLink(
+            atPath: symlink.path,
+            withDestinationPath: "../lib/codex.js"
+        )
+
+        let environment = CodexClient.spawnEnvironment(
+            forExecutableAt: symlink.path,
+            base: ["PATH": "/usr/bin"]
+        )
+
+        // The symlink's directory is where companion tools (node) live;
+        // resolving to the target's directory would lose them.
+        XCTAssertEqual(environment["PATH"], "/usr/bin:\(binDirectory.path)")
+    }
+
+    func testLiveConnectionPutsTheExecutableDirectoryOnTheChildPath() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dependency = "codex-limits-dep-\(UUID().uuidString)"
+        _ = try makeExecutableScript(
+            named: dependency,
+            contents: "#!/bin/sh\nexit 0\n",
+            in: directory
+        )
+        let fakeCodex = try makeExecutableScript(
+            named: "codex",
+            contents: """
+            #!/bin/sh
+            \(dependency) || exit 7
+            printf '%s\\n' '{"id":1,"result":{}}'
+            printf '%s\\n' '\(Self.rateLimitsResponse)'
+            printf '%s\\n' '{"id":3,"result":{}}'
+            exec sleep 5
+            """,
+            in: directory
+        )
+
+        let result = try await CodexClient.fetch(
+            executablePaths: [fakeCodex.path],
+            isExecutable: FileManager.default.isExecutableFile(atPath:),
+            retryDelayNanoseconds: 0,
+            timeoutNanoseconds: 10_000_000_000,
+            makeConnection: CodexClient.makeLiveConnection(using:)
+        )
+
+        XCTAssertEqual(result.mainLimit.window.remainingPercent, 80)
+    }
+
+    func testChildThatDiesWithoutOutputReportsInvalidResponse() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fakeCodex = try makeExecutableScript(
+            named: "codex",
+            contents: "#!/bin/sh\nsleep 0.3\nexit 127\n",
+            in: directory
+        )
+
+        do {
+            _ = try await CodexClient.fetch(
+                executablePaths: [fakeCodex.path],
+                isExecutable: FileManager.default.isExecutableFile(atPath:),
+                retryDelayNanoseconds: 0,
+                timeoutNanoseconds: 10_000_000_000,
+                makeConnection: CodexClient.makeLiveConnection(using:)
+            )
+            XCTFail("Expected invalidResponse")
+        } catch let error as CodexClientError {
+            guard case .invalidResponse = error else {
+                return XCTFail("Expected invalidResponse, got \(error)")
+            }
+        } catch {
+            XCTFail("Expected invalidResponse, got \(error)")
+        }
+    }
+
     func testRetriesOneFailedFetchThenReturnsTheSecondResult() async throws {
         var attempts = 0
 
@@ -656,6 +771,33 @@ final class CodexClientTests: XCTestCase {
 
         XCTAssertEqual(result.mainLimit.window.remainingPercent, 80)
         XCTAssertEqual(result.tokenHistory.map(\.tokens), [1_000])
+    }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "codex-limits-tests-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
+    }
+
+    private func makeExecutableScript(
+        named name: String,
+        contents: String,
+        in directory: URL
+    ) throws -> URL {
+        let url = directory.appendingPathComponent(name)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: url.path
+        )
+        return url
     }
 
     private func fetchSnapshot(

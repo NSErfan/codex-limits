@@ -107,7 +107,7 @@ enum CodexClient {
         }
     }
 
-    private static func makeLiveConnection(
+    static func makeLiveConnection(
         using executable: String
     ) -> CodexAppServerConnection {
         let process = Process()
@@ -115,6 +115,12 @@ enum CodexClient {
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = ["app-server", "--stdio"]
+        // GUI launches get a minimal PATH; the npm codex wrapper resolves
+        // `node` through `/usr/bin/env`, so its directory must be on PATH.
+        process.environment = spawnEnvironment(
+            forExecutableAt: executable,
+            base: ProcessInfo.processInfo.environment
+        )
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
@@ -131,6 +137,22 @@ enum CodexClient {
                 try? output.fileHandleForWriting.close()
             }
         )
+    }
+
+    static func spawnEnvironment(
+        forExecutableAt executable: String,
+        base: [String: String]
+    ) -> [String: String] {
+        let directory = URL(fileURLWithPath: executable)
+            .deletingLastPathComponent()
+            .path
+        var environment = base
+        let path = environment["PATH"] ?? ""
+        let entries = path.split(separator: ":").map(String.init)
+        if !entries.contains(directory) {
+            environment["PATH"] = path.isEmpty ? directory : "\(path):\(directory)"
+        }
+        return environment
     }
 
     static func decode(
