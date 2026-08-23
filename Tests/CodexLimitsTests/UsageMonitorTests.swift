@@ -310,6 +310,49 @@ final class UsageMonitorTests: XCTestCase {
         XCTAssertFalse(relaunched.isRefreshing)
     }
 
+    func testPaceTargetToggleRecalculatesFromTheExplicitSelection() async throws {
+        let fetchedAt = Self.fixtureNow
+        let credit = ResetCredit(
+            id: "banked-reset",
+            title: "Full reset",
+            expiresAt: fetchedAt.addingTimeInterval(2 * 86_400)
+        )
+        let snapshot = UsageSnapshot(
+            mainLimit: LimitReading(
+                limitId: "codex",
+                name: "Codex",
+                window: UsageWindow(
+                    remainingPercent: 60,
+                    resetsAt: fetchedAt.addingTimeInterval(4 * 86_400),
+                    durationMinutes: 7 * 24 * 60
+                )
+            ),
+            otherLimits: [],
+            tokenHistory: [],
+            resetCredits: [credit],
+            fetchedAt: fetchedAt
+        )
+        let source = SnapshotSequence(outcomes: [.snapshot(snapshot)])
+        let context = try makeContext { try await source.fetch() }
+        defer { context.cleanUp() }
+
+        await context.monitor.refresh()
+        let weeklyPace = try XCTUnwrap(context.monitor.forecast?.recommendedPercentPerDay)
+
+        context.monitor.updatePaceTarget(credit.id)
+        let bankedPace = try XCTUnwrap(context.monitor.forecast?.recommendedPercentPerDay)
+
+        XCTAssertEqual(
+            context.defaults.string(forKey: UsageMonitor.paceTargetCreditIDKey),
+            credit.id
+        )
+        XCTAssertGreaterThan(bankedPace, weeklyPace)
+
+        context.monitor.updatePaceTarget("")
+
+        XCTAssertEqual(context.monitor.forecast?.recommendedPercentPerDay, weeklyPace)
+    }
+
     private func makeContext(
         recoveryDelaysNanoseconds: [UInt64] = [],
         sleepBeforeRecovery: @escaping @Sendable (UInt64) async throws -> Void = {

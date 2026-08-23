@@ -21,8 +21,8 @@ struct MenuContentView: View {
         .frame(width: 420)
         .padding(16)
         .task { await monitor.refresh() }
-        .onChange(of: paceTargetCreditID) { _, _ in
-            monitor.updatePaceTarget()
+        .onChange(of: paceTargetCreditID) { _, selectedCreditID in
+            monitor.updatePaceTarget(selectedCreditID)
         }
         .environment(\.locale, Locale(identifier: "en_US"))
     }

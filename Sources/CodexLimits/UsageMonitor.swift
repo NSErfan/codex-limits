@@ -202,8 +202,9 @@ final class UsageMonitor: ObservableObject {
         persist()
     }
 
-    func updatePaceTarget() {
-        recalculate()
+    func updatePaceTarget(_ selectedCreditID: String) {
+        defaults.set(selectedCreditID, forKey: Self.paceTargetCreditIDKey)
+        recalculate(selectedCreditID: selectedCreditID)
         persist()
     }
 
@@ -239,7 +240,10 @@ final class UsageMonitor: ObservableObject {
         apply(await history.disconnect())
     }
 
-    private func recalculate(safetyBuffer: Double? = nil) {
+    private func recalculate(
+        safetyBuffer: Double? = nil,
+        selectedCreditID: String? = nil
+    ) {
         guard let snapshot else { return }
         let storedBuffer = defaults.object(forKey: Self.safetyBufferKey) as? Double
         let buffer = safetyBuffer ?? storedBuffer ?? 3
@@ -254,7 +258,8 @@ final class UsageMonitor: ObservableObject {
                 window: snapshot.mainLimit.window,
                 resetCredits: snapshot.resetCredits,
                 now: snapshot.fetchedAt,
-                selectedCreditID: defaults.string(forKey: Self.paceTargetCreditIDKey)
+                selectedCreditID: selectedCreditID
+                    ?? defaults.string(forKey: Self.paceTargetCreditIDKey)
             )
         )
         forecast = result
