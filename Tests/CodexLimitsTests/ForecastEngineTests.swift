@@ -118,6 +118,71 @@ final class ForecastEngineTests: XCTestCase {
         XCTAssertLessThan(result.currentPercentPerDay, 8)
     }
 
+    func testResetTimestampJitterKeepsSamplesInTheSameForecastWindow() {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(3 * day)
+        let window = UsageWindow(
+            remainingPercent: 50,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        let samples = [
+            UsageSample(
+                observedAt: now.addingTimeInterval(-day),
+                remainingPercent: 60,
+                resetsAt: reset.addingTimeInterval(-3)
+            ),
+            UsageSample(observedAt: now, remainingPercent: 50, resetsAt: reset)
+        ]
+
+        let result = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+
+        XCTAssertEqual(result.currentPercentPerDay, 10.75, accuracy: 0.01)
+    }
+
+    func testResetTimestampJitterKeepsHistoricalSamplesInOneWindow() {
+        let hour: TimeInterval = 3_600
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(4 * 86_400)
+        let previousReset = now.addingTimeInterval(-86_400)
+        let window = UsageWindow(
+            remainingPercent: 85,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        let samples = [
+            UsageSample(
+                observedAt: previousReset.addingTimeInterval(-4 * hour),
+                remainingPercent: 82,
+                resetsAt: previousReset.addingTimeInterval(-2)
+            ),
+            UsageSample(
+                observedAt: previousReset.addingTimeInterval(-3 * hour),
+                remainingPercent: 70,
+                resetsAt: previousReset.addingTimeInterval(2)
+            )
+        ]
+
+        let result = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+
+        XCTAssertEqual(result.historicalPercentPerDay, 12, accuracy: 0.01)
+    }
+
     func testEarlierDeadlineRaisesRecommendedPace() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let reset = now.addingTimeInterval(4 * 86_400)

@@ -97,7 +97,9 @@ final class UsageMonitor: ObservableObject {
 
     nonisolated static func windowSamples(_ samples: [UsageSample], reset: Date?) -> [UsageSample] {
         guard let reset else { return [] }
-        return samples.filter { $0.resetsAt == reset }.sorted { $0.observedAt < $1.observedAt }
+        return samples
+            .filter { UsageWindow.hasSameReset($0.resetsAt, reset) }
+            .sorted { $0.observedAt < $1.observedAt }
     }
 
     func start() async {

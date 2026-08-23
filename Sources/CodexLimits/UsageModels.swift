@@ -1,12 +1,18 @@
 import Foundation
 
 struct UsageWindow: Codable, Equatable, Sendable {
+    static let resetTimestampTolerance: TimeInterval = 60
+
     let remainingPercent: Double
     let resetsAt: Date
     let durationMinutes: Int
 
     var startsAt: Date {
         resetsAt.addingTimeInterval(-Double(durationMinutes) * 60)
+    }
+
+    static func hasSameReset(_ lhs: Date, _ rhs: Date) -> Bool {
+        abs(lhs.timeIntervalSince(rhs)) <= resetTimestampTolerance
     }
 }
 

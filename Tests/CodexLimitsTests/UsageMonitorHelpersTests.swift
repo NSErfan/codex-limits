@@ -68,7 +68,11 @@ final class UsageMonitorHelpersTests: XCTestCase {
         let otherReset = Date(timeIntervalSince1970: 3_000_000)
         let samples = [
             UsageSample(observedAt: Date(timeIntervalSince1970: 1_200), remainingPercent: 80, resetsAt: reset),
-            UsageSample(observedAt: Date(timeIntervalSince1970: 600), remainingPercent: 90, resetsAt: reset),
+            UsageSample(
+                observedAt: Date(timeIntervalSince1970: 600),
+                remainingPercent: 90,
+                resetsAt: reset.addingTimeInterval(3)
+            ),
             UsageSample(observedAt: Date(timeIntervalSince1970: 900), remainingPercent: 85, resetsAt: otherReset)
         ]
 

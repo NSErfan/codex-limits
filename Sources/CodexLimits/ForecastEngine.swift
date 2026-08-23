@@ -29,7 +29,9 @@ enum ForecastEngine {
         let target = deadline ?? window.resetsAt
         let daysLeft = max(target.timeIntervalSince(now) / 86_400, 0)
         let currentSamples = samples
-            .filter { $0.resetsAt == window.resetsAt && $0.observedAt <= now }
+            .filter {
+                UsageWindow.hasSameReset($0.resetsAt, window.resetsAt) && $0.observedAt <= now
+            }
             .sorted { $0.observedAt < $1.observedAt }
         let elapsedDays = max(now.timeIntervalSince(window.startsAt) / 86_400, 1 / 24)
         let windowRate = max((100 - window.remainingPercent) / elapsedDays, 0)
@@ -56,9 +58,9 @@ enum ForecastEngine {
         let currentRate = currentSamples.count > 1
             ? 0.7 * recentRate + 0.3 * windowRate
             : windowRate
-        let historicalRates = Dictionary(grouping: samples.filter { $0.resetsAt != window.resetsAt }) {
-            $0.resetsAt
-        }.values.compactMap { windowSamples -> Double? in
+        let historicalRates = resetGroups(
+            samples.filter { !UsageWindow.hasSameReset($0.resetsAt, window.resetsAt) }
+        ).compactMap { windowSamples -> Double? in
             let ordered = windowSamples.sorted { $0.observedAt < $1.observedAt }
             guard let first = ordered.first,
                   let last = ordered.last,
@@ -118,6 +120,18 @@ enum ForecastEngine {
             historicalPercentPerDay: historicalRate,
             safetyPercentPerDay: safetyRate
         )
+    }
+
+    private static func resetGroups(_ samples: [UsageSample]) -> [[UsageSample]] {
+        samples.sorted { $0.resetsAt < $1.resetsAt }.reduce(into: []) { groups, sample in
+            if let index = groups.indices.last,
+               let reset = groups[index].first?.resetsAt,
+               UsageWindow.hasSameReset(sample.resetsAt, reset) {
+                groups[index].append(sample)
+            } else {
+                groups.append([sample])
+            }
+        }
     }
 
     private static func tokenBootstrapRate(
