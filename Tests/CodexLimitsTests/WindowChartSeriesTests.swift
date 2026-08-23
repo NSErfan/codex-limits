@@ -102,6 +102,103 @@ final class WindowChartSeriesTests: XCTestCase {
         XCTAssertEqual(points.last?.date, window.resetsAt)
     }
 
+    private var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    func testTodayRateStartsAtTheLastSampleBeforeUsageBegan() throws {
+        let hour: TimeInterval = 3_600
+        // 12:00 UTC on a day well inside the window.
+        let fetchedAt = Date(timeIntervalSince1970: 60 * day + 12 * hour)
+        let startOfDay = Date(timeIntervalSince1970: 60 * day)
+        let window = UsageWindow(
+            remainingPercent: 68,
+            resetsAt: fetchedAt.addingTimeInterval(3 * day),
+            durationMinutes: 7 * 24 * 60
+        )
+        let reset = window.resetsAt
+        let samples = [
+            UsageSample(observedAt: startOfDay.addingTimeInterval(-hour), remainingPercent: 80, resetsAt: reset),
+            UsageSample(observedAt: startOfDay.addingTimeInterval(30 * 60), remainingPercent: 80, resetsAt: reset),
+            UsageSample(observedAt: startOfDay.addingTimeInterval(6 * hour), remainingPercent: 80, resetsAt: reset),
+            UsageSample(observedAt: startOfDay.addingTimeInterval(8 * hour), remainingPercent: 74, resetsAt: reset)
+        ]
+
+        let rate = WindowChartSeries.todayRate(
+            window: window,
+            samples: samples,
+            fetchedAt: fetchedAt,
+            calendar: utcCalendar
+        )
+
+        // Usage began after the idle 06:00 sample: 12% over a quarter day.
+        XCTAssertEqual(try XCTUnwrap(rate), 48, accuracy: 0.01)
+    }
+
+    func testTodayRateAnchorsToTheResetWhenTheWindowBeganToday() throws {
+        let hour: TimeInterval = 3_600
+        let fetchedAt = Date(timeIntervalSince1970: 60 * day + 10 * hour)
+        let window = UsageWindow(
+            remainingPercent: 90,
+            resetsAt: fetchedAt.addingTimeInterval(7 * day - 6 * hour),
+            durationMinutes: 7 * 24 * 60
+        )
+        let samples = [
+            UsageSample(
+                observedAt: fetchedAt.addingTimeInterval(-4 * hour),
+                remainingPercent: 95,
+                resetsAt: window.resetsAt
+            )
+        ]
+
+        let rate = WindowChartSeries.todayRate(
+            window: window,
+            samples: samples,
+            fetchedAt: fetchedAt,
+            calendar: utcCalendar
+        )
+
+        // 10% since the 04:00 reset, a quarter day before now.
+        XCTAssertEqual(try XCTUnwrap(rate), 40, accuracy: 0.01)
+    }
+
+    func testTodayRateIsNilWithoutUsageToday() {
+        let hour: TimeInterval = 3_600
+        let fetchedAt = Date(timeIntervalSince1970: 60 * day + 9 * hour)
+        let window = UsageWindow(
+            remainingPercent: 70,
+            resetsAt: fetchedAt.addingTimeInterval(3 * day),
+            durationMinutes: 7 * 24 * 60
+        )
+        let idle = [
+            UsageSample(
+                observedAt: fetchedAt.addingTimeInterval(-8 * hour),
+                remainingPercent: 70,
+                resetsAt: window.resetsAt
+            ),
+            UsageSample(
+                observedAt: fetchedAt.addingTimeInterval(-4 * hour),
+                remainingPercent: 70,
+                resetsAt: window.resetsAt
+            )
+        ]
+
+        XCTAssertNil(WindowChartSeries.todayRate(
+            window: window,
+            samples: idle,
+            fetchedAt: fetchedAt,
+            calendar: utcCalendar
+        ))
+        XCTAssertNil(WindowChartSeries.todayRate(
+            window: window,
+            samples: [],
+            fetchedAt: fetchedAt,
+            calendar: utcCalendar
+        ))
+    }
+
     func testVisibleCreditsRequireExpiryInsideTheWindow() {
         let credits = [
             ResetCredit(id: "inside", title: nil, expiresAt: start.addingTimeInterval(2 * day)),

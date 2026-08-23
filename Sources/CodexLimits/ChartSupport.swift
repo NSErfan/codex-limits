@@ -109,6 +109,38 @@ enum WindowChartSeries {
         return [current, endpoint]
     }
 
+    /// Percent burned per day since today's first usage moment: the last
+    /// observation still holding the day's opening balance, so idle hours
+    /// before usage began don't dilute the pace. Nil without usage today.
+    static func todayRate(
+        window: UsageWindow,
+        samples: [UsageSample],
+        fetchedAt: Date,
+        calendar: Calendar = .current
+    ) -> Double? {
+        let startOfDay = calendar.startOfDay(for: fetchedAt)
+        let today = samples
+            .filter { $0.observedAt >= startOfDay && $0.observedAt <= fetchedAt }
+            .sorted { $0.observedAt < $1.observedAt }
+        let opening: (date: Date, remaining: Double)
+        if window.startsAt >= startOfDay {
+            // The window reset today, which is a known 100% point.
+            opening = (window.startsAt, 100)
+        } else if let first = today.first {
+            opening = (first.observedAt, first.remainingPercent)
+        } else {
+            return nil
+        }
+        let anchor = today
+            .prefix { $0.remainingPercent >= opening.remaining }
+            .last
+            .map { (date: $0.observedAt, remaining: $0.remainingPercent) } ?? opening
+        let days = fetchedAt.timeIntervalSince(anchor.date) / 86_400
+        guard days > 0 else { return nil }
+        let rate = (anchor.remaining - window.remainingPercent) / days
+        return rate > 0 ? rate : nil
+    }
+
     static func visibleCredits(_ credits: [ResetCredit], window: UsageWindow) -> [ResetCredit] {
         credits.filter { credit in
             guard let expiresAt = credit.expiresAt else { return false }

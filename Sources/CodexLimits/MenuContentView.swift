@@ -638,6 +638,28 @@ private struct BurnDownChart: View {
         )
     }
 
+    private var todayRate: Double? {
+        WindowChartSeries.todayRate(
+            window: window,
+            samples: samples,
+            fetchedAt: fetchedAt
+        )
+    }
+
+    /// Projects today's pace to the window reset, so the endpoint shows
+    /// when the limit runs out if the whole week continues like today.
+    private var todayProjection: [BurnPoint] {
+        guard let rate = todayRate else { return [] }
+        let daysLeft = max(window.resetsAt.timeIntervalSince(fetchedAt) / 86_400, 0)
+        return WindowChartSeries.projection(
+            window: window,
+            fetchedAt: fetchedAt,
+            deadline: window.resetsAt,
+            rate: rate,
+            remainingAtDeadline: max(window.remainingPercent - rate * daysLeft, 0)
+        )
+    }
+
     private var xAxisDates: [Date] {
         let step: TimeInterval = window.durationMinutes <= 24 * 60 ? 3_600 : 86_400
         var dates: [Date] = []
@@ -693,6 +715,9 @@ private struct BurnDownChart: View {
                     ChartLegendItem(label: "Target", color: .green, dash: [3, 3])
                     ChartLegendItem(label: "Actual", color: .blue)
                     ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
+                    if todayRate != nil {
+                        ChartLegendItem(label: "Today", color: .purple, dash: [5, 4])
+                    }
                     ChartLegendItem(label: "Historical", color: .secondary, dash: [2, 3])
                 }
             }
@@ -741,6 +766,16 @@ private struct BurnDownChart: View {
                     )
                     .foregroundStyle(Color.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
+                }
+
+                ForEach(todayProjection) { point in
+                    LineMark(
+                        x: .value("Time", point.date),
+                        y: .value("Today", point.remaining),
+                        series: .value("Series", "Today")
+                    )
+                    .foregroundStyle(Color.purple)
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
                 }
 
                 RuleMark(x: .value("Now", fetchedAt))
@@ -810,6 +845,15 @@ private struct BurnDownChart: View {
                         y: .value("Current endpoint", endpoint.remaining)
                     )
                     .foregroundStyle(currentColor)
+                    .symbolSize(32)
+                }
+
+                if let endpoint = todayProjection.last {
+                    PointMark(
+                        x: .value("Today endpoint", endpoint.date),
+                        y: .value("Today endpoint", endpoint.remaining)
+                    )
+                    .foregroundStyle(Color.purple)
                     .symbolSize(32)
                 }
             }
