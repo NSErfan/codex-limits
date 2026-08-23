@@ -41,4 +41,41 @@ final class ChartInteractionTests: XCTestCase {
         XCTAssertEqual(hit, reset)
         XCTAssertNil(miss)
     }
+
+    func testNearestResetCreditUsesTheChartHitTolerance() {
+        let window = UsageWindow(
+            remainingPercent: 50,
+            resetsAt: base.addingTimeInterval(7 * 86_400),
+            durationMinutes: 7 * 24 * 60
+        )
+        let expiry = base.addingTimeInterval(3 * 86_400)
+        let credit = ResetCredit(
+            id: "credit",
+            title: nil,
+            expiresAt: expiry
+        )
+        let tolerance = 7 * 86_400 * ChartInteraction.hoverToleranceFraction
+
+        XCTAssertEqual(
+            ChartInteraction.nearestResetCredit(
+                to: expiry.addingTimeInterval(tolerance - 1),
+                in: [credit],
+                window: window
+            ),
+            credit
+        )
+        XCTAssertNil(ChartInteraction.nearestResetCredit(
+            to: expiry.addingTimeInterval(tolerance + 1),
+            in: [credit],
+            window: window
+        ))
+    }
+
+    func testCreditTapTogglesTheSelection() {
+        let credit = ResetCredit(id: "credit", title: nil, expiresAt: base)
+
+        XCTAssertEqual(ChartInteraction.toggledCreditID(current: "", tapped: credit), "credit")
+        XCTAssertEqual(ChartInteraction.toggledCreditID(current: "other", tapped: credit), "credit")
+        XCTAssertEqual(ChartInteraction.toggledCreditID(current: "credit", tapped: credit), "")
+    }
 }

@@ -576,11 +576,32 @@ private struct BurnDownChart: View {
 
     private var hoveredCredit: ResetCredit? {
         guard let selectedDate else { return nil }
-        return ChartInteraction.nearest(
-            to: selectedDate,
+        return credit(near: selectedDate)
+    }
+
+    private func credit(near date: Date) -> ResetCredit? {
+        ChartInteraction.nearestResetCredit(
+            to: date,
             in: visibleCredits,
-            visibleSpan: window.resetsAt.timeIntervalSince(window.startsAt),
-            date: { $0.expiresAt ?? .distantPast }
+            window: window
+        )
+    }
+
+    private func chartDate(
+        at location: CGPoint,
+        proxy: ChartProxy,
+        geometry: GeometryProxy
+    ) -> Date? {
+        guard let plotFrame = proxy.plotFrame else { return nil }
+        let frame = geometry[plotFrame]
+        guard frame.contains(location) else { return nil }
+        return proxy.value(atX: location.x - frame.minX)
+    }
+
+    private func toggleCredit(_ credit: ResetCredit) {
+        paceTargetCreditID = ChartInteraction.toggledCreditID(
+            current: paceTargetCreditID,
+            tapped: credit
         )
     }
 
@@ -627,6 +648,15 @@ private struct BurnDownChart: View {
         }
         dates.append(window.resetsAt)
         return dates
+    }
+
+    private var nowAnnotationOffset: CGFloat {
+        let span = window.resetsAt.timeIntervalSince(window.startsAt)
+        guard span > 0 else { return 0 }
+        let progress = fetchedAt.timeIntervalSince(window.startsAt) / span
+        if progress < 0.08 { return 18 }
+        if progress > 0.92 { return -18 }
+        return 0
     }
 
     var body: some View {
@@ -727,6 +757,7 @@ private struct BurnDownChart: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(.regularMaterial, in: Capsule())
+                            .offset(x: nowAnnotationOffset)
                     }
 
                 PointMark(
@@ -776,28 +807,59 @@ private struct BurnDownChart: View {
                 if let endpoint = currentProjection.last {
                     PointMark(
                         x: .value("Current endpoint", endpoint.date),
-                        y: .value("Current endpoint", 0)
+                        y: .value("Current endpoint", endpoint.remaining)
                     )
                     .foregroundStyle(currentColor)
                     .symbolSize(32)
                 }
             }
-            .chartXSelection(value: $selectedDate)
-            .onTapGesture {
-                if let credit = hoveredCredit {
-                    paceTargetCreditID = paceTargetCreditID == credit.id ? "" : credit.id
-                }
-                // A click pins the chart selection on macOS; release it so the
-                // readout follows the pointer again instead of freezing.
-                DispatchQueue.main.async { selectedDate = nil }
-            }
-            .onContinuousHover { phase in
-                // chartXSelection does not reliably clear when the pointer
-                // leaves the plot, which froze the readout in place.
-                if case .ended = phase { selectedDate = nil }
-            }
             .chartXScale(domain: window.startsAt ... window.resetsAt)
             .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    ZStack(alignment: .topLeading) {
+                        Rectangle()
+                            .fill(.clear)
+                            .contentShape(Rectangle())
+
+                        if let plotFrame = proxy.plotFrame {
+                            let frame = geometry[plotFrame]
+                            ForEach(visibleCredits) { credit in
+                                if let expiresAt = credit.expiresAt,
+                                   let xPosition = proxy.position(forX: expiresAt) {
+                                    Button {
+                                        selectedDate = nil
+                                        toggleCredit(credit)
+                                    } label: {
+                                        Color.clear
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(width: 14, height: frame.height)
+                                    .position(
+                                        x: frame.minX + xPosition,
+                                        y: frame.midY
+                                    )
+                                    .accessibilityLabel("Toggle pacing to banked reset")
+                                    .accessibilityValue(BankedResetPresentation.dateText(expiresAt))
+                                }
+                            }
+                        }
+                    }
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case let .active(location):
+                            selectedDate = chartDate(
+                                at: location,
+                                proxy: proxy,
+                                geometry: geometry
+                            )
+                        case .ended:
+                            selectedDate = nil
+                        }
+                    }
+                }
+            }
             .chartXAxis {
                 AxisMarks(values: xAxisDates) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))

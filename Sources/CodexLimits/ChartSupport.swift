@@ -32,6 +32,23 @@ enum ChartInteraction {
                 : nil
         }
     }
+
+    static func nearestResetCredit(
+        to target: Date,
+        in credits: [ResetCredit],
+        window: UsageWindow
+    ) -> ResetCredit? {
+        nearest(
+            to: target,
+            in: credits,
+            visibleSpan: window.resetsAt.timeIntervalSince(window.startsAt),
+            date: { $0.expiresAt ?? .distantPast }
+        )
+    }
+
+    static func toggledCreditID(current: String, tapped: ResetCredit) -> String {
+        current == tapped.id ? "" : tapped.id
+    }
 }
 
 enum WindowChartSeries {
