@@ -154,6 +154,32 @@ final class CodexClientTests: XCTestCase {
         }
     }
 
+    func testDecodesCapturedCodex0145RateLimitsPayload() throws {
+        // Captured verbatim from `codex app-server` 0.145.0.
+        let rateLimits = Data(#"""
+        {"id":2,"result":{"rateLimits":{"limitId":"codex","limitName":null,"primary":{"usedPercent":20,"windowDurationMins":10080,"resetsAt":1787197610},"secondary":null,"credits":{"hasCredits":false,"unlimited":false,"balance":"0"},"individualLimit":null,"spendControlReached":false,"planType":"prolite","rateLimitReachedType":null},"rateLimitsByLimitId":{"codex_bengalfox":{"limitId":"codex_bengalfox","limitName":"GPT-5.3-Codex-Spark","primary":{"usedPercent":1,"windowDurationMins":10080,"resetsAt":1787211801},"secondary":null,"credits":null,"individualLimit":null,"spendControlReached":null,"planType":"prolite","rateLimitReachedType":null},"codex":{"limitId":"codex","limitName":null,"primary":{"usedPercent":20,"windowDurationMins":10080,"resetsAt":1787197610},"secondary":null,"credits":{"hasCredits":false,"unlimited":false,"balance":"0"},"individualLimit":null,"spendControlReached":false,"planType":"prolite","rateLimitReachedType":null}},"rateLimitResetCredits":{"availableCount":0,"credits":[]}}}
+        """#.utf8)
+        let usage = Data(#"""
+        {"id":3,"result":{"summary":{"lifetimeTokens":100},"dailyUsageBuckets":[{"startDate":"2026-08-13","tokens":42}]}}
+        """#.utf8)
+
+        let result = try CodexClient.decode(
+            rateLimitsResponse: rateLimits,
+            usageResponse: usage,
+            fetchedAt: Self.fetchedAt
+        )
+
+        XCTAssertEqual(result.mainLimit.window.remainingPercent, 80)
+        XCTAssertEqual(
+            result.mainLimit.window.resetsAt,
+            Date(timeIntervalSince1970: 1_787_197_610)
+        )
+        XCTAssertEqual(result.otherLimits.map(\.name), ["GPT-5.3-Codex-Spark"])
+        XCTAssertEqual(result.otherLimits.map(\.window.remainingPercent), [99])
+        XCTAssertEqual(result.resetCredits, [])
+        XCTAssertEqual(result.tokenHistory.map(\.tokens), [42])
+    }
+
     func testRetriesOneFailedFetchThenReturnsTheSecondResult() async throws {
         var attempts = 0
 
