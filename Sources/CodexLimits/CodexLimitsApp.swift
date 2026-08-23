@@ -1,6 +1,15 @@
 import SwiftUI
 
 @main
+enum CodexLimitsMain {
+    @MainActor static func main() {
+        if BackgroundCollector.shouldRun(arguments: CommandLine.arguments) {
+            exit(BackgroundCollector.runBlocking())
+        }
+        CodexLimitsApp.main()
+    }
+}
+
 struct CodexLimitsApp: App {
     @StateObject private var monitor: UsageMonitor
 
@@ -8,6 +17,7 @@ struct CodexLimitsApp: App {
         // Must precede any preference or history access.
         LegacyBundleMigration.run()
         LoginItem.enableByDefault()
+        BackgroundCollection.enableByDefault()
         _monitor = StateObject(wrappedValue: UsageMonitor())
     }
 

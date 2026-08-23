@@ -14,6 +14,9 @@ rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp .build/release/CodexLimits "$app_dir/Contents/MacOS/CodexLimits"
 cp Resources/Info.plist "$app_dir/Contents/Info.plist"
+mkdir -p "$app_dir/Contents/Library/LaunchAgents"
+cp Resources/com.github.nserfan.CodexLimits.collector.plist \
+    "$app_dir/Contents/Library/LaunchAgents/"
 codesign --force --sign - "$app_dir"
 
 print -r -- "$app_dir"

@@ -382,7 +382,7 @@ final class UsageMonitor: ObservableObject {
         return lhs.resetsAt < rhs.resetsAt
     }
 
-    private static func historyDirectory() -> URL {
+    nonisolated static func historyDirectory() -> URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
