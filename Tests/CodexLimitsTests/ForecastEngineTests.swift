@@ -118,6 +118,75 @@ final class ForecastEngineTests: XCTestCase {
         XCTAssertLessThan(result.currentPercentPerDay, 8)
     }
 
+    func testFreshWindowPaceUsesTheResetBaselineInsteadOfAnnualizingASampleBurst() {
+        let hour: TimeInterval = 3_600
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(6 * 86_400 + 19 * hour)
+        let window = UsageWindow(
+            remainingPercent: 96,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        let samples = [
+            UsageSample(observedAt: now.addingTimeInterval(-42 * 60), remainingPercent: 99, resetsAt: reset),
+            UsageSample(observedAt: now, remainingPercent: 96, resetsAt: reset)
+        ]
+
+        let weekly = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+        let banked = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil,
+            deadline: now.addingTimeInterval(3 * 86_400)
+        )
+
+        // Four points used in the five hours since reset is 19.2%/day. The
+        // samples only cover the latest 42 minutes, but must not turn that
+        // three-point cluster into a sustained 102.9%/day pace.
+        XCTAssertEqual(weekly.currentPercentPerDay, 19.2, accuracy: 0.01)
+        XCTAssertEqual(banked.currentPercentPerDay, weekly.currentPercentPerDay, accuracy: 0.01)
+        XCTAssertGreaterThan(96 / weekly.currentPercentPerDay, 4.9)
+    }
+
+    func testMatureWindowFallsBackWhenSamplesOnlyCoverARecentBurst() {
+        let now = Date(timeIntervalSince1970: 3_000_000)
+        let reset = now.addingTimeInterval(3 * 86_400)
+        let window = UsageWindow(
+            remainingPercent: 50,
+            resetsAt: reset,
+            durationMinutes: 7 * 24 * 60
+        )
+        let samples = [
+            UsageSample(
+                observedAt: now.addingTimeInterval(-42 * 60),
+                remainingPercent: 53,
+                resetsAt: reset
+            ),
+            UsageSample(observedAt: now, remainingPercent: 50, resetsAt: reset)
+        ]
+
+        let result = ForecastEngine.evaluate(
+            window: window,
+            samples: samples,
+            tokenHistory: [],
+            safetyBuffer: 3,
+            now: now,
+            previousStatus: nil
+        )
+
+        XCTAssertEqual(result.currentPercentPerDay, 12.5, accuracy: 0.01)
+    }
+
     func testResetTimestampJitterKeepsSamplesInTheSameForecastWindow() {
         let day: TimeInterval = 86_400
         let now = Date(timeIntervalSince1970: 3_000_000)

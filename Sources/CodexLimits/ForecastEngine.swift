@@ -35,25 +35,12 @@ enum ForecastEngine {
             .sorted { $0.observedAt < $1.observedAt }
         let elapsedDays = max(now.timeIntervalSince(window.startsAt) / 86_400, 1 / 24)
         let windowRate = max((100 - window.remainingPercent) / elapsedDays, 0)
-        let recentRate: Double
-
-        // Pace over the trailing day, so stopping or slowing shows up within
-        // hours instead of being averaged away by the whole window.
-        let trailing = currentSamples.filter { $0.observedAt >= now.addingTimeInterval(-86_400) }
-        if trailing.count > 1,
-           let first = trailing.first,
-           let last = trailing.last,
-           last.observedAt > first.observedAt {
-            let days = last.observedAt.timeIntervalSince(first.observedAt) / 86_400
-            recentRate = max((first.remainingPercent - last.remainingPercent) / days, 0)
-        } else if let first = currentSamples.first,
-                  let last = currentSamples.last,
-                  last.observedAt > first.observedAt {
-            let days = last.observedAt.timeIntervalSince(first.observedAt) / 86_400
-            recentRate = max((first.remainingPercent - last.remainingPercent) / days, 0)
-        } else {
-            recentRate = windowRate
-        }
+        let recentRate = recentRate(
+            window: window,
+            samples: currentSamples,
+            now: now,
+            fallback: windowRate
+        )
 
         let currentRate = currentSamples.count > 1
             ? 0.7 * recentRate + 0.3 * windowRate
@@ -120,6 +107,37 @@ enum ForecastEngine {
             historicalPercentPerDay: historicalRate,
             safetyPercentPerDay: safetyRate
         )
+    }
+
+    private static func recentRate(
+        window: UsageWindow,
+        samples: [UsageSample],
+        now: Date,
+        fallback: Double
+    ) -> Double {
+        let trailingStart = max(window.startsAt, now.addingTimeInterval(-86_400))
+        let baseline: (date: Date, remaining: Double)
+
+        if trailingStart == window.startsAt {
+            // The reset is a known 100% point. On a fresh window it is the
+            // only honest baseline when local samples cover just a short
+            // burst near now.
+            baseline = (window.startsAt, 100)
+        } else if let nearest = samples.min(by: {
+            abs($0.observedAt.timeIntervalSince(trailingStart))
+                < abs($1.observedAt.timeIntervalSince(trailingStart))
+        }), now.timeIntervalSince(nearest.observedAt) >= 12 * 3_600 {
+            baseline = (nearest.observedAt, nearest.remainingPercent)
+        } else {
+            // Without meaningful trailing-day coverage, a clustered sample
+            // burst is not enough evidence for a sustained daily pace.
+            return fallback
+        }
+
+        let elapsed = now.timeIntervalSince(baseline.date)
+        guard elapsed > 0 else { return fallback }
+        let days = elapsed / 86_400
+        return max((baseline.remaining - window.remainingPercent) / days, 0)
     }
 
     private static func resetGroups(_ samples: [UsageSample]) -> [[UsageSample]] {
