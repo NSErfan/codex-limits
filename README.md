@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A macOS menu-bar app that tracks your Codex limit and recommends an hourly or daily pace.
+  A native macOS menu-bar app and desktop widgets for tracking your Codex limits, usage history, and sustainable pace.
 </p>
 
 <p align="center">
@@ -17,6 +17,8 @@
 
 <p align="center">
   <img src="docs/images/codex-limits-dashboard.png" width="465" alt="Codex Limits showing the remaining limit, usage chart, reset time, and suggested pace">
+  <br>
+  <sub>Earlier dashboard layout. Current builds also include history tabs, banked-reset pacing, and widget previews.</sub>
 </p>
 
 > [!NOTE]
@@ -31,30 +33,50 @@ Codex shows how much usage remains. That number does not tell you whether it wil
 
 Open the menu to see:
 
-- The percentage left, also shown in the menu bar.
+- The percentage left in the main Codex window with the lowest remaining percentage, also shown in the menu bar. This can be the five-hour or weekly window.
 - A status: `Slow down`, `On track`, or `Room to use more`.
 - A suggested hourly or daily pace.
 - Current and past use plotted against the target.
+- Other reported limits and available banked resets.
 
-## How to read the chart
+Desktop widgets always show the weekly limit, so their percentage can differ from the menu bar.
+
+## How to read the charts
+
+Choose **Window** for the current limit's forecast:
 
 - **Target** runs from 100% to empty at the pacing deadline.
-- **Actual** shows the samples recorded in the current window.
-- **Current** projects your recent pace through the reset.
-- **Historical** compares it with earlier use.
+- **Actual** shows recorded percentage samples. Before those cover the window, daily token totals can estimate the earlier part of the curve.
+- **Current** projects a blend of recent, current-window, and historical use toward the pacing deadline, or until the balance reaches zero.
+- **Today** projects today's observed pace to the scheduled window reset. It appears when the app can measure consumption today and excludes the observed idle period before usage began.
+- **Historical** projects the pace from earlier usage toward the pacing deadline.
 
-Forecasts keep a safety buffer, 3% by default. You can change it in Settings.
+Suggested pace reserves a safety buffer, 3% by default, which you can change in Settings. The drawn **Target** line ends at zero; the buffer affects the recommendation and status calculation.
+
+Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples.
+
+When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
 
 ## Features
 
 - Shows the main Codex limit and model-specific limits.
-- Saves usage samples for the current window.
+- Saves main-limit history and a separate weekly history for widgets.
 - Estimates the percentage left at reset from current and past use.
-- Keeps up to 90 days of history in versioned daily JSON files.
+- Keeps up to 90 days of main-limit history in versioned daily JSON files, with 7-day and 30-day chart views.
 - Can copy history to a private folder that you choose.
 - Refreshes on launch, after wake, when you open the menu, every ten minutes, or on request.
+- Retries transient read failures automatically and preserves the last successful reading and cached history.
+- Can collect usage on a 15-minute schedule while the menu-bar app is closed.
 - Runs as a native SwiftUI menu-bar app with no third-party runtime dependencies.
 - Includes two native desktop widgets: a small weekly percentage and a medium weekly usage graph.
+
+## Background collection
+
+In Settings, **Collect usage while the app is closed** controls a bundled background helper. On first app launch, Codex Limits attempts to register it automatically; macOS may require approval in **System Settings → Login Items**. Settings reports when approval is needed or registration fails.
+
+The helper runs a single collection on a 15-minute schedule, writing main-limit history and weekly widget data. The menu-bar app continues to refresh on its own ten-minute schedule. Background execution depends on macOS scheduling and the Codex CLI being available; it is not continuous polling while the Mac sleeps.
+
+Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 
 ## Desktop widgets
 
@@ -67,14 +89,15 @@ These widgets always use the seven-day `codex` limit, even when the menu bar's m
 constrained limit is the five-hour window. They keep their own weekly readings;
 the dashed chart guide is a straight line from 100% to 0% at the scheduled reset,
 independent of the dashboard's forecast and banked-reset pacing settings.
-Weekly history begins with this version. Older dashboard history cannot be imported
+Weekly history begins when you first run a build with widget support. Older dashboard history cannot be imported
 reliably because it mixes five-hour and weekly readings without identifying them.
 Until there are two weekly readings, the graph says **Collecting history**.
 
 Open **Preview widgets** (the overlapping rectangles button in the menu) to see
 both designs with your usage. Before the first reading, the gallery clearly labels
 synthetic sample data. To add an installed widget, Control-click your desktop,
-choose **Edit Widgets**, and search for **Codex Limits**.
+choose **Edit Widgets**, and search for **Codex Limits**. Use the installed build
+in `/Applications`; if the gallery was already open during an update, close and reopen it.
 Ad-hoc builds also record weekly history locally for the preview gallery.
 
 ### Signing for desktop data sharing
@@ -85,14 +108,18 @@ extension requires an Apple code-signing identity. Build with:
 
 ```sh
 DEVELOPMENT_TEAM=YOURTEAMID \
-CODE_SIGN_IDENTITY="Apple Development: Your Name (YOURTEAMID)" \
-Scripts/build-app.sh
+CODE_SIGN_IDENTITY="YOUR_CERTIFICATE_SHA1" \
+Scripts/install-app.sh
 ```
 
-Use your actual team ID and an identity listed by `security find-identity -v -p
-codesigning`. The build gives both bundles the same team-prefixed macOS App Group,
+Use your actual Apple Developer Team ID and the certificate SHA-1 (or full identity
+name) listed by `security find-identity -v -p codesigning`. The identifier in
+parentheses at the end of a certificate's name is not necessarily its Team ID;
+the certificate's Organizational Unit (`OU`) identifies the team. The build checks
+that `DEVELOPMENT_TEAM` matches the signed extension's team. It gives both bundles
+the same team-prefixed macOS App Group,
 which [Apple supports without a provisioning profile](https://developer.apple.com/documentation/xcode/accessing-app-group-containers).
-The same environment variables work with `Scripts/install-app.sh` and
+The same environment variables work with `Scripts/build-app.sh` and
 `script/build_and_run.sh`. Launch the signed app and let it refresh before adding
 the widgets. Ad-hoc builds show an empty state in the desktop widget instead of
 pretending preview data is live account usage.
@@ -125,10 +152,21 @@ full, low, empty, stale, expired, and unavailable states.
 
 1. Codex Limits starts your installed Codex CLI and reads usage through its local app server.
 2. It saves percentage samples on your Mac. Daily token history supplies data for the first forecast.
-3. It compares actual and projected use with a target that ends at your chosen buffer.
+3. It calculates a sustainable pace toward the scheduled reset or a selected banked reset's expiry, reserving your chosen buffer.
 4. It shows a status and suggests how much you can use per hour or day.
 
 Forecasts improve as the app records more samples. They are estimates, not guarantees.
+
+```mermaid
+flowchart LR
+    CLI[Local Codex app server] --> App[Menu-bar app]
+    CLI --> Collector[Background collector]
+    App --> History[Main-limit history]
+    Collector --> History
+    App --> Weekly[Weekly snapshots]
+    Collector --> Weekly
+    Weekly --> Widgets[Desktop widgets]
+```
 
 ## Privacy
 
@@ -137,8 +175,10 @@ Codex Limits keeps usage data on your Mac:
 - It does not copy or store your Codex credentials.
 - It sends no telemetry or analytics. It has no notifications or direct network client.
 - It stores main-limit samples in the app's Application Support directory.
+- Signed builds share weekly percentages and observation/reset times with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for the preview gallery.
 - If you enable history sync, it copies only usage samples to the selected folder. Preferences, credentials, and raw Codex responses stay on your Mac.
 - Synced JSON files contain observation times, remaining percentages, and reset times. Choose a folder that you do not share with other people.
+- Folder sync covers main-limit history; the separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same Codex account.
 - The Codex CLI may contact the Codex service as part of its normal operation.
 
 Do not attach raw CLI output or screenshots containing account usage to public issues.
@@ -153,24 +193,34 @@ Codex Limits does not use a Codex binary bundled with another app. Install and u
 
 ## Build from source
 
-Clone the repository and run:
+Clone the repository. To build, install into `/Applications`, and launch:
+
+```sh
+Scripts/install-app.sh
+```
+
+For live desktop widget data, configure developer signing as described above before
+installing. Without signing configuration, builds use ad-hoc signing and support
+the menu-bar app and in-app widget previews.
+
+To build without installing:
 
 ```sh
 Scripts/build-app.sh
-```
-
-The script creates an ad-hoc signed app at `.build/release/Codex Limits.app`. Launch it with:
-
-```sh
 open ".build/release/Codex Limits.app"
 ```
 
-The project does not provide a prebuilt or notarized app. Open `Package.swift` in Xcode to work on the source.
-The build script also builds `Widgets/CodexLimitsWidgets.xcodeproj` as a native
-app-extension target. This is required for WidgetKit's extension launch entry
-point; a plain Swift executable wrapped in an `.appex` can register without being
-able to serve the widget gallery. Signing uses the local configuration described
-above when present, otherwise it is ad-hoc.
+The default output is `.build/release/Codex Limits.app`; `CONFIGURATION=debug`
+selects `.build/debug/Codex Limits.app`. The Codex Run button uses
+`script/build_and_run.sh`, which rebuilds and launches the debug bundle. Re-run
+`Scripts/install-app.sh` to update the copy in `/Applications`.
+
+Open `Package.swift` in Xcode to work on the app and shared widget views. The build
+script also builds `Widgets/CodexLimitsWidgets.xcodeproj` as a native app-extension
+target, supplying the entry point needed for macOS to load the widget gallery.
+Building the Swift package alone does not package the desktop extension.
+
+The project does not provide a prebuilt or notarized app.
 
 ## Test
 
