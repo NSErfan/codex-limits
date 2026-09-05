@@ -53,6 +53,8 @@ Choose **Window** for the current limit's forecast:
 
 Suggested pace reserves a safety buffer, 3% by default, which you can change in Settings. The drawn **Target** line ends at zero; the buffer affects the recommendation and status calculation.
 
+In **Settings → Appearance**, choose an accent preset or a custom color for the app, graphs, and both widgets. Presets adapt to light and dark appearance. Foreground colors adjust for readability, including black and white custom colors, while the picker and background tint retain your selection. **Automatic** keeps the balance-based mint, amber, and coral colors; warning text retains its warning color with any selection. Changes are saved locally and request a widget refresh, which macOS schedules.
+
 Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples.
 
 When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
@@ -175,7 +177,7 @@ Codex Limits keeps usage data on your Mac:
 - It does not copy or store your Codex credentials.
 - It sends no telemetry or analytics. It has no notifications or direct network client.
 - It stores main-limit samples in the app's Application Support directory.
-- Signed builds share weekly percentages and observation/reset times with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for the preview gallery.
+- Signed builds share weekly percentages, observation/reset times, and the selected accent color with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for the preview gallery.
 - If you enable history sync, it copies only usage samples to the selected folder. Preferences, credentials, and raw Codex responses stay on your Mac.
 - Synced JSON files contain observation times, remaining percentages, and reset times. Choose a folder that you do not share with other people.
 - Folder sync covers main-limit history; the separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same Codex account.

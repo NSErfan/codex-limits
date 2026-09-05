@@ -4,6 +4,7 @@ public struct WeeklyPercentageView: View {
     public let snapshot: WeeklyWidgetSnapshot?
     public let date: Date
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.usageAccent) private var usageAccent
 
     public init(snapshot: WeeklyWidgetSnapshot?, date: Date) {
         self.snapshot = snapshot
@@ -52,7 +53,7 @@ public struct WeeklyPercentageView: View {
     private var remaining: Double? {
         status == .current || status == .stale ? snapshot?.window?.remainingPercent : nil
     }
-    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme) }
+    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var caption: String {
         switch status {
         case .current: "Weekly remaining"

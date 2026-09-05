@@ -1,6 +1,6 @@
 import Foundation
 
-/// The only data shared with the extension: percentages and dates, never CLI responses.
+/// Usage shared with the extension: percentages and dates, never CLI responses.
 public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
     public struct Window: Codable, Equatable, Sendable {
         public let remainingPercent: Double

@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct UsageSurfaceBackground: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.usageAccent) private var usageAccent
     private let remaining: Double?
 
     public init(remaining: Double?) {
@@ -22,5 +23,5 @@ public struct UsageSurfaceBackground: View {
         }
     }
 
-    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme) }
+    private var accent: Color { UsageChartStyle.surfaceTint(for: remaining, scheme: scheme, selection: usageAccent) }
 }

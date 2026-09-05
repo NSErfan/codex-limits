@@ -27,6 +27,28 @@ public struct WeeklyWidgetStore: Sendable {
         return records.max { $0.fetchedAt < $1.fetchedAt }?.merging(records)
     }
 
+    public func readAccent() -> UsageAccent {
+        let url = directory.appendingPathComponent("appearance.json")
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= 4_096,
+              let data = try? Data(contentsOf: url),
+              let accent = try? JSONDecoder().decode(UsageAccent.self, from: data),
+              accent.isValid else { return .automatic }
+        return accent
+    }
+
+    public func writeAccent(_ accent: UsageAccent) throws {
+        guard accent.isValid else {
+            throw CocoaError(.coderInvalidValue)
+        }
+        // Appearance is owned by the app, independently of usage timestamps.
+        // A later background collection must never overwrite the user's choice.
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(accent).write(
+            to: directory.appendingPathComponent("appearance.json"), options: .atomic
+        )
+    }
+
     public func write(_ snapshot: WeeklyWidgetSnapshot, writer: Writer) throws {
         // Each process owns its file. Atomic replacement prevents partial reads;
         // separate files prevent an older concurrent fetch overwriting a newer one.

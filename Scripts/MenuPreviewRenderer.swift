@@ -83,6 +83,28 @@ enum MenuPreviewRenderer {
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.colorScheme, .dark)
         try render(comparison, to: output.appendingPathComponent("menu-and-widgets.png"))
+        try render(comparison.environment(\.usageAccent, .blue), to: output.appendingPathComponent("accent-blue.png"))
+        try render(menus.environment(\.usageAccent, .rose), to: output.appendingPathComponent("accent-rose.png"))
+        let black = UsageAccent.custom(red: 0, green: 0, blue: 0)
+        let white = UsageAccent.custom(red: 1, green: 1, blue: 1)
+        let navy = UsageAccent.custom(red: 0.01, green: 0.02, blue: 0.08)
+        try render(comparison.environment(\.usageAccent, black), to: output.appendingPathComponent("accent-black-widgets.png"))
+        try render(menus.environment(\.usageAccent, black), to: output.appendingPathComponent("accent-black.png"))
+        try render(menus.environment(\.usageAccent, white), to: output.appendingPathComponent("accent-white.png"))
+        try render(menus.environment(\.usageAccent, navy), to: output.appendingPathComponent("accent-navy.png"))
+
+        let appearance = AppearanceSettings(defaults: defaults, widgetStore: nil)
+        appearance.setAccent(.blue)
+        let settingsPreview = HStack(alignment: .top, spacing: 24) {
+            ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                SettingsView(monitor: monitor, appearance: appearance)
+                    .defaultAppStorage(defaults)
+                    .frame(height: 720)
+                    .environment(\.colorScheme, scheme)
+            }
+        }
+        .padding(24).background(Color.gray.opacity(0.15))
+        try render(settingsPreview, to: output.appendingPathComponent("accent-settings.png"))
 
         let history = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
@@ -113,6 +135,7 @@ enum MenuPreviewRenderer {
         }
         .padding(24).background(Color.gray.opacity(0.15))
         try render(recentHistory, to: output.appendingPathComponent("menu-history-gaps.png"))
+        try render(recentHistory.environment(\.usageAccent, black), to: output.appendingPathComponent("accent-black-history.png"))
     }
 
     @MainActor private static func menu(monitor: UsageMonitor, defaults: UserDefaults, scheme: ColorScheme) -> some View {

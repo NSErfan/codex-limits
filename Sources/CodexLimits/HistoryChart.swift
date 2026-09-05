@@ -11,8 +11,9 @@ struct HistoryChart: View {
 
     @State private var selectedDate: Date?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.usageAccent) private var usageAccent
 
-    private var accent: Color { UsageChartStyle.accent(for: remainingPercent, scheme: colorScheme) }
+    private var accent: Color { UsageChartStyle.accent(for: remainingPercent, scheme: colorScheme, selection: usageAccent) }
 
     private var gapFill: LinearGradient {
         LinearGradient(
@@ -119,7 +120,8 @@ struct HistoryChart: View {
     }
 
     private var chart: some View {
-        Chart {
+        let accent = self.accent
+        return Chart {
             ForEach(series.connectors) { connector in
                 ForEach([connector.start, connector.end], id: \.date) { point in
                     AreaMark(

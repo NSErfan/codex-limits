@@ -15,8 +15,9 @@ struct BurnDownChart: View {
 
     @State private var selectedDate: Date?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.usageAccent) private var usageAccent
 
-    private var accent: Color { UsageChartStyle.accent(for: window.remainingPercent, scheme: colorScheme) }
+    private var accent: Color { UsageChartStyle.accent(for: window.remainingPercent, scheme: colorScheme, selection: usageAccent) }
     private var todayColor: Color { UsageChartStyle.today(scheme: colorScheme) }
     private var creditColor: Color { UsageChartStyle.accent(for: 25, scheme: colorScheme) }
 
@@ -139,6 +140,7 @@ struct BurnDownChart: View {
     }
 
     var body: some View {
+        let accent = self.accent
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 if let credit = hoveredCredit, let expiresAt = credit.expiresAt {

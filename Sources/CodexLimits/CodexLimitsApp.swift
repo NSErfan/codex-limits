@@ -1,3 +1,4 @@
+import CodexWidgetKit
 import SwiftUI
 
 @main
@@ -12,6 +13,7 @@ enum CodexLimitsMain {
 
 struct CodexLimitsApp: App {
     @StateObject private var monitor: UsageMonitor
+    @StateObject private var appearance: AppearanceSettings
 
     init() {
         // Must precede any preference or history access.
@@ -19,11 +21,13 @@ struct CodexLimitsApp: App {
         LoginItem.enableByDefault()
         BackgroundCollection.enableByDefault()
         _monitor = StateObject(wrappedValue: UsageMonitor())
+        _appearance = StateObject(wrappedValue: AppearanceSettings())
     }
 
     var body: some Scene {
         MenuBarExtra {
             MenuContentView(monitor: monitor)
+                .environment(\.usageAccent, appearance.accent)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "gauge.with.dots.needle.50percent")
@@ -34,11 +38,13 @@ struct CodexLimitsApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(monitor: monitor)
+            SettingsView(monitor: monitor, appearance: appearance)
+                .environment(\.usageAccent, appearance.accent)
         }
 
         Window("Codex Limits Widgets", id: "widgets") {
             WidgetGalleryView(monitor: monitor)
+                .environment(\.usageAccent, appearance.accent)
         }
         .windowResizability(.contentSize)
     }

@@ -20,6 +20,33 @@ final class WeeklyWidgetStoreTests: XCTestCase {
         XCTAssertEqual(store.read(), result)
     }
 
+    func testUsageWritersPreserveAppearanceWithoutChangingReadingDates() throws {
+        let store = temporaryStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        XCTAssertEqual(store.readAccent(), .automatic)
+        try store.writeAccent(.indigo)
+        XCTAssertNil(store.read())
+        try store.write(snapshot(offset: -600, remaining: 72), writer: .app)
+        try store.write(snapshot(offset: 0, remaining: 68), writer: .collector)
+        XCTAssertEqual(store.readAccent(), .indigo)
+        let reading = store.read()
+        try store.writeAccent(.custom(red: 0.2, green: 0.4, blue: 0.6))
+        XCTAssertEqual(store.read(), reading)
+        XCTAssertEqual(store.readAccent(), .custom(red: 0.2, green: 0.4, blue: 0.6))
+    }
+
+    func testCorruptAndOutOfRangeAppearanceFallsBackToAutomatic() throws {
+        let store = temporaryStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        try store.writeAccent(.rose)
+        let url = store.directory.appendingPathComponent("appearance.json")
+        try Data("not JSON".utf8).write(to: url)
+        XCTAssertEqual(store.readAccent(), .automatic)
+        try JSONEncoder().encode(UsageAccent.custom(red: 2, green: 0, blue: 0)).write(to: url)
+        XCTAssertEqual(store.readAccent(), .automatic)
+        XCTAssertThrowsError(try store.writeAccent(.custom(red: -1, green: 0, blue: 0)))
+    }
+
     func testResetExcludesPreviousWeekAndFutureSamples() throws {
         let old = snapshot(offset: -600, remaining: 2)
         let newWindow = WeeklyWidgetSnapshot.Window(

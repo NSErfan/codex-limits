@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WidgetGalleryView: View {
     @ObservedObject var monitor: UsageMonitor
+    @Environment(\.usageAccent) private var usageAccent
     @State private var appearance = Appearance.dark
     private enum Appearance: String, CaseIterable { case light = "Light", dark = "Dark" }
 
@@ -69,6 +70,7 @@ struct WidgetGalleryView: View {
             .frame(width: 622)
         }
         .preferredColorScheme(appearance == .dark ? .dark : .light)
+        .tint(usageAccent.readableColor(scheme: appearance == .dark ? .dark : .light))
     }
 
     private var previewSnapshot: WeeklyWidgetSnapshot {

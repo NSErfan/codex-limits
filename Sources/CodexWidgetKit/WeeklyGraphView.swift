@@ -4,6 +4,7 @@ public struct WeeklyGraphView: View {
     public let snapshot: WeeklyWidgetSnapshot?
     public let date: Date
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.usageAccent) private var usageAccent
 
     public init(snapshot: WeeklyWidgetSnapshot?, date: Date) {
         self.snapshot = snapshot
@@ -96,7 +97,7 @@ public struct WeeklyGraphView: View {
     private var remaining: Double? {
         status == .current || status == .stale ? snapshot?.window?.remainingPercent : nil
     }
-    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme) }
+    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var resetText: String {
         guard remaining != nil, let reset = snapshot?.window?.resetsAt else {
             return status == .expired ? "Reset reached" : "Weekly limit"

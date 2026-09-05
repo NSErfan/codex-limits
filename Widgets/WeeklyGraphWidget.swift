@@ -10,7 +10,9 @@ struct WeeklyGraphWidget: Widget {
             WeeklyGraphView(snapshot: entry.snapshot, date: entry.date)
                 .containerBackground(for: .widget) {
                     UsageSurfaceBackground(remaining: entry.snapshot?.window?.remainingPercent)
+                        .environment(\.usageAccent, entry.accent)
                 }
+                .environment(\.usageAccent, entry.accent)
         }
         .configurationDisplayName("Weekly Graph")
         .description("Your weekly balance and usage curve, with an even-pace guide to reset.")
