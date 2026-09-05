@@ -36,5 +36,10 @@ struct CodexLimitsApp: App {
         Settings {
             SettingsView(monitor: monitor)
         }
+
+        Window("Codex Limits Widgets", id: "widgets") {
+            WidgetGalleryView(monitor: monitor)
+        }
+        .windowResizability(.contentSize)
     }
 }

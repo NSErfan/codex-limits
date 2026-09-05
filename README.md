@@ -54,6 +54,72 @@ Forecasts keep a safety buffer, 3% by default. You can change it in Settings.
 - Can copy history to a private folder that you choose.
 - Refreshes on launch, after wake, when you open the menu, every ten minutes, or on request.
 - Runs as a native SwiftUI menu-bar app with no third-party runtime dependencies.
+- Includes two native desktop widgets: a small weekly percentage and a medium weekly usage graph.
+
+## Desktop widgets
+
+**Weekly Percentage** shows the percentage of your weekly Codex limit remaining,
+with a segmented balance indicator. **Weekly Graph** adds the current week's
+recorded usage curve, an even-pace guide, and time until reset. Both adapt to light
+and dark appearance, with amber and coral accents at 25% and 10% remaining.
+
+These widgets always use the seven-day `codex` limit, even when the menu bar's most
+constrained limit is the five-hour window. They keep their own weekly readings;
+the dashed chart guide is a straight line from 100% to 0% at the scheduled reset,
+independent of the dashboard's forecast and banked-reset pacing settings.
+Weekly history begins with this version. Older dashboard history cannot be imported
+reliably because it mixes five-hour and weekly readings without identifying them.
+Until there are two weekly readings, the graph says **Collecting history**.
+
+Open **Preview widgets** (the overlapping rectangles button in the menu) to see
+both designs with your usage. Before the first reading, the gallery clearly labels
+synthetic sample data. To add an installed widget, Control-click your desktop,
+choose **Edit Widgets**, and search for **Codex Limits**.
+Ad-hoc builds also record weekly history locally for the preview gallery.
+
+### Signing for desktop data sharing
+
+The default ad-hoc build compiles and embeds the WidgetKit extension and supports
+the in-app preview gallery. Sharing real readings with the sandboxed desktop
+extension requires an Apple code-signing identity. Build with:
+
+```sh
+DEVELOPMENT_TEAM=YOURTEAMID \
+CODE_SIGN_IDENTITY="Apple Development: Your Name (YOURTEAMID)" \
+Scripts/build-app.sh
+```
+
+Use your actual team ID and an identity listed by `security find-identity -v -p
+codesigning`. The build gives both bundles the same team-prefixed macOS App Group,
+which [Apple supports without a provisioning profile](https://developer.apple.com/documentation/xcode/accessing-app-group-containers).
+The same environment variables work with `Scripts/install-app.sh` and
+`script/build_and_run.sh`. Launch the signed app and let it refresh before adding
+the widgets. Ad-hoc builds show an empty state in the desktop widget instead of
+pretending preview data is live account usage.
+
+To keep subsequent builds and the Run button signed, you can save the identity
+name (or certificate SHA-1) under `CodeSignIdentity` and the team ID under
+`DevelopmentTeam` in a local `.env.signing.plist` dictionary. This file is ignored
+by Git; explicit environment variables override it. It contains identifiers only,
+and the private signing key remains in Keychain.
+
+The app and the existing background collector publish small, atomic JSON snapshots
+to the group container. Widgets never launch the CLI or access credentials. Each
+writer owns a separate file; the extension merges readings from the current weekly
+cycle. The app requests a widget reload after a successful fetch, and the extension
+requests a refresh after 15 minutes. macOS controls actual delivery times. Readings
+older than 30 minutes are marked as last known; when the reset arrives, the old
+percentage is hidden until another successful fetch. Without the app or background
+collector running, the widget cannot fetch fresh usage by itself.
+
+Render the production SwiftUI views with synthetic data for visual inspection:
+
+```sh
+Scripts/render-widget-previews.sh
+```
+
+Images are written to `.build/widget-previews/`, including light/dark variants,
+full, low, empty, stale, expired, and unavailable states.
 
 ## How it works
 
@@ -100,6 +166,11 @@ open ".build/release/Codex Limits.app"
 ```
 
 The project does not provide a prebuilt or notarized app. Open `Package.swift` in Xcode to work on the source.
+The build script also builds `Widgets/CodexLimitsWidgets.xcodeproj` as a native
+app-extension target. This is required for WidgetKit's extension launch entry
+point; a plain Swift executable wrapped in an `.appex` can register without being
+able to serve the widget gallery. Signing uses the local configuration described
+above when present, otherwise it is ad-hoc.
 
 ## Test
 

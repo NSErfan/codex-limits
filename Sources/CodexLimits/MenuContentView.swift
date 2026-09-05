@@ -9,6 +9,7 @@ struct MenuContentView: View {
     @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -172,6 +173,15 @@ struct MenuContentView: View {
                 .foregroundStyle(.secondary)
                 Spacer()
                 Button {
+                    openWindow(id: "widgets")
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    Image(systemName: "rectangle.on.rectangle")
+                }
+                .buttonStyle(.borderless)
+                .help("Preview widgets")
+                .accessibilityLabel("Preview widgets")
+                Button {
                     openSettings()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         NSApp.windows.first {
@@ -208,6 +218,11 @@ struct MenuContentView: View {
                     Task { await monitor.refresh() }
                 }
             }
+            Button("Preview widgets") {
+                openWindow(id: "widgets")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            .buttonStyle(.borderless)
         }
         .frame(maxWidth: .infinity, minHeight: 150)
     }
