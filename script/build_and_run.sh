@@ -12,13 +12,16 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$PROCESS_NAME"
 
-pkill -x "$PROCESS_NAME" >/dev/null 2>&1 || true
+"$ROOT_DIR/Scripts/stop-app.sh"
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
 export CLANG_MODULE_CACHE_PATH=/private/tmp/codex-limits-clang-cache
 export SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/codex-limits-swiftpm-cache
 
 CONFIGURATION=debug "$ROOT_DIR/Scripts/build-app.sh"
+
+# macOS may have relaunched a previously registered extension during the build.
+"$ROOT_DIR/Scripts/stop-app.sh"
 
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
