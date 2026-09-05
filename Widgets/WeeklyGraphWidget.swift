@@ -1,0 +1,20 @@
+import CodexWidgetKit
+import SwiftUI
+import WidgetKit
+
+struct WeeklyGraphWidget: Widget {
+    let kind = WeeklyWidgetStore.graphKind
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: WeeklyWidgetProvider()) { entry in
+            WeeklyGraphView(snapshot: entry.snapshot, date: entry.date)
+                .containerBackground(for: .widget) {
+                    WeeklyWidgetBackground(remaining: entry.snapshot?.window?.remainingPercent)
+                }
+        }
+        .configurationDisplayName("Weekly Graph")
+        .description("Your weekly balance and usage curve, with an even-pace guide to reset.")
+        .supportedFamilies([.systemMedium])
+        .contentMarginsDisabled()
+    }
+}

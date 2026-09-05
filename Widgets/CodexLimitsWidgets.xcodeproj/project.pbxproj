@@ -1,0 +1,80 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {};
+    objectVersion = 56;
+    objects = {
+        A00000000000000000000001 = {
+            isa = PBXProject;
+            attributes = { LastUpgradeCheck = 1640; };
+            buildConfigurationList = A00000000000000000000002;
+            compatibilityVersion = "Xcode 14.0";
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (en, Base);
+            mainGroup = A00000000000000000000003;
+            productRefGroup = A00000000000000000000004;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (A00000000000000000000005);
+        };
+        A00000000000000000000002 = { isa = XCConfigurationList; buildConfigurations = (A00000000000000000000006); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        A00000000000000000000003 = { isa = PBXGroup; children = (A00000000000000000000011, A00000000000000000000012, A00000000000000000000013, A00000000000000000000014, A00000000000000000000004); sourceTree = "<group>"; };
+        A00000000000000000000004 = { isa = PBXGroup; children = (A00000000000000000000007); name = Products; sourceTree = "<group>"; };
+        A00000000000000000000005 = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A00000000000000000000008;
+            buildPhases = (A00000000000000000000009, A00000000000000000000010);
+            buildRules = ();
+            dependencies = ();
+            name = CodexLimitsWidgets;
+            productName = CodexLimitsWidgets;
+            productReference = A00000000000000000000007;
+            productType = "com.apple.product-type.app-extension";
+        };
+        A00000000000000000000006 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CLANG_ENABLE_MODULES = YES;
+                MACOSX_DEPLOYMENT_TARGET = 14.0;
+                SDKROOT = macosx;
+                SWIFT_VERSION = 5.0;
+            };
+            name = Release;
+        };
+        A00000000000000000000007 = { isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CodexLimitsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        A00000000000000000000008 = { isa = XCConfigurationList; buildConfigurations = (A00000000000000000000015); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        A00000000000000000000009 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000021, A00000000000000000000022, A00000000000000000000023, A00000000000000000000024); runOnlyForDeploymentPostprocessing = 0; };
+        A00000000000000000000010 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        A00000000000000000000011 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexLimitsWidgets.swift; sourceTree = "<group>"; };
+        A00000000000000000000012 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyWidgetProvider.swift; sourceTree = "<group>"; };
+        A00000000000000000000013 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyPercentageWidget.swift; sourceTree = "<group>"; };
+        A00000000000000000000014 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyGraphWidget.swift; sourceTree = "<group>"; };
+        A00000000000000000000015 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                APPLICATION_EXTENSION_API_ONLY = YES;
+                CODE_SIGNING_ALLOWED = NO;
+                CODEX_WIDGET_LIBRARY_DIR = "$(SRCROOT)/../.build/release";
+                ENABLE_APP_SANDBOX = YES;
+                GENERATE_INFOPLIST_FILE = NO;
+                INFOPLIST_FILE = Info.plist;
+                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+                LIBRARY_SEARCH_PATHS = "\"$(CODEX_WIDGET_LIBRARY_DIR)\"";
+                OTHER_LDFLAGS = "$(inherited) -lCodexWidgetKit";
+                PRODUCT_BUNDLE_IDENTIFIER = com.github.nserfan.CodexLimits.widgets;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SKIP_INSTALL = YES;
+                SUPPORTED_PLATFORMS = macosx;
+                SWIFT_INCLUDE_PATHS = "\"$(CODEX_WIDGET_LIBRARY_DIR)/Modules\"";
+                SWIFT_OPTIMIZATION_LEVEL = "-O";
+            };
+            name = Release;
+        };
+        A00000000000000000000021 = { isa = PBXBuildFile; fileRef = A00000000000000000000011; };
+        A00000000000000000000022 = { isa = PBXBuildFile; fileRef = A00000000000000000000012; };
+        A00000000000000000000023 = { isa = PBXBuildFile; fileRef = A00000000000000000000014; };
+        A00000000000000000000024 = { isa = PBXBuildFile; fileRef = A00000000000000000000013; };
+    };
+    rootObject = A00000000000000000000001;
+}
