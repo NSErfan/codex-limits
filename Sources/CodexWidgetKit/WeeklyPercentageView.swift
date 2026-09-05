@@ -52,7 +52,7 @@ public struct WeeklyPercentageView: View {
     private var remaining: Double? {
         status == .current || status == .stale ? snapshot?.window?.remainingPercent : nil
     }
-    private var accent: Color { WeeklyWidgetStyle.accent(for: remaining, scheme: scheme) }
+    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme) }
     private var caption: String {
         switch status {
         case .current: "Weekly remaining"

@@ -55,11 +55,11 @@ enum WidgetPreviewRenderer {
         HStack(spacing: 24) {
             WeeklyPercentageView(snapshot: snapshot, date: date)
                 .frame(width: 170, height: 170)
-                .background { WeeklyWidgetBackground(remaining: snapshot?.window?.remainingPercent) }
+                .background { UsageSurfaceBackground(remaining: snapshot?.window?.remainingPercent) }
                 .clipShape(RoundedRectangle(cornerRadius: 23))
             WeeklyGraphView(snapshot: snapshot, date: date)
                 .frame(width: 364, height: 170)
-                .background { WeeklyWidgetBackground(remaining: snapshot?.window?.remainingPercent) }
+                .background { UsageSurfaceBackground(remaining: snapshot?.window?.remainingPercent) }
                 .clipShape(RoundedRectangle(cornerRadius: 23))
         }
         .environment(\.colorScheme, scheme)

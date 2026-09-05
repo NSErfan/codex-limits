@@ -9,16 +9,16 @@ struct WeeklyUsageChart: View {
         if let window = snapshot.window {
             Chart {
                 RuleMark(y: .value("Half remaining", 50))
-                    .foregroundStyle(Color.primary.opacity(0.07))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                    .foregroundStyle(UsageChartStyle.grid)
+                    .lineStyle(UsageChartStyle.gridStroke)
                 ForEach([window.startsAt, window.resetsAt], id: \.self) { date in
                     LineMark(
                         x: .value("Date", date),
                         y: .value("Even pace", date == window.startsAt ? 100 : 0),
                         series: .value("Series", "Even pace")
                     )
-                    .foregroundStyle(Color.secondary.opacity(0.5))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                    .foregroundStyle(UsageChartStyle.guide)
+                    .lineStyle(UsageChartStyle.guideStroke)
                 }
                 ForEach(snapshot.samples, id: \.date) { sample in
                     AreaMark(
@@ -26,10 +26,7 @@ struct WeeklyUsageChart: View {
                         yStart: .value("Zero", 0),
                         yEnd: .value("Remaining", sample.remainingPercent)
                     )
-                    .foregroundStyle(LinearGradient(
-                        colors: [accent.opacity(0.23), accent.opacity(0.01)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
+                    .foregroundStyle(UsageChartStyle.area(accent))
                     .interpolationMethod(.linear)
                     LineMark(
                         x: .value("Date", sample.date),
@@ -37,7 +34,7 @@ struct WeeklyUsageChart: View {
                         series: .value("Series", "Actual")
                     )
                     .foregroundStyle(accent)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .lineStyle(UsageChartStyle.actualStroke)
                     .interpolationMethod(.linear)
                 }
                 PointMark(x: .value("Latest", snapshot.fetchedAt), y: .value("Remaining", window.remainingPercent))

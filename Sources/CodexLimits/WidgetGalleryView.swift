@@ -83,7 +83,7 @@ struct WidgetGalleryView: View {
     private func card<Content: View>(width: CGFloat, remaining: Double?, @ViewBuilder content: () -> Content) -> some View {
         content()
             .frame(width: width, height: 170)
-            .background { WeeklyWidgetBackground(remaining: remaining) }
+            .background { UsageSurfaceBackground(remaining: remaining) }
             .clipShape(RoundedRectangle(cornerRadius: 23, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 23, style: .continuous)

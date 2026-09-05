@@ -9,7 +9,7 @@ struct WeeklyGraphWidget: Widget {
         StaticConfiguration(kind: kind, provider: WeeklyWidgetProvider()) { entry in
             WeeklyGraphView(snapshot: entry.snapshot, date: entry.date)
                 .containerBackground(for: .widget) {
-                    WeeklyWidgetBackground(remaining: entry.snapshot?.window?.remainingPercent)
+                    UsageSurfaceBackground(remaining: entry.snapshot?.window?.remainingPercent)
                 }
         }
         .configurationDisplayName("Weekly Graph")

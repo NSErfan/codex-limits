@@ -1,6 +1,6 @@
 import SwiftUI
 
-public struct WeeklyWidgetBackground: View {
+public struct UsageSurfaceBackground: View {
     @Environment(\.colorScheme) private var scheme
     private let remaining: Double?
 
@@ -22,5 +22,5 @@ public struct WeeklyWidgetBackground: View {
         }
     }
 
-    private var accent: Color { WeeklyWidgetStyle.accent(for: remaining, scheme: scheme) }
+    private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme) }
 }
