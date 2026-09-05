@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CodexWidgetKit
 import Foundation
 
 @MainActor
@@ -23,6 +24,7 @@ final class UsageMonitor: ObservableObject {
     private let recoveryDelaysNanoseconds: [UInt64]
     private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
     private let history: UsageHistory
+    private let widgetStore: WeeklyWidgetStore?
     private var previousStatus: PaceStatus?
     private var cancellables: Set<AnyCancellable> = []
     private var recoveryTask: Task<Void, Never>?
@@ -36,6 +38,7 @@ final class UsageMonitor: ObservableObject {
         defaults: UserDefaults = .standard,
         historyDirectory: URL? = nil,
         historyNow: @escaping @Sendable () -> Date = { Date() },
+        widgetStore: WeeklyWidgetStore? = .shared(),
         fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot = {
             try await CodexClient.fetch()
         },
@@ -50,6 +53,10 @@ final class UsageMonitor: ObservableObject {
         startsAutomatically: Bool = true
     ) {
         self.defaults = defaults
+        self.widgetStore = widgetStore ?? WeeklyWidgetStore(
+            directory: (historyDirectory ?? Self.historyDirectory())
+                .appendingPathComponent("WeeklyWidget", isDirectory: true)
+        )
         self.fetchUsage = fetchUsage
         self.recoveryDelaysNanoseconds = recoveryDelaysNanoseconds
         self.sleepBeforeRecovery = sleepBeforeRecovery
@@ -85,6 +92,8 @@ final class UsageMonitor: ObservableObject {
     var menuBarText: String {
         Self.menuBarText(remainingPercent: snapshot?.mainLimit.window.remainingPercent)
     }
+
+    var weeklyWidgetSnapshot: WeeklyWidgetSnapshot? { widgetStore?.read() }
 
     var currentWindowSamples: [UsageSample] {
         Self.windowSamples(samples, reset: snapshot?.mainLimit.window.resetsAt)
@@ -165,6 +174,7 @@ final class UsageMonitor: ObservableObject {
                 syncErrorMessage = exchangeErrorMessage
             }
             snapshot = newSnapshot
+            WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore)
             errorMessage = nil
             recalculate()
             persist()

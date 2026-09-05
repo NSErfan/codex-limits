@@ -1,4 +1,5 @@
 import Foundation
+import CodexWidgetKit
 
 /// Headless mode run by the bundled LaunchAgent: records one usage sample into
 /// the shared history store and exits, so the charts keep their shape over
@@ -35,6 +36,7 @@ enum BackgroundCollector {
     static func collectOnce(
         defaults: UserDefaults,
         historyDirectory: URL,
+        widgetStore: WeeklyWidgetStore? = .shared(),
         fetchUsage: @Sendable () async throws -> UsageSnapshot
     ) async -> Bool {
         guard let snapshot = try? await fetchUsage() else { return false }
@@ -48,7 +50,12 @@ enum BackgroundCollector {
             localDirectory: historyDirectory,
             installationID: installationID(in: defaults)
         )
-        return await history.record(sample).errorMessage == nil
+        let recorded = await history.record(sample)
+        let store = widgetStore ?? WeeklyWidgetStore(
+            directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true)
+        )
+        WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store)
+        return recorded.errorMessage == nil
     }
 
     /// The collector writes under its own history installation so its files
