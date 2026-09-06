@@ -8,26 +8,28 @@ struct ChartHoverReadout: View {
     var hint: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 7) {
-                if let symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 11, weight: .semibold))
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    if let symbol {
+                        Image(systemName: symbol)
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
                 }
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Text(detail)
-                    .font(.system(size: 12, weight: .medium))
-                    .fixedSize()
+                if let hint {
+                    Text(hint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
-            if let hint {
-                Text(hint)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            Spacer(minLength: 8)
+            Text(detail)
+                .font(.system(size: 12, weight: .medium))
+                .fixedSize()
         }
         .monospacedDigit()
         .foregroundStyle(.primary)
