@@ -46,9 +46,33 @@ final class HistoryChartDataTests: XCTestCase {
         XCTAssertEqual(data.plotRuns.count, 2)
         XCTAssertEqual(data.series.connectors.count, 1)
         XCTAssertEqual(data.selection(at: start.addingTimeInterval(600), visibleSpan: 86_400), .point(point(1, 80)))
-        XCTAssertEqual(data.selection(at: start.addingTimeInterval(3_600), visibleSpan: 86_400), .gap)
+        let estimateDate = start.addingTimeInterval(3_600)
+        let expected = 80 + 20 * (3_000.0 / 85_800)
+        XCTAssertEqual(data.selection(at: estimateDate, visibleSpan: 86_400), .estimated(.init(date: estimateDate, remainingPercent: expected)))
         XCTAssertEqual(data.selection(at: reset, visibleSpan: 86_400), .reset(reset))
         XCTAssertEqual(data.selection(at: reset.addingTimeInterval(-60), visibleSpan: 86_400), .reset(reset))
+    }
+
+    func testGapEstimatesFollowTheDrawnLineAndKeepSampleEndpoints() {
+        let end = start.addingTimeInterval(8_000)
+        for levels in [[80.0, 20.0], [75.0, 75.0]] {
+            let samples = [
+                UsageSample(observedAt: start, remainingPercent: levels[0], resetsAt: end),
+                UsageSample(observedAt: end, remainingPercent: levels[1], resetsAt: end)
+            ]
+            let data = HistoryChartData(samples: samples, range: start ... end, bucketDuration: 0)
+            for fraction in [0.1, 0.25, 0.5, 0.9] {
+                let date = start.addingTimeInterval(8_000 * fraction)
+                guard case let .estimated(point) = data.selection(at: date, visibleSpan: 8_000) else {
+                    XCTFail("Missing estimate inside a sampling gap")
+                    continue
+                }
+                XCTAssertEqual(point.date, date)
+                XCTAssertEqual(point.remainingPercent, levels[0] + (levels[1] - levels[0]) * fraction, accuracy: 1e-9)
+            }
+            XCTAssertEqual(data.selection(at: start, visibleSpan: 8_000), .point(.init(date: start, remainingPercent: levels[0])))
+            XCTAssertEqual(data.selection(at: end, visibleSpan: 8_000), .point(.init(date: end, remainingPercent: levels[1])))
+        }
     }
 
     func testBatchPlotsConnectGapsWithoutFillingThemAsSampled() {

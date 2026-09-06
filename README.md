@@ -18,7 +18,7 @@
 <p align="center">
   <img src="docs/images/codex-limits-dashboard.png" width="465" alt="Codex Limits showing the remaining limit, usage chart, reset time, and suggested pace">
   <br>
-  <sub>Earlier dashboard layout. Current builds also include history tabs, banked-reset pacing, and widget previews.</sub>
+  <sub>Earlier dashboard layout. Current builds also include history tabs, banked-reset pacing, and desktop widgets.</sub>
 </p>
 
 > [!NOTE]
@@ -55,7 +55,7 @@ Suggested pace reserves a safety buffer, 3% by default, which you can change in 
 
 In **Settings → Appearance**, choose an accent preset or a custom color for the app, graphs, and both widgets. Presets adapt to light and dark appearance. Foreground colors adjust for readability, including black and white custom colors, while the picker and background tint retain your selection. **Automatic** keeps the balance-based mint, amber, and coral colors; warning text retains its warning color with any selection. Changes are saved locally and request a widget refresh, which macOS schedules.
 
-Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples.
+Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples. Hovering inside a gap shows a percentage interpolated between the surrounding readings, labeled **Estimated · No sample here**.
 
 When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
 
@@ -95,17 +95,15 @@ Weekly history begins when you first run a build with widget support. Older dash
 reliably because it mixes five-hour and weekly readings without identifying them.
 Until there are two weekly readings, the graph says **Collecting history**.
 
-Open **Preview widgets** (the overlapping rectangles button in the menu) to see
-both designs with your usage. Before the first reading, the gallery clearly labels
-synthetic sample data. To add an installed widget, Control-click your desktop,
-choose **Edit Widgets**, and search for **Codex Limits**. Use the installed build
-in `/Applications`; if the gallery was already open during an update, close and reopen it.
-Ad-hoc builds also record weekly history locally for the preview gallery.
+To add a widget, Control-click your desktop, choose **Edit Widgets**, and search
+for **Codex Limits**. macOS provides the previews and handles adding both sizes.
+Use the installed build in `/Applications`; if the macOS widget gallery was already
+open during an update, close and reopen it.
 
 ### Signing for desktop data sharing
 
 The default ad-hoc build compiles and embeds the WidgetKit extension and supports
-the in-app preview gallery. Sharing real readings with the sandboxed desktop
+the menu-bar app. Sharing real readings with the sandboxed desktop
 extension requires an Apple code-signing identity. Build with:
 
 ```sh
@@ -177,7 +175,7 @@ Codex Limits keeps usage data on your Mac:
 - It does not copy or store your Codex credentials.
 - It sends no telemetry or analytics. It has no notifications or direct network client.
 - It stores main-limit samples in the app's Application Support directory.
-- Signed builds share weekly percentages, observation/reset times, and the selected accent color with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for the preview gallery.
+- Signed builds share weekly percentages, observation/reset times, and the selected accent color with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for local storage.
 - If you enable history sync, it copies only usage samples to the selected folder. Preferences, credentials, and raw Codex responses stay on your Mac.
 - Synced JSON files contain observation times, remaining percentages, and reset times. Choose a folder that you do not share with other people.
 - Folder sync covers main-limit history; the separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same Codex account.
@@ -203,7 +201,7 @@ Scripts/install-app.sh
 
 For live desktop widget data, configure developer signing as described above before
 installing. Without signing configuration, builds use ad-hoc signing and support
-the menu-bar app and in-app widget previews.
+the menu-bar app.
 
 To build without installing:
 

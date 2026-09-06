@@ -144,32 +144,17 @@ struct BurnDownChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 if let credit = hoveredCredit, let expiresAt = credit.expiresAt {
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 8))
-                        Text("Banked \(credit.title?.lowercased() ?? "reset")")
-                        Text("expires \(BankedResetPresentation.dateText(expiresAt))")
-                            .foregroundStyle(.secondary)
-                        Text(credit.id == paceTargetCreditID ? "· click to stop pacing" : "· click to pace here")
-                            .foregroundStyle(.secondary)
-                            .italic()
-                    }
-                    .font(.caption)
-                    .foregroundStyle(creditColor)
+                    ChartHoverReadout(
+                        title: "Banked \(credit.title?.lowercased() ?? "reset")",
+                        detail: "Expires \(BankedResetPresentation.dateText(expiresAt))",
+                        symbol: "arrow.counterclockwise",
+                        hint: credit.id == paceTargetCreditID ? "Click to stop pacing to this reset" : "Click to pace to this reset"
+                    )
                 } else if let hovered = hoveredPoint {
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Text("\(Int(hovered.remaining.rounded()))%")
-                            .fontWeight(.semibold)
-                        Text(
-                            hovered.date,
-                            format: .dateTime.month(.abbreviated).day().hour().minute()
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
-                    .monospacedDigit()
+                    ChartHoverReadout(
+                        title: "\(Int(hovered.remaining.rounded()))% remaining",
+                        detail: hovered.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+                    )
                 } else {
                     ChartLegendItem(label: "Actual", color: accent)
                     ChartLegendItem(label: "Target", color: UsageChartStyle.guide, dash: [3, 4])
@@ -180,7 +165,7 @@ struct BurnDownChart: View {
                     ChartLegendItem(label: "Historical", color: .secondary.opacity(0.65), dash: [2, 3])
                 }
             }
-            .frame(height: 16)
+            .frame(height: 40)
 
             Chart {
                 ForEach([

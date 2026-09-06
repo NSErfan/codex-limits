@@ -106,6 +106,25 @@ enum MenuPreviewRenderer {
         .padding(24).background(Color.gray.opacity(0.15))
         try render(settingsPreview, to: output.appendingPathComponent("accent-settings.png"))
 
+        let detailStyles = HStack(alignment: .top, spacing: 24) {
+            ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                VStack(spacing: 14) {
+                    PaceStatusView(status: .slowDown, message: "At this pace, your limit may run out 5 days before the reset.", color: UsageChartStyle.accent(for: 0, scheme: scheme))
+                    PaceStatusView(status: .onTrack, message: "You’re on track to have 15% left at the reset.", color: UsageChartStyle.accent(for: 100, scheme: scheme))
+                    ChartHoverReadout(title: "97% remaining", detail: "Sep 6, 2026 at 5:52 AM")
+                    ChartHoverReadout(title: "Reset", detail: "Sep 13 at 5:52 AM", symbol: "arrow.counterclockwise")
+                    ChartHoverReadout(title: "≈72% remaining", detail: "Sep 6 at 5:52 AM", hint: "Estimated · No sample here")
+                    ChartHoverReadout(title: "Banked reset", detail: "Expires Sep 21 at 8:14 AM", symbol: "arrow.counterclockwise", hint: "Click to pace to this reset")
+                }
+                .padding(20).frame(width: 460)
+                .background { UsageSurfaceBackground(remaining: 68) }
+                .environment(\.colorScheme, scheme)
+                .clipShape(RoundedRectangle(cornerRadius: 23))
+            }
+        }
+        .padding(24).background(Color.gray.opacity(0.15))
+        try render(detailStyles, to: output.appendingPathComponent("menu-detail-styles.png"))
+
         let history = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
                 VStack(alignment: .leading, spacing: 16) {

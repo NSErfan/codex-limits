@@ -57,48 +57,45 @@ struct HistoryChart: View {
     }
 
     private func readout(selection: HistoryChartData.Selection?) -> some View {
-        HStack(spacing: 4) {
-            ChartLegendItem(label: "Remaining", color: accent)
-            Spacer()
-            if case let .reset(hoveredReset) = selection {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.system(size: 8))
-                    .foregroundStyle(accent)
-                Text("Reset")
-                    .foregroundStyle(accent)
-                Text(
-                    hoveredReset,
-                    format: .dateTime.month(.abbreviated).day().hour().minute()
+        Group {
+            if case let .reset(date) = selection {
+                ChartHoverReadout(
+                    title: "Reset", detail: date.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
+                    symbol: "arrow.counterclockwise"
                 )
-                .foregroundStyle(.secondary)
-            } else if selection == .gap {
-                Text("No samples · estimated connection")
-                    .foregroundStyle(.secondary)
-            } else if case let .point(hovered) = selection {
-                Text("\(Int(hovered.remainingPercent.rounded()))%")
-                    .fontWeight(.semibold)
-                Text(
-                    hovered.date,
-                    format: .dateTime.month(.abbreviated).day().hour().minute()
+            } else if case let .estimated(point) = selection {
+                ChartHoverReadout(
+                    title: "≈\(Int(point.remainingPercent.rounded()))% remaining",
+                    detail: point.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
+                    hint: "Estimated · No sample here"
                 )
-                .foregroundStyle(.secondary)
-            } else if !data.series.connectors.isEmpty {
-                HStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(gapFill)
-                        .overlay {
+            } else if case let .point(point) = selection {
+                ChartHoverReadout(
+                    title: "\(Int(point.remainingPercent.rounded()))% remaining",
+                    detail: point.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+                )
+            } else {
+                HStack {
+                    ChartLegendItem(label: "Remaining", color: accent)
+                    Spacer()
+                    if !data.series.connectors.isEmpty {
+                        HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2)
-                                .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                                .fill(gapFill)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                                }
+                                .frame(width: 12, height: 8)
+                            Text("No samples")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
                         }
-                        .frame(width: 12, height: 8)
-                    Text("No samples")
-                        .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .font(UsageChartStyle.axisFont)
-        .monospacedDigit()
-        .frame(height: 12)
+        .frame(height: 40)
     }
 
     private func historyContent(accent: Color) -> AnyChartContent {
@@ -209,7 +206,10 @@ struct HistoryChart: View {
     private func chart(selection: HistoryChartData.Selection?) -> some View {
         let accent = self.accent
         let hoveredReset: Date? = if case let .reset(date) = selection { date } else { nil }
-        let hoveredPoint: HistorySeriesBuilder.Point? = if case let .point(point) = selection { point } else { nil }
+        let hoveredPoint: HistorySeriesBuilder.Point? = switch selection {
+        case let .point(point), let .estimated(point): point
+        default: nil
+        }
         return Chart {
             historyContent(accent: accent)
 

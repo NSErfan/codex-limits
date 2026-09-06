@@ -41,11 +41,5 @@ struct CodexLimitsApp: App {
             SettingsView(monitor: monitor, appearance: appearance)
                 .environment(\.usageAccent, appearance.accent)
         }
-
-        Window("Codex Limits Widgets", id: "widgets") {
-            WidgetGalleryView(monitor: monitor)
-                .environment(\.usageAccent, appearance.accent)
-        }
-        .windowResizability(.contentSize)
     }
 }

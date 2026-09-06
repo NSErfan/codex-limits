@@ -5,7 +5,7 @@ struct HistoryChartData {
     enum Selection: Equatable {
         case point(HistorySeriesBuilder.Point)
         case reset(Date)
-        case gap
+        case estimated(HistorySeriesBuilder.Point)
     }
 
     struct AreaPoint {
@@ -43,8 +43,11 @@ struct HistoryChartData {
         if let reset = ChartInteraction.nearest(to: date, in: series.resets, visibleSpan: visibleSpan, date: { $0 }) {
             return .reset(reset)
         }
-        if series.connectors.contains(where: { date > $0.start.date && date < $0.end.date }) {
-            return .gap
+        if let gap = series.connectors.first(where: { date > $0.start.date && date < $0.end.date }) {
+            // Match the straight connector drawn between the surrounding samples.
+            let fraction = date.timeIntervalSince(gap.start.date) / gap.end.date.timeIntervalSince(gap.start.date)
+            let remaining = gap.start.remainingPercent + fraction * (gap.end.remainingPercent - gap.start.remainingPercent)
+            return .estimated(.init(date: date, remainingPercent: remaining))
         }
         // Keep every prepared reading available to hover, including points
         // omitted from the drawing because they lie on a straight segment.

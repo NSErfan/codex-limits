@@ -9,7 +9,6 @@ struct MenuContentView: View {
     @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.usageAccent) private var usageAccent
 
@@ -82,22 +81,18 @@ struct MenuContentView: View {
                 .accessibilityLabel("Refresh usage")
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(StatusText.title(forecast.status))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(statusColor(forecast.status))
-                Text(StatusText.message(
+            PaceStatusView(
+                status: forecast.status,
+                message: StatusText.message(
                     forecast: forecast,
                     remainingPercent: snapshot.mainLimit.window.remainingPercent,
                     fetchedAt: snapshot.fetchedAt,
                     deadline: paceDeadline,
                     windowReset: snapshot.mainLimit.window.resetsAt,
                     safetyBuffer: safetyBuffer
-                ))
-                .foregroundStyle(.secondary)
-                .font(.system(size: 12))
-                .fixedSize(horizontal: false, vertical: true)
-            }
+                ),
+                color: statusColor(forecast.status)
+            )
 
             ChartRangePicker(selection: $chartRange, accent: accent)
 
@@ -201,15 +196,6 @@ struct MenuContentView: View {
                 .foregroundStyle(.secondary)
                 Spacer()
                 Button {
-                    openWindow(id: "widgets")
-                    NSApp.activate(ignoringOtherApps: true)
-                } label: {
-                    Image(systemName: "rectangle.on.rectangle")
-                }
-                .buttonStyle(.borderless)
-                .help("Preview widgets")
-                .accessibilityLabel("Preview widgets")
-                Button {
                     openSettings()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         NSApp.windows.first {
@@ -246,11 +232,6 @@ struct MenuContentView: View {
                     Task { await monitor.refresh() }
                 }
             }
-            Button("Preview widgets") {
-                openWindow(id: "widgets")
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            .buttonStyle(.borderless)
         }
         .frame(maxWidth: .infinity, minHeight: 150)
     }
