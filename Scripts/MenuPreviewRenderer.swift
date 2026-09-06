@@ -106,6 +106,32 @@ enum MenuPreviewRenderer {
         .padding(24).background(Color.gray.opacity(0.15))
         try render(settingsPreview, to: output.appendingPathComponent("accent-settings.png"))
 
+        let activityEvents = (0 ..< 400).map { index in
+            let model = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.3-codex"][index % 3]
+            let effort = ["high", "medium", "low"][(index / 3) % 3]
+            let total = Int64(2_000 + (index % 17) * 450)
+            return ModelActivityEvent(id: "preview-\(index)", date: now.addingTimeInterval(-Double(index < 18 ? index * 2 + 1 : index * 1_400 + 60)),
+                                      group: .init(model: model, effort: effort),
+                                      tokens: .init(input: total - 500, output: 500, cached: 1_000, total: total))
+        }
+        let activityStore = ModelActivityStore(previewEvents: activityEvents, now: now)
+        activityStore.selectedModels = ["gpt-5.5"]
+        activityStore.updateHistory(samples)
+        let activityPreview = ModelActivityView(store: activityStore, loadsAutomatically: false, samples: samples)
+            .frame(width: 1_080, height: 940)
+        try render(activityPreview.environment(\.colorScheme, .dark), to: output.appendingPathComponent("model-activity-dark.png"))
+        try render(activityPreview.environment(\.colorScheme, .light), to: output.appendingPathComponent("model-activity-light.png"))
+
+        if let interval = activityStore.timeline.interval(at: nil) {
+            for scheme in [ColorScheme.dark, .light] {
+                let pies = ModelActivityPieCharts(interval: interval, metric: .total, selectedModel: .constant("gpt-5.5"))
+                    .padding(26).frame(width: 780)
+                    .environment(\.colorScheme, scheme)
+                    .background(scheme == .dark ? Color(white: 0.12) : Color.white)
+                try render(pies, to: output.appendingPathComponent("model-pies-\(scheme == .dark ? "dark" : "light").png"))
+            }
+        }
+
         let detailStyles = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
                 VStack(spacing: 14) {

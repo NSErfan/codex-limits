@@ -80,6 +80,47 @@ The helper runs a single collection on a 15-minute schedule, writing main-limit 
 
 Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 
+## Model and effort activity
+
+Open **Activity** from the menu-bar window to inspect local Codex token activity in
+a separate, resizable window. While Activity is open (including minimized), Codex
+Limits appears in the Dock and Command-Tab. Closing Activity restores menu-bar-only
+mode. Choose Window, 7 days, or 30 days, then group events
+into 30-minute, hourly, six-hour, or daily intervals. Model and reasoning-effort
+checkboxes filter the graphs, detail rows, and both pie charts; **Reset filters** restores all
+activity. A remaining-limit burndown graph stays above the token timeline, using
+the same time range and shared interval selection. Selected models have colored
+activity bands beneath the burndown and stacked token bars in the timeline.
+The remaining-limit curve is the observed account balance, independent of filters.
+The seven-day view scrolls through 30 days of history, with both charts aligned.
+Arrow controls also move the viewport backward or forward by a week.
+Switch to **Token breakdown** to compare model shares for the visible range;
+select a model slice or legend row to reveal its effort shares. The burndown stays
+above both tabs. Category colors are consistent across pies, filters, and detail
+rows. Each filter group has **Select all** and **Deselect all** controls; these
+limit the breakdown to selected models and efforts, with shares recomputed from
+the matching tokens.
+
+It uses the app’s observed limit history, including resets and estimated gaps. Hover an interval to see its token count and share for each
+model/effort combination. Moving away restores the whole visible range, including
+partial intervals at its edges. Choose **Total tokens** or **Output tokens**.
+
+This is a breakdown of **recorded local tokens**, not attribution of the account's
+limit percentage. Total tokens include cached inputs. Activity on other devices,
+missing logs, and metadata missing from older Codex versions can leave gaps;
+missing model/effort fields appear as **Unknown**. Events are assigned to their
+recorded timestamp, not spread over an inferred execution duration.
+
+The window streams usage metadata from `sessions/` and `archived_sessions/` under
+`CODEX_HOME` when set, otherwise `~/.codex`. It does not save or display conversation
+content, modify logs, or send activity data anywhere. Repeated cumulative counters
+and copied turn events are deduplicated. It caches unchanged files in memory and
+refreshes once a minute while the window is open; the first scan of a large history
+can take several seconds. The main menu and desktop widgets do not scan these logs.
+
+For an interactive synthetic-data preview, run `Scripts/run-model-activity-preview.sh`.
+The menu preview renderer also generates light/dark activity-window images.
+
 ## Desktop widgets
 
 **Weekly Percentage** shows the percentage of your weekly Codex limit remaining,

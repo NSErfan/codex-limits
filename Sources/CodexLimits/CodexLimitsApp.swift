@@ -37,6 +37,13 @@ struct CodexLimitsApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Model Activity", id: "model-activity") {
+            ModelActivityWindow(monitor: monitor)
+                .environment(\.usageAccent, appearance.accent)
+        }
+        .defaultSize(width: 1_080, height: 880)
+        .windowResizability(.contentMinSize)
+
         Settings {
             SettingsView(monitor: monitor, appearance: appearance)
                 .environment(\.usageAccent, appearance.accent)

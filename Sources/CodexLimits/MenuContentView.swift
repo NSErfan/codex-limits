@@ -8,6 +8,7 @@ struct MenuContentView: View {
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
     @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.usageAccent) private var usageAccent
@@ -188,32 +189,54 @@ struct MenuContentView: View {
             }
 
             Divider()
-            HStack {
+            VStack(alignment: .leading, spacing: 8) {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     Text(StatusText.updated(snapshot.fetchedAt, now: context.date))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    openSettings()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        NSApp.windows.first {
-                            $0.isVisible && $0.styleMask.contains(.titled)
-                        }?.orderFrontRegardless()
+                HStack(spacing: 16) {
+                    activityButton
+                    Button {
+                        openSettings()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            NSApp.windows.first {
+                                $0.isVisible && $0.styleMask.contains(.titled)
+                            }?.orderFrontRegardless()
+                        }
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                            .padding(.horizontal, 6).frame(minHeight: 30)
+                            .contentShape(Rectangle())
                     }
-                } label: {
-                    Image(systemName: "gearshape")
+                    .buttonStyle(.borderless)
+                    .help("Settings")
+                    .accessibilityLabel("Settings")
+                    Spacer()
+                    Button {
+                        NSApplication.shared.terminate(nil)
+                    } label: {
+                        Text("Quit").padding(.horizontal, 6).frame(minHeight: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
-                .help("Settings")
-                .accessibilityLabel("Settings")
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.borderless)
             }
         }
+    }
+
+    private var activityButton: some View {
+        Button {
+            openWindow(id: "model-activity")
+            NSApp.activate(ignoringOtherApps: true)
+        } label: {
+            Label("Activity", systemImage: "chart.bar.xaxis")
+                .padding(.horizontal, 6).frame(minHeight: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help("Explore model and effort activity")
+        .accessibilityLabel("Open model activity")
     }
 
     private var emptyState: some View {
@@ -232,8 +255,9 @@ struct MenuContentView: View {
                     Task { await monitor.refresh() }
                 }
             }
+            activityButton
         }
-        .frame(maxWidth: .infinity, minHeight: 150)
+        .frame(maxWidth: .infinity, minHeight: 170)
     }
 
     private func statusColor(_ status: PaceStatus) -> Color {
