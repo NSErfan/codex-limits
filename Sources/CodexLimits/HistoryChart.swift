@@ -3,12 +3,11 @@ import CodexWidgetKit
 import SwiftUI
 
 struct HistoryChart: View {
-    let samples: [UsageSample]
     let range: ClosedRange<Date>
-    let bucketDuration: TimeInterval
     let visibleDuration: TimeInterval?
     let remainingPercent: Double
 
+    private let data: HistoryChartData
     @State private var selectedDate: Date?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.usageAccent) private var usageAccent
@@ -22,63 +21,46 @@ struct HistoryChart: View {
         )
     }
 
-    private var series: HistorySeriesBuilder.Series {
-        HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
+    init(
+        samples: [UsageSample],
+        range: ClosedRange<Date>,
+        bucketDuration: TimeInterval,
+        visibleDuration: TimeInterval?,
+        remainingPercent: Double
+    ) {
+        self.range = range
+        self.visibleDuration = visibleDuration
+        self.remainingPercent = remainingPercent
+        data = HistoryChartData(samples: samples, range: range, bucketDuration: bucketDuration)
     }
 
-    private var axisDayStride: Int {
-        visibleDuration == nil ? 5 : 1
-    }
-
-    private var hoveredPoint: HistorySeriesBuilder.Point? {
-        guard let selectedDate, hoveredGap == nil else { return nil }
-        return ChartInteraction.nearest(
-            to: selectedDate,
-            in: series.runs.flatMap(\.points),
-            date: \.date
-        )
-    }
-
-    private var hoveredGap: HistorySeriesBuilder.Connector? {
-        guard let selectedDate else { return nil }
-        return series.connectors.first { selectedDate > $0.start.date && selectedDate < $0.end.date }
-    }
-
-    private var hoveredReset: Date? {
-        guard let selectedDate else { return nil }
-        return ChartInteraction.nearest(
-            to: selectedDate,
-            in: series.resets,
-            visibleSpan: visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound),
-            date: { $0 }
-        )
-    }
+    private var axisDayStride: Int { visibleDuration == nil ? 5 : 1 }
 
     var body: some View {
+        let selection = data.selection(
+            at: selectedDate,
+            visibleSpan: visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound)
+        )
         VStack(alignment: .leading, spacing: 3) {
-            readout
-            if series.isEmpty {
+            readout(selection: selection)
+            if data.series.isEmpty {
                 Text("No history yet")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 190)
-            } else if let visibleDuration {
-                chart
-                    .chartScrollableAxes(.horizontal)
-                    .chartXVisibleDomain(length: visibleDuration)
-                    .chartScrollPosition(
-                        initialX: range.upperBound.addingTimeInterval(-visibleDuration)
-                    )
             } else {
-                chart
+                chart(selection: selection)
+                    .modifier(HistoryChartScrolling(
+                        range: range, visibleDuration: visibleDuration, selectedDate: $selectedDate
+                    ))
             }
         }
     }
 
-    private var readout: some View {
+    private func readout(selection: HistoryChartData.Selection?) -> some View {
         HStack(spacing: 4) {
             ChartLegendItem(label: "Remaining", color: accent)
             Spacer()
-            if let hoveredReset {
+            if case let .reset(hoveredReset) = selection {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.system(size: 8))
                     .foregroundStyle(accent)
@@ -89,10 +71,10 @@ struct HistoryChart: View {
                     format: .dateTime.month(.abbreviated).day().hour().minute()
                 )
                 .foregroundStyle(.secondary)
-            } else if hoveredGap != nil {
+            } else if selection == .gap {
                 Text("No samples · estimated connection")
                     .foregroundStyle(.secondary)
-            } else if let hovered = hoveredPoint {
+            } else if case let .point(hovered) = selection {
                 Text("\(Int(hovered.remainingPercent.rounded()))%")
                     .fontWeight(.semibold)
                 Text(
@@ -100,7 +82,7 @@ struct HistoryChart: View {
                     format: .dateTime.month(.abbreviated).day().hour().minute()
                 )
                 .foregroundStyle(.secondary)
-            } else if !series.connectors.isEmpty {
+            } else if !data.series.connectors.isEmpty {
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(gapFill)
@@ -119,64 +101,119 @@ struct HistoryChart: View {
         .frame(height: 12)
     }
 
-    private var chart: some View {
-        let accent = self.accent
-        return Chart {
-            ForEach(series.connectors) { connector in
-                ForEach([connector.start, connector.end], id: \.date) { point in
+    private func historyContent(accent: Color) -> AnyChartContent {
+        if #available(macOS 15.0, *) {
+            return AnyChartContent(vectorizedHistory(accent: accent))
+        }
+        return AnyChartContent(legacyHistory(accent: accent))
+    }
+
+    @available(macOS 15.0, *)
+    @ChartContentBuilder
+    private func vectorizedHistory(accent: Color) -> some ChartContent {
+        // Batch by style instead of building two marks for every sample.
+        // Namespaced series IDs keep sampled and estimated fills separate.
+        AreaPlot(
+            data.gapArea,
+            x: .value("Time", \.date),
+            yStart: .value("Zero", \.baseline),
+            yEnd: .value("Remaining", \.remainingPercent),
+            series: .value("Series", \.seriesID)
+        )
+        .foregroundStyle(gapFill)
+        .interpolationMethod(.linear)
+
+        AreaPlot(
+            data.sampledArea,
+            x: .value("Time", \.date),
+            yStart: .value("Zero", \.baseline),
+            yEnd: .value("Remaining", \.remainingPercent),
+            series: .value("Series", \.seriesID)
+        )
+        .foregroundStyle(UsageChartStyle.area(accent))
+        .interpolationMethod(.linear)
+
+        LinePlot(
+            data.linePoints,
+            x: .value("Time", \.date),
+            y: .value("Remaining", \.remainingPercent)
+        )
+        .foregroundStyle(accent)
+        .lineStyle(UsageChartStyle.actualStroke)
+        .interpolationMethod(.linear)
+
+        if data.linePoints.count == 1, let point = data.linePoints.first {
+            PointMark(x: .value("Time", point.date), y: .value("Remaining", point.remainingPercent))
+                .foregroundStyle(accent)
+                .symbolSize(20)
+        }
+    }
+
+    @ChartContentBuilder
+    private func legacyHistory(accent: Color) -> some ChartContent {
+        ForEach(data.series.connectors) { connector in
+            ForEach([connector.start, connector.end], id: \.date) { point in
+                AreaMark(
+                    x: .value("Time", point.date),
+                    yStart: .value("Zero", 0),
+                    yEnd: .value("Remaining", point.remainingPercent),
+                    series: .value("Series", "gap-\(connector.id)")
+                )
+                .foregroundStyle(gapFill)
+                .interpolationMethod(.linear)
+                LineMark(
+                    x: .value("Time", point.date),
+                    y: .value("Remaining", point.remainingPercent),
+                    series: .value("Series", "gap-\(connector.id)")
+                )
+                .foregroundStyle(accent)
+                .lineStyle(UsageChartStyle.actualStroke)
+                .interpolationMethod(.linear)
+            }
+        }
+
+        ForEach(data.plotRuns) { run in
+            if run.points.count == 1, let point = run.points.first {
+                // Connectors already pass through isolated samples. Only a
+                // standalone reading needs a dot to remain visible.
+                if data.series.connectors.isEmpty {
+                    PointMark(
+                        x: .value("Time", point.date),
+                        y: .value("Remaining", point.remainingPercent)
+                    )
+                    .foregroundStyle(accent)
+                    .symbolSize(20)
+                }
+            } else {
+                ForEach(run.points, id: \.date) { point in
                     AreaMark(
                         x: .value("Time", point.date),
                         yStart: .value("Zero", 0),
                         yEnd: .value("Remaining", point.remainingPercent),
-                        series: .value("Series", "gap-\(connector.id)")
+                        series: .value("Series", "run-\(run.id)")
                     )
-                    .foregroundStyle(gapFill)
+                    .foregroundStyle(UsageChartStyle.area(accent))
                     .interpolationMethod(.linear)
                     LineMark(
                         x: .value("Time", point.date),
                         y: .value("Remaining", point.remainingPercent),
-                        series: .value("Series", "gap-\(connector.id)")
+                        series: .value("Series", "run-\(run.id)")
                     )
                     .foregroundStyle(accent)
                     .lineStyle(UsageChartStyle.actualStroke)
-                    .interpolationMethod(.linear)
                 }
             }
+        }
+    }
 
-            ForEach(series.runs) { run in
-                if run.points.count == 1, let point = run.points.first {
-                    // Connectors already pass through isolated samples. Only a
-                    // standalone reading needs a dot to remain visible.
-                    if series.connectors.isEmpty {
-                        PointMark(
-                            x: .value("Time", point.date),
-                            y: .value("Remaining", point.remainingPercent)
-                        )
-                        .foregroundStyle(accent)
-                        .symbolSize(20)
-                    }
-                } else {
-                    ForEach(run.points, id: \.date) { point in
-                        AreaMark(
-                            x: .value("Time", point.date),
-                            yStart: .value("Zero", 0),
-                            yEnd: .value("Remaining", point.remainingPercent),
-                            series: .value("Series", "run-\(run.id)")
-                        )
-                        .foregroundStyle(UsageChartStyle.area(accent))
-                        .interpolationMethod(.linear)
-                        LineMark(
-                            x: .value("Time", point.date),
-                            y: .value("Remaining", point.remainingPercent),
-                            series: .value("Series", "run-\(run.id)")
-                        )
-                        .foregroundStyle(accent)
-                        .lineStyle(UsageChartStyle.actualStroke)
-                    }
-                }
-            }
+    private func chart(selection: HistoryChartData.Selection?) -> some View {
+        let accent = self.accent
+        let hoveredReset: Date? = if case let .reset(date) = selection { date } else { nil }
+        let hoveredPoint: HistorySeriesBuilder.Point? = if case let .point(point) = selection { point } else { nil }
+        return Chart {
+            historyContent(accent: accent)
 
-            ForEach(series.resets, id: \.self) { resetDate in
+            ForEach(data.series.resets, id: \.self) { resetDate in
                 RuleMark(x: .value("Reset", resetDate))
                     .foregroundStyle(accent.opacity(resetDate == hoveredReset ? 0.9 : 0.35))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
@@ -195,7 +232,7 @@ struct HistoryChart: View {
                 .symbolSize(55)
             }
 
-            if let latest = series.latestPoint {
+            if let latest = data.series.latestPoint {
                 PointMark(x: .value("Latest", latest.date), y: .value("Remaining", latest.remainingPercent))
                     .foregroundStyle(accent.opacity(0.15))
                     .symbolSize(190)
@@ -246,7 +283,7 @@ struct HistoryChart: View {
         .padding(.top, 4)
         .accessibilityLabel("Usage history")
         .accessibilityValue(
-            series.accessibilitySummary(
+            data.series.accessibilitySummary(
                 days: Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
             )
         )
