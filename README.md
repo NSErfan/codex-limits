@@ -16,9 +16,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/codex-limits-dashboard.png" width="465" alt="Codex Limits showing the remaining limit, usage chart, reset time, and suggested pace">
+  <img src="docs/images/menu-and-widgets.png" width="908" alt="Codex Limits menu showing remaining balance, usage forecast, reset time, and suggested pace beside the weekly graph and percentage widgets">
   <br>
-  <sub>Earlier dashboard layout. Current builds also include history tabs, banked-reset pacing, and desktop widgets.</sub>
+  <sub>The current native menu and both desktop widgets. The menu and widgets use synthetic example data.</sub>
 </p>
 
 > [!NOTE]
@@ -105,6 +105,18 @@ It uses the app’s observed limit history, including resets and estimated gaps.
 model/effort combination. Moving away restores the whole visible range, including
 partial intervals at its edges. Choose **Total tokens** or **Output tokens**.
 
+<p align="center">
+  <img src="docs/images/model-activity.png" width="1080" alt="Model Activity in light appearance with a model filter, remaining-limit burndown, token timeline, and reasoning-effort detail rows for the visible seven-day range">
+  <br>
+  <sub>Real local activity with Astra selected, alongside the account's recorded remaining-limit history.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/token-breakdown.png" width="780" alt="Token breakdown showing model shares and the selected model's low, medium, and high reasoning-effort shares in dark appearance">
+  <br>
+  <sub>The Token breakdown panel with synthetic Astra, Sol, and Luna activity. Select a model to explore its reasoning-effort shares.</sub>
+</p>
+
 This is a breakdown of **recorded local tokens**, not attribution of the account's
 limit percentage. Total tokens include cached inputs. Activity on other devices,
 missing logs, and metadata missing from older Codex versions can leave gaps;
@@ -119,7 +131,7 @@ refreshes once a minute while the window is open; the first scan of a large hist
 can take several seconds. The main menu and desktop widgets do not scan these logs.
 
 For an interactive synthetic-data preview, run `Scripts/run-model-activity-preview.sh`.
-The menu preview renderer also generates light/dark activity-window images.
+The menu preview renderer also generates light/dark activity-window images using synthetic data by default. To capture your own activity, set `PREVIEW_ACTIVITY_HISTORY` to your app’s `History` directory when running `Scripts/render-menu-previews.sh`; this reads local session metadata and recorded limit samples. Review the resulting usage totals and dates before sharing.
 
 ## Desktop widgets
 

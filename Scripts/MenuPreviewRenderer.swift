@@ -2,10 +2,10 @@ import AppKit
 import CodexWidgetKit
 import SwiftUI
 
-/// Visual QA uses the actual menu views with isolated, synthetic usage state.
+/// Visual QA uses synthetic state unless a real activity history directory is explicitly supplied.
 @main
 enum MenuPreviewRenderer {
-    @MainActor static func main() throws {
+    @MainActor static func main() async throws {
         _ = NSApplication.shared
         let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
@@ -107,7 +107,7 @@ enum MenuPreviewRenderer {
         try render(settingsPreview, to: output.appendingPathComponent("accent-settings.png"))
 
         let activityEvents = (0 ..< 400).map { index in
-            let model = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.3-codex"][index % 3]
+            let model = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna"][index % 3]
             let effort = ["high", "medium", "low"][(index / 3) % 3]
             let total = Int64(2_000 + (index % 17) * 450)
             return ModelActivityEvent(id: "preview-\(index)", date: now.addingTimeInterval(-Double(index < 18 ? index * 2 + 1 : index * 1_400 + 60)),
@@ -115,16 +115,36 @@ enum MenuPreviewRenderer {
                                       tokens: .init(input: total - 500, output: 500, cached: 1_000, total: total))
         }
         let activityStore = ModelActivityStore(previewEvents: activityEvents, now: now)
-        activityStore.selectedModels = ["gpt-5.5"]
+        activityStore.selectedModels = ["gpt-6-astra"]
         activityStore.updateHistory(samples)
-        let activityPreview = ModelActivityView(store: activityStore, loadsAutomatically: false, samples: samples)
-            .frame(width: 1_080, height: 940)
+        var activitySamples = samples
+        if let path = ProcessInfo.processInfo.environment["PREVIEW_ACTIVITY_HISTORY"] {
+            let directory = URL(fileURLWithPath: path, isDirectory: true).appendingPathComponent("installations")
+            guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil) else {
+                throw CocoaError(.fileReadNoSuchFile)
+            }
+            let files = enumerator.allObjects
+            var recordedSamples: [UsageSample] = []
+            for case let file as URL in files where file.pathExtension == "json" && !file.lastPathComponent.hasPrefix(".") {
+                let daily = try JSONDecoder().decode(ActivityHistoryDay.self, from: Data(contentsOf: file))
+                recordedSamples.append(contentsOf: daily.samples)
+            }
+            await activityStore.refresh()
+            guard activityStore.lastUpdated != nil, !recordedSamples.isEmpty else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            activitySamples = UsageMonitor.mergedSamples([], recordedSamples)
+            activityStore.updateHistory(activitySamples)
+        }
+        let activityPreview = ModelActivityView(store: activityStore, loadsAutomatically: false, samples: activitySamples)
+            .frame(width: 1_080, height: 1_140)
         try render(activityPreview.environment(\.colorScheme, .dark), to: output.appendingPathComponent("model-activity-dark.png"))
         try render(activityPreview.environment(\.colorScheme, .light), to: output.appendingPathComponent("model-activity-light.png"))
 
-        if let interval = activityStore.timeline.interval(at: nil) {
+        let exampleStore = ModelActivityStore(previewEvents: activityEvents, now: now)
+        if let interval = exampleStore.timeline.interval(at: nil) {
             for scheme in [ColorScheme.dark, .light] {
-                let pies = ModelActivityPieCharts(interval: interval, metric: .total, selectedModel: .constant("gpt-5.5"))
+                let pies = ModelActivityPieCharts(interval: interval, metric: .total, selectedModel: .constant("gpt-6-astra"))
                     .padding(26).frame(width: 780)
                     .environment(\.colorScheme, scheme)
                     .background(scheme == .dark ? Color(white: 0.12) : Color.white)
@@ -181,6 +201,10 @@ enum MenuPreviewRenderer {
         .padding(24).background(Color.gray.opacity(0.15))
         try render(recentHistory, to: output.appendingPathComponent("menu-history-gaps.png"))
         try render(recentHistory.environment(\.usageAccent, black), to: output.appendingPathComponent("accent-black-history.png"))
+    }
+
+    private struct ActivityHistoryDay: Decodable {
+        let samples: [UsageSample]
     }
 
     @MainActor private static func menu(monitor: UsageMonitor, defaults: UserDefaults, scheme: ColorScheme) -> some View {
