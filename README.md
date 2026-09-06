@@ -232,6 +232,18 @@ swift test
 
 The tests use synthetic usage data. Do not commit exported account data or local app state as fixtures.
 
+For manual scrolling checks, run `Scripts/run-history-scroll-preview.sh`. It opens
+the production 7-day chart in a separate window with a month of synthetic readings,
+including plateaus, weekly resets, and a sampling gap. It does not fetch account data.
+
+For repeatable performance checks, run `Scripts/benchmark-history-scroll.sh`.
+It builds an optimized chart-only executable and runs three identical sweeps with
+360 precise horizontal scroll events at a target cadence of 120 events/second.
+Each run prints process CPU cost and main-loop event intervals, and saves its log
+under `.build/history-scroll-benchmark/`. These are controlled workload metrics,
+not displayed FPS, physical trackpad latency, or a percentage of perceived smoothness.
+The benchmark requires an active macOS desktop and briefly opens its own window.
+
 ## Current limitations
 
 - You must build the app from source.
