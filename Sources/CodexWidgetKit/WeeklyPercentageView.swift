@@ -13,7 +13,7 @@ public struct WeeklyPercentageView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WeeklyWidgetHeader(stale: status == .stale)
+            WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date))
             Spacer(minLength: 4)
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(remaining.map { String(Int($0.rounded())) } ?? "—")
@@ -64,7 +64,8 @@ public struct WeeklyPercentageView: View {
     }
     private var accessibilityValue: String {
         if let remaining {
-            return "\(Int(remaining.rounded())) percent remaining\(status == .stale ? ", last known reading" : "")"
+            let pace = snapshot?.pace(at: date).map { ", \($0.title)" } ?? ""
+            return "\(Int(remaining.rounded())) percent remaining\(status == .stale ? ", last known reading" : "")\(pace)"
         }
         return caption
     }

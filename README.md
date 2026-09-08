@@ -140,6 +140,13 @@ with a segmented balance indicator. **Weekly Graph** adds the current week's
 recorded usage curve, an even-pace guide, and time until reset. Both adapt to light
 and dark appearance, with amber and coral accents at 25% and 10% remaining.
 
+Both headers include a small weekly pace indicator: a green checkmark for **On track**,
+an amber gauge for **Slow down**, or a blue upward arrow for **Room to use more**.
+It uses weekly readings, the existing forecast rules, and your safety buffer to pace
+toward the scheduled weekly reset. The indicator is hidden for stale, expired, or
+unavailable readings; VoiceOver announces its meaning. Existing installations gain
+the indicator after the next successful refresh.
+
 These widgets always use the seven-day `codex` limit, even when the menu bar's most
 constrained limit is the five-hour window. They keep their own weekly readings;
 the dashed chart guide is a straight line from 100% to 0% at the scheduled reset,

@@ -37,6 +37,19 @@ enum WidgetPreviewRenderer {
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.colorScheme, .dark)
         try render(sheet, to: directory.appendingPathComponent("weekly-widgets.png"))
+        let paces = VStack(alignment: .leading, spacing: 20) {
+            ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                ForEach([WeeklyPace.onTrack, .slowDown, .roomToUseMore], id: \.rawValue) { pace in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(pace.title).font(.headline)
+                        row(snapshot: .preview(at: now, pace: pace), date: now, scheme: scheme)
+                    }
+                }
+            }
+        }
+        .padding(30)
+        .background(Color(nsColor: .windowBackgroundColor))
+        try render(paces, to: directory.appendingPathComponent("weekly-widget-paces.png"))
         let states = VStack(alignment: .leading, spacing: 20) {
             ForEach([100.0, 25, 8, 0], id: \.self) { remaining in
                 row(snapshot: .preview(at: now, remaining: remaining), date: now, scheme: .dark)

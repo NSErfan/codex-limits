@@ -174,7 +174,8 @@ final class UsageMonitor: ObservableObject {
                 syncErrorMessage = exchangeErrorMessage
             }
             snapshot = newSnapshot
-            WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore)
+            WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore,
+                                          safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3)
             errorMessage = nil
             recalculate()
             persist()
@@ -208,6 +209,9 @@ final class UsageMonitor: ObservableObject {
     }
 
     func updateSafetyBuffer(_ value: Double) {
+        if let snapshot {
+            WeeklyWidgetPublisher.publish(snapshot, writer: .app, store: widgetStore, safetyBuffer: value)
+        }
         recalculate(safetyBuffer: value)
         persist()
     }

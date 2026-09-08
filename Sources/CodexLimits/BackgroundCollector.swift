@@ -54,7 +54,8 @@ enum BackgroundCollector {
         let store = widgetStore ?? WeeklyWidgetStore(
             directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true)
         )
-        WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store)
+        WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store,
+                                      safetyBuffer: defaults.object(forKey: UsageMonitor.safetyBufferKey) as? Double ?? 3)
         return recorded.errorMessage == nil
     }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WeeklyWidgetHeader: View {
     let stale: Bool
+    var pace: WeeklyPace? = nil
 
     var body: some View {
         HStack(spacing: 6) {
@@ -11,6 +12,9 @@ struct WeeklyWidgetHeader: View {
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .tracking(2)
             Spacer(minLength: 4)
+            if let pace {
+                WeeklyPaceIndicator(pace: pace)
+            }
             if stale {
                 Image(systemName: "clock")
                     .font(.system(size: 10, weight: .medium))

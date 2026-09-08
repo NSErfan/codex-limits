@@ -33,12 +33,14 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
     public let fetchedAt: Date
     public let window: Window?
     public let samples: [Sample]
+    public let pace: WeeklyPace?
 
-    public init(fetchedAt: Date, window: Window?, samples: [Sample] = []) {
+    public init(fetchedAt: Date, window: Window?, samples: [Sample] = [], pace: WeeklyPace? = nil) {
         version = 1
         self.fetchedAt = fetchedAt
         self.window = window
         self.samples = samples
+        self.pace = pace
     }
 
     public func status(at date: Date) -> Status {
@@ -50,6 +52,10 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
         }
         if date >= window.resetsAt { return .expired }
         return date.timeIntervalSince(fetchedAt) >= Self.staleInterval ? .stale : .current
+    }
+
+    public func pace(at date: Date) -> WeeklyPace? {
+        status(at: date) == .current ? pace : nil
     }
 
     /// Merge only readings from the same weekly cycle. Keep the newest observation
@@ -81,11 +87,11 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
         } else {
             bounded = ordered
         }
-        return Self(fetchedAt: fetchedAt, window: window, samples: bounded)
+        return Self(fetchedAt: fetchedAt, window: window, samples: bounded, pace: pace)
     }
 
     /// Synthetic readings, used only by WidgetKit's gallery and explicit previews.
-    public static func preview(at date: Date = .now, remaining: Double = 68) -> Self {
+    public static func preview(at date: Date = .now, remaining: Double = 68, pace: WeeklyPace = .onTrack) -> Self {
         let start = date.addingTimeInterval(-3 * 86_400)
         let window = Window(
             remainingPercent: remaining,
@@ -98,6 +104,6 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
                 date: start.addingTimeInterval(Double($0.offset) / Double(levels.count - 1) * 3 * 86_400),
                 remainingPercent: remaining + ($0.element - 68) / 32 * (100 - remaining)
             )
-        })
+        }, pace: pace)
     }
 }

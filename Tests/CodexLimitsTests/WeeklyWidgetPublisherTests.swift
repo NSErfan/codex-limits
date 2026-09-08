@@ -18,7 +18,20 @@ final class WeeklyWidgetPublisherTests: XCTestCase {
         let usage = snapshot(includeWeekly: false)
         let value = WeeklyWidgetPublisher.snapshot(from: usage)
         XCTAssertNil(value.window)
+        XCTAssertNil(value.pace)
         XCTAssertEqual(value.status(at: now), .unavailable)
+    }
+
+    func testWeeklyPaceUsesForecastRulesAndSafetyBuffer() {
+        for (remaining, expected) in [(20.0, WeeklyPace.slowDown), (59, .onTrack), (80, .roomToUseMore)] {
+            let weekly = UsageWindow(remainingPercent: remaining, resetsAt: now.addingTimeInterval(4 * 86_400), durationMinutes: 10_080)
+            let usage = UsageSnapshot(mainLimit: .init(limitId: "codex", name: "Weekly", window: weekly),
+                                      otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now)
+            XCTAssertEqual(WeeklyWidgetPublisher.snapshot(from: usage).pace, expected)
+            if remaining == 59 {
+                XCTAssertEqual(WeeklyWidgetPublisher.snapshot(from: usage, safetyBuffer: 20).pace, .slowDown)
+            }
+        }
     }
 
     @MainActor

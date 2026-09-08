@@ -5,6 +5,28 @@ import XCTest
 final class WeeklyWidgetStoreTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func testPaceSurvivesStorageAndIsHiddenWhenStaleOrExpired() throws {
+        let store = temporaryStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let snapshot = WeeklyWidgetSnapshot.preview(at: now, pace: .slowDown)
+        try store.write(snapshot, writer: .collector)
+        let restored = try XCTUnwrap(store.read())
+        XCTAssertEqual(restored.pace(at: now), .slowDown)
+        XCTAssertNil(restored.pace(at: now.addingTimeInterval(WeeklyWidgetSnapshot.staleInterval)))
+        XCTAssertNil(restored.pace(at: restored.window!.resetsAt))
+    }
+
+    func testLegacySnapshotWithoutPaceStillDecodes() throws {
+        let snapshot = WeeklyWidgetSnapshot.preview(at: now)
+        let data = try JSONEncoder().encode(snapshot)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        json.removeValue(forKey: "pace")
+        let legacy = try JSONDecoder().decode(WeeklyWidgetSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(legacy.window, snapshot.window)
+        XCTAssertEqual(legacy.status(at: now), .current)
+        XCTAssertNil(legacy.pace(at: now))
+    }
+
     func testConcurrentWritersKeepNewestReadingAndCombineHistory() throws {
         let store = temporaryStore()
         defer { try? FileManager.default.removeItem(at: store.directory) }

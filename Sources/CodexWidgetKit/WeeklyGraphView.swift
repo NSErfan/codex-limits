@@ -14,7 +14,7 @@ public struct WeeklyGraphView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                WeeklyWidgetHeader(stale: status == .stale)
+                WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date))
                 Text("THIS WEEK")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.4)
