@@ -3,6 +3,12 @@ set -euo pipefail
 
 project_dir=${0:A:h:h}
 destination="/Applications/Codex Limits.app"
+launch=true
+case "${1:-}" in
+    "") ;;
+    --no-launch) launch=false ;;
+    *) print -u2 "usage: $0 [--no-launch]"; exit 2 ;;
+esac
 
 # build-app.sh prints the bundle path on its final line.
 app_dir=$("$project_dir/Scripts/build-app.sh" | tail -n1)
@@ -15,6 +21,8 @@ ditto "$app_dir" "$destination"
 codesign --verify --deep --strict "$destination"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$destination"
 /usr/bin/pluginkit -a "$destination/Contents/PlugIns/CodexLimitsWidgets.appex"
-open "$destination"
+if [[ "$launch" == true ]]; then
+    open "$destination"
+fi
 
 print -r -- "$destination"

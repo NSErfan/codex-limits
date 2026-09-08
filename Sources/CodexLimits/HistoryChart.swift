@@ -53,10 +53,12 @@ struct HistoryChart: View {
 
     private func readout(selection: HistoryChartData.Selection?) -> some View {
         Group {
-            if case let .reset(date) = selection {
+            if case let .reset(reset) = selection {
                 ChartHoverReadout(
-                    title: "Reset", detail: date.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
-                    symbol: "arrow.counterclockwise"
+                    title: "\(Int(reset.before.remainingPercent.rounded()))% before reset",
+                    detail: reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
+                    symbol: "arrow.counterclockwise",
+                    hint: "Last recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
                 )
             } else if case let .estimated(point) = selection {
                 ChartHoverReadout(
@@ -73,6 +75,12 @@ struct HistoryChart: View {
                 HStack {
                     ChartLegendItem(label: "Remaining", color: accent)
                     Spacer()
+                    if !data.series.resets.isEmpty {
+                        Label("Before reset", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
                     if !data.series.connectors.isEmpty {
                         HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2)
@@ -95,7 +103,7 @@ struct HistoryChart: View {
 
     private func chart(selection: HistoryChartData.Selection?) -> some View {
         let accent = self.accent
-        let hoveredReset: Date? = if case let .reset(date) = selection { date } else { nil }
+        let hoveredReset: Date? = if case let .reset(reset) = selection { reset.date } else { nil }
         let hoveredPoint: HistorySeriesBuilder.Point? = switch selection {
         case let .point(point), let .estimated(point): point
         default: nil
@@ -103,11 +111,7 @@ struct HistoryChart: View {
         return Chart {
             HistoryChartPlot(data: data, accent: accent)
 
-            ForEach(data.series.resets, id: \.self) { resetDate in
-                RuleMark(x: .value("Reset", resetDate))
-                    .foregroundStyle(accent.opacity(resetDate == hoveredReset ? 0.9 : 0.35))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-            }
+            HistoryResetMarks(resets: data.series.resets, accent: accent, selectedReset: hoveredReset)
 
             if hoveredReset == nil, let hovered = hoveredPoint {
                 RuleMark(x: .value("Hovered", hovered.date))

@@ -49,8 +49,22 @@ final class HistoryChartDataTests: XCTestCase {
         let estimateDate = start.addingTimeInterval(3_600)
         let expected = 80 + 20 * (3_000.0 / 85_800)
         XCTAssertEqual(data.selection(at: estimateDate, visibleSpan: 86_400), .estimated(.init(date: estimateDate, remainingPercent: expected)))
-        XCTAssertEqual(data.selection(at: reset, visibleSpan: 86_400), .reset(reset))
-        XCTAssertEqual(data.selection(at: reset.addingTimeInterval(-60), visibleSpan: 86_400), .reset(reset))
+        XCTAssertEqual(data.selection(at: reset, visibleSpan: 86_400), .reset(.init(date: reset, before: point(1, 80))))
+        XCTAssertEqual(data.selection(at: reset.addingTimeInterval(-60), visibleSpan: 86_400), .reset(.init(date: reset, before: point(1, 80))))
+    }
+
+    func testHoverRetainsMinuteReadingsOmittedFromBuckets() {
+        let end = start.addingTimeInterval(3_600)
+        let samples = (0 ... 60).map { index in
+            UsageSample(observedAt: start.addingTimeInterval(Double(index) * 60),
+                        remainingPercent: 90 - Double(index), resetsAt: end)
+        }
+        let data = HistoryChartData(samples: samples, range: start ... end, bucketDuration: 1_800)
+        let date = start.addingTimeInterval(60)
+
+        XCTAssertFalse(data.linePoints.contains { $0.date == date })
+        XCTAssertEqual(data.selection(at: date, visibleSpan: 7 * 86_400),
+                       .point(.init(date: date, remainingPercent: 89)))
     }
 
     func testGapEstimatesFollowTheDrawnLineAndKeepSampleEndpoints() {

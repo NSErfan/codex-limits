@@ -120,7 +120,9 @@ final class HistorySeriesBuilderTests: XCTestCase {
             bucketDuration: 1_800
         )
 
-        XCTAssertEqual(series.resets, [firstReset])
+        XCTAssertEqual(series.resets.map(\.date), [firstReset])
+        XCTAssertEqual(series.resets.first?.before.remainingPercent, 5)
+        XCTAssertEqual(series.resets.first?.before.date, start)
     }
 
     func testJumpAcrossGapWithoutScheduledResetUsesObservationTime() {
@@ -137,7 +139,9 @@ final class HistorySeriesBuilderTests: XCTestCase {
             bucketDuration: 1_800
         )
 
-        XCTAssertEqual(series.resets, [observedJump])
+        XCTAssertEqual(series.resets.map(\.date), [observedJump])
+        XCTAssertEqual(series.resets.first?.before.remainingPercent, 40)
+        XCTAssertEqual(series.resets.first?.before.date, start)
     }
 
     func testSmallUpwardJitterIsNotAReset() {
@@ -154,6 +158,23 @@ final class HistorySeriesBuilderTests: XCTestCase {
         )
 
         XCTAssertTrue(series.resets.isEmpty)
+    }
+
+    func testResetKeepsLastReadingRatherThanBucketMinimum() {
+        let end = start.addingTimeInterval(3_600)
+        let levels = [50.0, 27, 29, 100, 95, 0, 100]
+        let samples = levels.enumerated().map { index, remaining in
+            UsageSample(observedAt: start.addingTimeInterval(Double(index) * 60),
+                        remainingPercent: remaining, resetsAt: end)
+        }
+        let series = HistorySeriesBuilder.series(from: samples, in: start ... end, bucketDuration: 1_800)
+
+        XCTAssertEqual(series.resets.map(\.before.remainingPercent), [29, 0])
+        XCTAssertEqual(series.resets.map(\.before.date), [start.addingTimeInterval(120), start.addingTimeInterval(300)])
+        for reset in series.resets {
+            XCTAssertTrue(series.runs.flatMap(\.points).contains(reset.before))
+            XCTAssertTrue(series.runs.flatMap(\.points).contains { $0.date == reset.date && $0.remainingPercent == 100 })
+        }
     }
 
     func testAccessibilitySummaryDescribesLatestValueAndGaps() {

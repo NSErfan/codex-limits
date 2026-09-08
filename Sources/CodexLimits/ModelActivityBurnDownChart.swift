@@ -10,7 +10,12 @@ struct ModelActivityBurnDownChart: View {
     let accent: Color
     @Binding var selectedDate: Date?
 
+    private var selection: HistoryChartData.Selection? {
+        history.selection(at: selectedDate, visibleSpan: viewport.visibleDuration ?? timeline.range.upperBound.timeIntervalSince(timeline.range.lowerBound))
+    }
+
     var body: some View {
+        let hoveredReset: Date? = if case let .reset(reset) = selection { reset.date } else { nil }
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Remaining limit").font(.system(size: 13, weight: .semibold))
@@ -30,11 +35,7 @@ struct ModelActivityBurnDownChart: View {
                         .accessibilityValue("\(segment.start.formatted()) to \(segment.end.formatted())")
                 }
                 HistoryChartPlot(data: history, accent: accent)
-                ForEach(history.series.resets, id: \.self) { reset in
-                    RuleMark(x: .value("Reset", reset))
-                        .foregroundStyle(Color.secondary.opacity(0.35))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                }
+                HistoryResetMarks(resets: history.series.resets, accent: accent, selectedReset: hoveredReset)
                 if let date = selectedDate {
                     RuleMark(x: .value("Selected", date))
                         .foregroundStyle(Color.primary.opacity(0.45))
@@ -66,15 +67,26 @@ struct ModelActivityBurnDownChart: View {
     }
 
     @ViewBuilder private var readout: some View {
-        let selection = history.selection(at: selectedDate, visibleSpan: viewport.visibleDuration ?? timeline.range.upperBound.timeIntervalSince(timeline.range.lowerBound))
         Group {
             switch selection {
             case let .point(point): Text("\(Int(point.remainingPercent.rounded()))% remaining")
             case let .estimated(point): Text("≈\(Int(point.remainingPercent.rounded()))% · Estimated — no sample here")
-            case .reset: Text("Limit reset")
-            case nil: Text(history.series.isEmpty ? "No recorded limit readings" : "Observed usage · Muted gaps are estimated")
+            case let .reset(reset):
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(Int(reset.before.remainingPercent.rounded()))% before reset · \(reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                    Text("Last recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                        .font(.system(size: 10))
+                }
+            case nil:
+                HStack(spacing: 8) {
+                    if !history.series.resets.isEmpty {
+                        Label("Before reset", systemImage: "arrow.counterclockwise")
+                    }
+                    Text(history.series.isEmpty ? "No recorded limit readings" : "Observed usage · Muted gaps are estimated")
+                }
             }
         }
         .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+        .frame(height: 28, alignment: .trailing)
     }
 }

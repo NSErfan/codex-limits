@@ -55,7 +55,7 @@ Suggested pace reserves a safety buffer, 3% by default, which you can change in 
 
 In **Settings → Appearance**, choose an accent preset or a custom color for the app, graphs, and both widgets. Presets adapt to light and dark appearance. Foreground colors adjust for readability, including black and white custom colors, while the picker and background tint retain your selection. **Automatic** keeps the balance-based mint, amber, and coral colors; warning text retains its warning color with any selection. Changes are saved locally and request a widget refresh, which macOS schedules.
 
-Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples. Hovering inside a gap shows a percentage interpolated between the surrounding readings, labeled **Estimated · No sample here**.
+Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples. A badge shows the last recorded percentage before the latest reset; hovering an older reset shows its badge instead. Moving away restores the latest badge. Hover details include the reading time, and minute-level readings remain available even when the drawn chart is downsampled. Hovering inside a gap shows a percentage interpolated between the surrounding readings, labeled **Estimated · No sample here**.
 
 When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
 
@@ -265,8 +265,10 @@ open ".build/release/Codex Limits.app"
 
 The default output is `.build/release/Codex Limits.app`; `CONFIGURATION=debug`
 selects `.build/debug/Codex Limits.app`. The Codex Run button uses
-`script/build_and_run.sh`, which rebuilds and launches the debug bundle. Re-run
-`Scripts/install-app.sh` to update the copy in `/Applications`.
+`script/build_and_run.sh`, which rebuilds the debug bundle, updates
+`/Applications/Codex Limits.app`, and launches that installed copy. Each Run-button
+build therefore keeps the Applications copy current. `Scripts/install-app.sh`
+also updates and launches the Applications copy, using a release build by default.
 
 Open `Package.swift` in Xcode to work on the app and shared widget views. The build
 script also builds `Widgets/CodexLimitsWidgets.xcodeproj` as a native app-extension

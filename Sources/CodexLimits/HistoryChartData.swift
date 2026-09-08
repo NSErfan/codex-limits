@@ -4,7 +4,7 @@ import Foundation
 struct HistoryChartData {
     enum Selection: Equatable {
         case point(HistorySeriesBuilder.Point)
-        case reset(Date)
+        case reset(HistorySeriesBuilder.Reset)
         case estimated(HistorySeriesBuilder.Point)
     }
 
@@ -24,7 +24,9 @@ struct HistoryChartData {
 
     init(samples: [UsageSample], range: ClosedRange<Date>, bucketDuration: TimeInterval) {
         series = HistorySeriesBuilder.series(from: samples, in: range, bucketDuration: bucketDuration)
-        points = series.runs.flatMap(\.points)
+        points = samples.filter { range.contains($0.observedAt) }
+            .sorted { $0.observedAt < $1.observedAt }
+            .map { .init(date: $0.observedAt, remainingPercent: $0.remainingPercent) }
         let runs = series.runs.map { HistorySeriesBuilder.Run(id: $0.id, points: Self.simplified($0.points)) }
         plotRuns = runs
         linePoints = runs.flatMap(\.points)
@@ -40,7 +42,7 @@ struct HistoryChartData {
 
     func selection(at date: Date?, visibleSpan: TimeInterval) -> Selection? {
         guard let date else { return nil }
-        if let reset = ChartInteraction.nearest(to: date, in: series.resets, visibleSpan: visibleSpan, date: { $0 }) {
+        if let reset = ChartInteraction.nearest(to: date, in: series.resets, visibleSpan: visibleSpan, date: \.date) {
             return .reset(reset)
         }
         if let gap = series.connectors.first(where: { date > $0.start.date && date < $0.end.date }) {

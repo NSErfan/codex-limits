@@ -2,26 +2,26 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="Codex Limits"
 PROCESS_NAME="CodexLimits"
 BUNDLE_ID="com.github.nserfan.CodexLimits"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_BUNDLE="$ROOT_DIR/.build/debug/$APP_NAME.app"
-APP_CONTENTS="$APP_BUNDLE/Contents"
-APP_MACOS="$APP_CONTENTS/MacOS"
-APP_BINARY="$APP_MACOS/$PROCESS_NAME"
-
-"$ROOT_DIR/Scripts/stop-app.sh"
+case "$MODE" in
+  run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
+  *)
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
+    exit 2
+    ;;
+esac
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
 export CLANG_MODULE_CACHE_PATH=/private/tmp/codex-limits-clang-cache
 export SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/codex-limits-swiftpm-cache
 
-CONFIGURATION=debug "$ROOT_DIR/Scripts/build-app.sh"
-
-# macOS may have relaunched a previously registered extension during the build.
-"$ROOT_DIR/Scripts/stop-app.sh"
+# The installer stops the app after building, updates Applications, and registers
+# the app and widget. Its final line is the installed bundle path.
+APP_BUNDLE=$(CONFIGURATION=debug "$ROOT_DIR/Scripts/install-app.sh" --no-launch | tail -n1)
+APP_BINARY="$APP_BUNDLE/Contents/MacOS/$PROCESS_NAME"
 
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
@@ -45,10 +45,12 @@ case "$MODE" in
   --verify|verify)
     open_app
     sleep 1
-    pgrep -x "$PROCESS_NAME" >/dev/null
-    ;;
-  *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
-    exit 2
+    for process_id in $(pgrep -x "$PROCESS_NAME"); do
+      if [[ "$(ps -p "$process_id" -o comm=)" == "$APP_BINARY" ]]; then
+        exit 0
+      fi
+    done
+    echo "The installed app did not launch: $APP_BINARY" >&2
+    exit 1
     ;;
 esac
