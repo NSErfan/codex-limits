@@ -8,7 +8,7 @@ struct HistoryResetMarks: ChartContent {
     var selectedReset: Date? = nil
 
     private var annotatedReset: HistorySeriesBuilder.Reset? {
-        resets.first { $0.date == selectedReset } ?? resets.last
+        resets.first { $0.date == selectedReset }
     }
 
     var body: some ChartContent {
