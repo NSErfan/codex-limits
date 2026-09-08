@@ -78,12 +78,7 @@ struct ModelActivityBurnDownChart: View {
                         .font(.system(size: 10))
                 }
             case nil:
-                HStack(spacing: 8) {
-                    if !history.series.resets.isEmpty {
-                        Label("Before reset", systemImage: "arrow.counterclockwise")
-                    }
-                    Text(history.series.isEmpty ? "No recorded limit readings" : "Observed usage · Muted gaps are estimated")
-                }
+                Text(history.series.isEmpty ? "No recorded limit readings" : "Observed usage · Muted gaps are estimated")
             }
         }
         .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)

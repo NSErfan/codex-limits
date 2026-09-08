@@ -75,12 +75,6 @@ struct HistoryChart: View {
                 HStack {
                     ChartLegendItem(label: "Remaining", color: accent)
                     Spacer()
-                    if !data.series.resets.isEmpty {
-                        Label("Before reset", systemImage: "arrow.counterclockwise")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
                     if !data.series.connectors.isEmpty {
                         HStack(spacing: 4) {
                             RoundedRectangle(cornerRadius: 2)
