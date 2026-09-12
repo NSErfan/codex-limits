@@ -315,12 +315,18 @@ the production 7-day chart in a separate window with a month of synthetic readin
 including plateaus, weekly resets, and a sampling gap. It does not fetch account data.
 
 For repeatable performance checks, run `Scripts/benchmark-history-scroll.sh`.
-It builds an optimized chart-only executable and runs three identical sweeps with
+It builds an optimized chart-only app and runs three identical sweeps with
 360 precise horizontal scroll events at a target cadence of 120 events/second.
 Each run prints process CPU cost and main-loop event intervals, and saves its log
-under `.build/history-scroll-benchmark/`. These are controlled workload metrics,
+under `.build/history-scroll-benchmark/release/`. Use `CONFIGURATION=debug` to
+measure the unoptimized configuration used by the Run button; its logs are saved
+under the corresponding `debug/` directory. The benchmark fails if the chart does
+not actually traverse the expected distance. These are controlled workload metrics,
 not displayed FPS, physical trackpad latency, or a percentage of perceived smoothness.
 The benchmark requires an active macOS desktop and briefly opens its own window.
+It does not reproduce native pointer tracking during a physical trackpad gesture;
+also check that scrolling with the pointer over the chart stays responsive and
+hover values resume after scrolling stops.
 
 ## Current limitations
 

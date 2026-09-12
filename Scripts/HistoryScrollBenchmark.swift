@@ -28,6 +28,10 @@ enum HistoryScrollBenchmark {
         window.contentView = host
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+            fputs("Scroll benchmark timed out; an active macOS desktop is required.\n", stderr)
+            exit(1)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             func scrollViews(_ view: NSView) -> [NSScrollView] {
                 (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
@@ -72,6 +76,11 @@ enum HistoryScrollBenchmark {
                         let elapsed = ProcessInfo.processInfo.systemUptime - start
                         let cpu = cpuTime() - cpuStart
                         let sorted = intervals.sorted()
+                        let observedSpan = positions.max()! - positions.min()!
+                        guard observedSpan > 1_200 else {
+                            fputs("Scroll events did not move the chart through the expected sweep; refusing to report performance.\n", stderr)
+                            exit(1)
+                        }
                         let output: [String: Any] = [
                             "steps": steps, "wall_seconds": elapsed, "cpu_seconds": cpu,
                             "prepared_readings": prepared.series.runs.reduce(0) { $0 + $1.points.count },
@@ -82,7 +91,7 @@ enum HistoryScrollBenchmark {
                             "interval_over_16_67_ms": intervals.filter { $0 > 16.667 }.count,
                             "sync_update_ms": durations.reduce(0, +) / Double(steps),
                             "scroll_span_points": maxX,
-                            "observed_span_points": positions.max()! - positions.min()!,
+                            "observed_span_points": observedSpan,
                             "os": ProcessInfo.processInfo.operatingSystemVersionString
                         ]
                         let json = try! JSONSerialization.data(withJSONObject: output, options: [.sortedKeys])

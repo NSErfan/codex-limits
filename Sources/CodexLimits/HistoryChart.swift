@@ -9,7 +9,7 @@ struct HistoryChart: View {
     let remainingPercent: Double
 
     private let data: HistoryChartData
-    @State private var selectedDate: Date?
+    @StateObject private var interaction = HistoryChartInteraction()
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.usageAccent) private var usageAccent
 
@@ -34,7 +34,7 @@ struct HistoryChart: View {
 
     var body: some View {
         let selection = data.selection(
-            at: selectedDate,
+            at: interaction.selectedDate,
             visibleSpan: visibleDuration ?? range.upperBound.timeIntervalSince(range.lowerBound)
         )
         VStack(alignment: .leading, spacing: 3) {
@@ -46,7 +46,7 @@ struct HistoryChart: View {
             } else {
                 chart(selection: selection)
                     .modifier(HistoryChartScrolling(
-                        range: range, visibleDuration: visibleDuration, selectedDate: $selectedDate
+                        range: range, visibleDuration: visibleDuration, interaction: interaction
                     ))
             }
         }
@@ -130,16 +130,19 @@ struct HistoryChart: View {
                     .symbolSize(35)
             }
         }
-        .chartXSelection(value: $selectedDate)
+        .chartXSelection(value: Binding(
+            get: { interaction.selectedDate },
+            set: { interaction.select($0) }
+        ))
         .onTapGesture {
             // A click pins the chart selection on macOS; release it so the
             // readout follows the pointer again instead of freezing.
-            DispatchQueue.main.async { selectedDate = nil }
+            DispatchQueue.main.async { interaction.select(nil) }
         }
         .onContinuousHover { phase in
             // chartXSelection does not reliably clear when the pointer
             // leaves the plot, which froze the readout in place.
-            if case .ended = phase { selectedDate = nil }
+            if case .ended = phase { interaction.select(nil) }
         }
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))

@@ -6,13 +6,13 @@ import SwiftUI
 struct HistoryChartScrolling: ViewModifier {
     let range: ClosedRange<Date>
     let visibleDuration: TimeInterval?
-    @Binding var selectedDate: Date?
+    let interaction: HistoryChartInteraction
     @State private var position: Date
 
-    init(range: ClosedRange<Date>, visibleDuration: TimeInterval?, selectedDate: Binding<Date?>) {
+    init(range: ClosedRange<Date>, visibleDuration: TimeInterval?, interaction: HistoryChartInteraction) {
         self.range = range
         self.visibleDuration = visibleDuration
-        _selectedDate = selectedDate
+        self.interaction = interaction
         _position = State(initialValue: max(range.lowerBound, range.upperBound.addingTimeInterval(-(visibleDuration ?? 0))))
     }
 
@@ -22,10 +22,14 @@ struct HistoryChartScrolling: ViewModifier {
                 content
                     .chartScrollableAxes(.horizontal)
                     .chartXVisibleDomain(length: visibleDuration)
-                    .chartScrollPosition(x: $position)
-                    .onChange(of: position) { _, _ in
-                        if selectedDate != nil { selectedDate = nil }
-                    }
+                    .chartScrollPosition(x: Binding(
+                        get: { position },
+                        set: { updated in
+                            guard updated != position else { return }
+                            interaction.scroll()
+                            position = updated
+                        }
+                    ))
             } else {
                 content
             }
@@ -39,13 +43,13 @@ struct HistoryChartScrolling: ViewModifier {
             } else {
                 position = min(max(position, updated.lowerBound), updatedEnd)
             }
-            selectedDate = nil
+            interaction.select(nil)
         }
         .onChange(of: visibleDuration) { _, duration in
             guard let duration else { return }
             let end = max(range.lowerBound, range.upperBound.addingTimeInterval(-duration))
             position = min(max(position, range.lowerBound), end)
-            selectedDate = nil
+            interaction.select(nil)
         }
     }
 }
