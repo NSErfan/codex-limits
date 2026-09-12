@@ -61,12 +61,13 @@ When Codex reports banked resets, select an eligible reset from the **Banked res
 
 ### Past forecasts
 
-Use the clock button beside the chart tabs, or **Option-click Window**, to choose
-an exact past date and time. **Option-click a past point on the Window, 7-day, or
+**Option-click Window** to choose an exact past date and time.
+**Option-click a past point on the Window, 7-day, or
 30-day chart** to start with the pointer's time. The picker uses your local time
-zone. Select **Show forecast** to keep that burndown visible; choose **Live** or
-Option-click **Window** again to return to the current forecast. Choosing a history
-tab also leaves the past forecast.
+zone. Select **Show forecast** to keep that burndown visible. A clock button then
+appears beside the chart tabs so you can change the selected time. Choose **Live**
+or Option-click **Window** again to return to the current forecast and hide the
+clock button. Choosing a history tab also leaves the past forecast.
 
 The chart recomputes the forecast using only percentage readings recorded by the
 selected time. In a sampling gap, it uses the last recorded balance, marks it as

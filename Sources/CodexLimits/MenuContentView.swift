@@ -252,24 +252,26 @@ struct MenuContentView: View {
                     showDatePicker(at: snapshot.fetchedAt)
                 }
             })
-            Button {
-                datePickerSelection = historicalSelection ?? HistoricalForecastSelection(date: snapshot.fetchedAt)
-            } label: {
-                Image(systemName: "clock.arrow.circlepath").frame(width: 28, height: 28)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Choose a past date and time")
-            .help("Past forecast · Option-click a chart to choose its time")
-            .popover(isPresented: Binding(get: { datePickerSelection != nil }, set: { if !$0 { datePickerSelection = nil } })) {
-                if let draft = datePickerSelection {
-                    ForecastDatePicker(samples: monitor.samples,
-                                       safetyBuffer: safetyBuffer, initialSelection: draft, now: snapshot.fetchedAt,
-                                       onCancel: { datePickerSelection = nil }, onSelect: { selection in
-                        historicalSelection = selection
-                        chartRange = .window
-                        datePickerSelection = nil
-                    })
+            if let historicalSelection {
+                Button {
+                    datePickerSelection = historicalSelection
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath").frame(width: 28, height: 28)
                 }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Choose a past date and time")
+                .help("Past forecast · Option-click a chart to choose its time")
+            }
+        }
+        .popover(isPresented: Binding(get: { datePickerSelection != nil }, set: { if !$0 { datePickerSelection = nil } })) {
+            if let draft = datePickerSelection {
+                ForecastDatePicker(samples: monitor.samples,
+                                   safetyBuffer: safetyBuffer, initialSelection: draft, now: snapshot.fetchedAt,
+                                   onCancel: { datePickerSelection = nil }, onSelect: { selection in
+                    historicalSelection = selection
+                    chartRange = .window
+                    datePickerSelection = nil
+                })
             }
         }
     }
