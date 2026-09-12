@@ -62,6 +62,8 @@ When Codex reports banked resets, select an eligible reset from the **Banked res
 ### Custom burndown target
 
 **Option-click a future time on the Window chart** to pace toward that time.
+Option-click the active target's vertical marker to clear it and return to the
+scheduled reset. Option-click another future time to move the target.
 The target must be ahead of now and within the current limit window. The target
 line, current and historical projections, status, and suggested pace update from
 your latest recorded usage. The full window remains visible; the Today projection

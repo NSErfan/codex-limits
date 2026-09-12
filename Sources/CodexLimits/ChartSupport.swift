@@ -49,6 +49,14 @@ enum ChartInteraction {
     static func toggledCreditID(current: String, tapped: ResetCredit) -> String {
         current == tapped.id ? "" : tapped.id
     }
+
+    static func toggledTargetDate(current: Date?, tapped: Date, visibleSpan: TimeInterval) -> Date? {
+        guard let current,
+              nearest(to: tapped, in: [current], visibleSpan: visibleSpan, date: { $0 }) != nil else {
+            return tapped
+        }
+        return nil
+    }
 }
 
 enum WindowChartSeries {

@@ -13,7 +13,8 @@ struct BurnDownChart: View {
     let resetCredits: [ResetCredit]
     let paceDeadline: Date
     @Binding var paceTargetCreditID: String
-    var onSelectTarget: ((Date) -> Void)? = nil
+    var customTargetDate: Date? = nil
+    var onSelectTarget: ((Date?) -> Void)? = nil
 
     @State private var selectedDate: Date?
     @Environment(\.colorScheme) private var colorScheme
@@ -60,6 +61,14 @@ struct BurnDownChart: View {
         paceTargetCreditID = ChartInteraction.toggledCreditID(
             current: paceTargetCreditID,
             tapped: credit
+        )
+    }
+
+    private func toggledTargetDate(at date: Date) -> Date? {
+        ChartInteraction.toggledTargetDate(
+            current: customTargetDate,
+            tapped: date,
+            visibleSpan: window.resetsAt.timeIntervalSince(window.startsAt)
         )
     }
 
@@ -156,7 +165,9 @@ struct BurnDownChart: View {
                     ChartHoverReadout(
                         title: "Burndown target",
                         detail: selectedDate.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
-                        hint: "Option-click to pace toward this time"
+                        hint: toggledTargetDate(at: selectedDate) == nil
+                            ? "Option-click to clear this target"
+                            : "Option-click to pace toward this time"
                     )
                 } else if let hovered = hoveredPoint {
                     ChartHoverReadout(
@@ -372,7 +383,8 @@ struct BurnDownChart: View {
                     .simultaneousGesture(SpatialTapGesture().modifiers(.option).onEnded { event in
                         guard let date = chartDate(at: event.location, proxy: proxy, geometry: geometry),
                               BurndownTarget.accepts(date, in: window, now: .now) else { return }
-                        onSelectTarget?(date)
+                        selectedDate = nil
+                        onSelectTarget?(toggledTargetDate(at: date))
                     })
                     .onContinuousHover { phase in
                         switch phase {

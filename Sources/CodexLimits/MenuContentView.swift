@@ -138,7 +138,14 @@ struct MenuContentView: View {
                         burndownTarget = nil
                         paceTargetCreditID = $0
                     }),
-                    onSelectTarget: { selectTarget($0, in: snapshot.mainLimit.window) }
+                    customTargetDate: target?.date,
+                    onSelectTarget: { date in
+                        if let date {
+                            selectTarget(date, in: snapshot.mainLimit.window)
+                        } else {
+                            burndownTarget = nil
+                        }
+                    }
                 )
             }
 

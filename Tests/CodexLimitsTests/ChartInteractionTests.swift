@@ -78,4 +78,23 @@ final class ChartInteractionTests: XCTestCase {
         XCTAssertEqual(ChartInteraction.toggledCreditID(current: "other", tapped: credit), "credit")
         XCTAssertEqual(ChartInteraction.toggledCreditID(current: "credit", tapped: credit), "")
     }
+
+    func testTargetTapSelectsMovesAndClearsWithinTheChartHitTolerance() {
+        for span: TimeInterval in [5 * 3_600, 7 * 86_400] {
+            let target = base.addingTimeInterval(span / 2)
+            let tolerance = span * ChartInteraction.hoverToleranceFraction
+            XCTAssertEqual(ChartInteraction.toggledTargetDate(current: nil, tapped: target, visibleSpan: span), target)
+            for offset in [-tolerance, 0, tolerance] {
+                XCTAssertNil(ChartInteraction.toggledTargetDate(
+                    current: target, tapped: target.addingTimeInterval(offset), visibleSpan: span
+                ))
+            }
+            for offset in [-tolerance - 1, tolerance + 1] {
+                let other = target.addingTimeInterval(offset)
+                XCTAssertEqual(ChartInteraction.toggledTargetDate(
+                    current: target, tapped: other, visibleSpan: span
+                ), other)
+            }
+        }
+    }
 }
