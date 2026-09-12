@@ -7,7 +7,6 @@ struct HistoryChart: View {
     let range: ClosedRange<Date>
     let visibleDuration: TimeInterval?
     let remainingPercent: Double
-    let onSelectDate: ((Date) -> Void)?
 
     private let data: HistoryChartData
     @State private var selectedDate: Date?
@@ -23,13 +22,11 @@ struct HistoryChart: View {
         range: ClosedRange<Date>,
         bucketDuration: TimeInterval,
         visibleDuration: TimeInterval?,
-        remainingPercent: Double,
-        onSelectDate: ((Date) -> Void)? = nil
+        remainingPercent: Double
     ) {
         self.range = range
         self.visibleDuration = visibleDuration
         self.remainingPercent = remainingPercent
-        self.onSelectDate = onSelectDate
         data = HistoryChartData(samples: samples, range: range, bucketDuration: bucketDuration)
     }
 
@@ -135,9 +132,6 @@ struct HistoryChart: View {
         }
         .chartXSelection(value: $selectedDate)
         .onTapGesture {
-            if NSEvent.modifierFlags.contains(.option), let selectedDate {
-                onSelectDate?(selectedDate)
-            }
             // A click pins the chart selection on macOS; release it so the
             // readout follows the pointer again instead of freezing.
             DispatchQueue.main.async { selectedDate = nil }

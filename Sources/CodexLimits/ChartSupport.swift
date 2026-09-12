@@ -207,9 +207,10 @@ enum StatusText {
         fetchedAt: Date,
         deadline: Date,
         windowReset: Date,
-        safetyBuffer: Double
+        safetyBuffer: Double,
+        targetName: String? = nil
     ) -> String {
-        let target = deadline == windowReset ? "reset" : "banked reset expiry"
+        let target = targetName ?? (deadline == windowReset ? "reset" : "banked reset expiry")
         switch forecast.status {
         case .slowDown:
             let timeLeft = deadline.timeIntervalSince(fetchedAt)

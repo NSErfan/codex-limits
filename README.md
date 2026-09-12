@@ -59,29 +59,23 @@ Choose **7 days** for a scrollable week of recorded history or **30 days** for t
 
 When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
 
-### Past forecasts
+### Custom burndown target
 
-**Option-click Window** to choose an exact past date and time.
-**Option-click a past point on the Window, 7-day, or
-30-day chart** to start with the pointer's time. The picker uses your local time
-zone. Select **Show forecast** to keep that burndown visible. A clock button then
-appears beside the chart tabs so you can change the selected time. Choose **Live**
-or Option-click **Window** again to return to the current forecast and hide the
-clock button. Choosing a history tab also leaves the past forecast.
+**Option-click a future time on the Window chart** to pace toward that time.
+The target must be ahead of now and within the current limit window. The target
+line, current and historical projections, status, and suggested pace update from
+your latest recorded usage. The full window remains visible; the Today projection
+continues to show the scheduled reset.
 
-The chart recomputes the forecast using only percentage readings recorded by the
-selected time. In a sampling gap, it uses the last recorded balance, marks it as
-an estimate, and draws a muted dotted connection to the chosen time. It does not
-use later readings to interpolate that balance or carry a balance across a reset
-without a new reading. Dates without usable history cannot be selected.
+A clock button appears beside the chart tabs only while a custom target is set.
+Click it to adjust the exact date and time, or choose **Use scheduled reset** to
+clear the target. **Option-click Window** also clears an active target; when no
+custom target is set, it opens the precise date picker. All times are local.
 
-This is a reconstruction using your current safety buffer and the scheduled reset;
-past banked resets and daily token estimates are not included. Earlier windows
-contribute to the historical pace only when their recorded duration matches.
-Older readings did not record the window length, so the picker asks you to choose
-seven days or five hours when the length is unknown. New readings from both the
-app and background collector save it. Live menu-bar usage, collection, and widgets
-continue independently of the selected past time.
+Choosing a history tab or a banked reset leaves the custom target. It expires at
+the selected time and is not reused in a different limit window. This is a local
+pacing preview; it does not change your actual reset, redeem credits, or change
+widget pacing.
 
 ## Features
 

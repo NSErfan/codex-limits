@@ -13,8 +13,7 @@ struct BurnDownChart: View {
     let resetCredits: [ResetCredit]
     let paceDeadline: Date
     @Binding var paceTargetCreditID: String
-    var isHistorical = false
-    var onSelectDate: ((Date) -> Void)? = nil
+    var onSelectTarget: ((Date) -> Void)? = nil
 
     @State private var selectedDate: Date?
     @Environment(\.colorScheme) private var colorScheme
@@ -25,7 +24,7 @@ struct BurnDownChart: View {
     private var creditColor: Color { UsageChartStyle.accent(for: 25, scheme: colorScheme) }
 
     private var hoveredPoint: BurnPoint? {
-        guard let selectedDate else { return nil }
+        guard let selectedDate, selectedDate <= fetchedAt else { return nil }
         return ChartInteraction.nearest(to: selectedDate, in: observed, date: \.date)
     }
 
@@ -69,7 +68,7 @@ struct BurnDownChart: View {
             window: window,
             samples: samples,
             tokenHistory: tokenHistory,
-            fetchedAt: isHistorical ? min(samples.map(\.observedAt).max() ?? fetchedAt, fetchedAt) : fetchedAt
+            fetchedAt: fetchedAt
         )
     }
 
@@ -153,6 +152,12 @@ struct BurnDownChart: View {
                         symbol: "arrow.counterclockwise",
                         hint: credit.id == paceTargetCreditID ? "Click to stop pacing to this reset" : "Click to pace to this reset"
                     )
+                } else if let selectedDate, BurndownTarget.accepts(selectedDate, in: window, now: .now) {
+                    ChartHoverReadout(
+                        title: "Burndown target",
+                        detail: selectedDate.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
+                        hint: "Option-click to pace toward this time"
+                    )
                 } else if let hovered = hoveredPoint {
                     ChartHoverReadout(
                         title: "\(Int(hovered.remaining.rounded()))% remaining",
@@ -163,7 +168,7 @@ struct BurnDownChart: View {
                     ChartLegendItem(label: "Target", color: UsageChartStyle.guide, dash: [3, 4])
                     ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
                     if todayRate != nil {
-                        ChartLegendItem(label: isHistorical ? "That day" : "Today", color: todayColor, dash: [5, 4])
+                        ChartLegendItem(label: "Today", color: todayColor, dash: [5, 4])
                     }
                     ChartLegendItem(label: "Historical", color: .secondary.opacity(0.65), dash: [2, 3])
                 }
@@ -212,15 +217,6 @@ struct BurnDownChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [7, 3]))
                 }
 
-                if isHistorical, let last = observed.last, last.date < fetchedAt {
-                    ForEach([last, BurnPoint(date: fetchedAt, remaining: window.remainingPercent)]) { point in
-                        LineMark(x: .value("Time", point.date), y: .value("Last known balance", point.remaining),
-                                 series: .value("Series", "Last known balance"))
-                            .foregroundStyle(accent.opacity(0.45))
-                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
-                    }
-                }
-
                 ForEach(historicalProjection) { point in
                     LineMark(
                         x: .value("Time", point.date),
@@ -249,7 +245,7 @@ struct BurnDownChart: View {
                         spacing: 2,
                         overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
                     ) {
-                        Text(isHistorical ? "As of" : "Now")
+                        Text("Now")
                             .font(UsageChartStyle.axisFont)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 5)
@@ -302,6 +298,18 @@ struct BurnDownChart: View {
                     .symbolSize(55)
                 }
 
+                if paceTargetCreditID.isEmpty, paceDeadline != window.resetsAt {
+                    RuleMark(x: .value("Burndown target", paceDeadline))
+                        .foregroundStyle(accent.opacity(0.45))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                        .annotation(position: .top, spacing: 2,
+                                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                            Text("Target").font(.system(size: 9, weight: .semibold))
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(.regularMaterial, in: Capsule())
+                        }
+                }
+
                 PointMark(
                     x: .value("Reset", paceDeadline),
                     y: .value("Target", 0)
@@ -342,10 +350,7 @@ struct BurnDownChart: View {
                                 if let expiresAt = credit.expiresAt,
                                    let xPosition = proxy.position(forX: expiresAt) {
                                     Button {
-                                        if NSEvent.modifierFlags.contains(.option), let onSelectDate {
-                                            if let selectedDate, selectedDate <= fetchedAt { onSelectDate(selectedDate) }
-                                            return
-                                        }
+                                        if NSEvent.modifierFlags.contains(.option) { return }
                                         selectedDate = nil
                                         toggleCredit(credit)
                                     } label: {
@@ -366,8 +371,8 @@ struct BurnDownChart: View {
                     }
                     .simultaneousGesture(SpatialTapGesture().modifiers(.option).onEnded { event in
                         guard let date = chartDate(at: event.location, proxy: proxy, geometry: geometry),
-                              date <= fetchedAt else { return }
-                        onSelectDate?(date)
+                              BurndownTarget.accepts(date, in: window, now: .now) else { return }
+                        onSelectTarget?(date)
                     })
                     .onContinuousHover { phase in
                         switch phase {
@@ -418,7 +423,7 @@ struct BurnDownChart: View {
             .padding(.top, 4)
             .accessibilityLabel("Usage forecast")
             .accessibilityValue(
-                "\(isHistorical ? "The selected time" : "Now") has \(Int(window.remainingPercent.rounded())) percent remaining. At reset, the current pace leaves \(Int(forecast.expectedRemainingAtReset.rounded())) percent and the historical pace leaves \(Int(forecast.historicalRemainingAtReset.rounded())) percent."
+                "Now has \(Int(window.remainingPercent.rounded())) percent remaining. At the pacing target, the current pace leaves \(Int(forecast.expectedRemainingAtReset.rounded())) percent and the historical pace leaves \(Int(forecast.historicalRemainingAtReset.rounded())) percent."
             )
         }
     }
