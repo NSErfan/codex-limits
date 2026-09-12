@@ -1,14 +1,21 @@
+import AppKit
 import SwiftUI
 
 struct ChartRangePicker: View {
     @Binding var selection: ChartRange
     let accent: Color
+    var windowHelp = "Window"
+    var onOptionClickWindow: (() -> Void)? = nil
     @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 3) {
             ForEach(ChartRange.allCases, id: \.self) { range in
                 Button {
+                    if range == .window, NSEvent.modifierFlags.contains(.option), let onOptionClickWindow {
+                        onOptionClickWindow()
+                        return
+                    }
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
                         selection = range
                     }
@@ -29,6 +36,7 @@ struct ChartRangePicker: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .help(range == .window ? windowHelp : range.title)
                 .accessibilityAddTraits(selection == range ? [.isSelected] : [])
             }
         }

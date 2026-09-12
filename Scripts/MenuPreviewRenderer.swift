@@ -59,6 +59,22 @@ enum MenuPreviewRenderer {
         .background(Color.gray.opacity(0.15))
         try render(menus, to: output.appendingPathComponent("menu-window.png"))
 
+        let pastDate = now.addingTimeInterval(-24 * 3_600)
+        let past = try HistoricalForecast.reconstruct(at: pastDate, samples: samples,
+            legacyDurationMinutes: 10_080, safetyBuffer: 3, now: now).get()
+        for scheme in [ColorScheme.dark, .light] {
+            let pastChart = VStack(alignment: .leading, spacing: 14) {
+                Text("PAST FORECAST").font(.headline)
+                Text(past.date.formatted(date: .abbreviated, time: .shortened))
+                HistoricalBurndownView(value: past, safetyBuffer: 3)
+            }
+            .padding(20).frame(width: 460)
+            .background { UsageSurfaceBackground(remaining: past.window.remainingPercent) }
+            .environment(\.colorScheme, scheme)
+            try render(pastChart, to: output.appendingPathComponent("past-forecast-\(scheme == .dark ? "dark" : "light").png"))
+
+        }
+
         let comparison = VStack(alignment: .leading, spacing: 24) {
             Text("CODEX LIMITS · ONE VISUAL LANGUAGE")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))

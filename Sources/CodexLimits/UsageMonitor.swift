@@ -166,7 +166,8 @@ final class UsageMonitor: ObservableObject {
             let sample = UsageSample(
                 observedAt: newSnapshot.fetchedAt,
                 remainingPercent: window.remainingPercent,
-                resetsAt: window.resetsAt
+                resetsAt: window.resetsAt,
+                durationMinutes: window.durationMinutes
             )
             let recordedState = await history.record(sample)
             apply(recordedState, configuredFolderName: configuredSyncDirectory?.lastPathComponent)

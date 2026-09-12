@@ -59,6 +59,29 @@ Choose **7 days** for a scrollable week of recorded history or **30 days** for t
 
 When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
 
+### Past forecasts
+
+Use the clock button beside the chart tabs, or **Option-click Window**, to choose
+an exact past date and time. **Option-click a past point on the Window, 7-day, or
+30-day chart** to start with the pointer's time. The picker uses your local time
+zone. Select **Show forecast** to keep that burndown visible; choose **Live** or
+Option-click **Window** again to return to the current forecast. Choosing a history
+tab also leaves the past forecast.
+
+The chart recomputes the forecast using only percentage readings recorded by the
+selected time. In a sampling gap, it uses the last recorded balance, marks it as
+an estimate, and draws a muted dotted connection to the chosen time. It does not
+use later readings to interpolate that balance or carry a balance across a reset
+without a new reading. Dates without usable history cannot be selected.
+
+This is a reconstruction using your current safety buffer and the scheduled reset;
+past banked resets and daily token estimates are not included. Earlier windows
+contribute to the historical pace only when their recorded duration matches.
+Older readings did not record the window length, so the picker asks you to choose
+seven days or five hours when the length is unknown. New readings from both the
+app and background collector save it. Live menu-bar usage, collection, and widgets
+continue independently of the selected past time.
+
 ## Features
 
 - Shows the main Codex limit and model-specific limits.

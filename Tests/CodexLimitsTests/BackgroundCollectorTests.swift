@@ -40,7 +40,8 @@ final class BackgroundCollectorTests: XCTestCase {
                 UsageSample(
                     observedAt: snapshot.fetchedAt,
                     remainingPercent: 64,
-                    resetsAt: snapshot.mainLimit.window.resetsAt
+                    resetsAt: snapshot.mainLimit.window.resetsAt,
+                    durationMinutes: snapshot.mainLimit.window.durationMinutes
                 )
             ]
         )
@@ -131,7 +132,8 @@ final class BackgroundCollectorTests: XCTestCase {
                 UsageSample(
                     observedAt: collected.fetchedAt,
                     remainingPercent: 42,
-                    resetsAt: collected.mainLimit.window.resetsAt
+                    resetsAt: collected.mainLimit.window.resetsAt,
+                    durationMinutes: collected.mainLimit.window.durationMinutes
                 )
             ]
         )

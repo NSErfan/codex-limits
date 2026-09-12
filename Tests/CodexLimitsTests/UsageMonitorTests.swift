@@ -40,7 +40,8 @@ final class UsageMonitorTests: XCTestCase {
                 UsageSample(
                     observedAt: expected.fetchedAt,
                     remainingPercent: 62,
-                    resetsAt: expected.mainLimit.window.resetsAt
+                    resetsAt: expected.mainLimit.window.resetsAt,
+                    durationMinutes: expected.mainLimit.window.durationMinutes
                 )
             ]
         )

@@ -1,3 +1,4 @@
+import AppKit
 import Charts
 import CodexWidgetKit
 import SwiftUI
@@ -12,6 +13,8 @@ struct BurnDownChart: View {
     let resetCredits: [ResetCredit]
     let paceDeadline: Date
     @Binding var paceTargetCreditID: String
+    var isHistorical = false
+    var onSelectDate: ((Date) -> Void)? = nil
 
     @State private var selectedDate: Date?
     @Environment(\.colorScheme) private var colorScheme
@@ -66,7 +69,7 @@ struct BurnDownChart: View {
             window: window,
             samples: samples,
             tokenHistory: tokenHistory,
-            fetchedAt: fetchedAt
+            fetchedAt: isHistorical ? min(samples.map(\.observedAt).max() ?? fetchedAt, fetchedAt) : fetchedAt
         )
     }
 
@@ -160,7 +163,7 @@ struct BurnDownChart: View {
                     ChartLegendItem(label: "Target", color: UsageChartStyle.guide, dash: [3, 4])
                     ChartLegendItem(label: "Current", color: currentColor, dash: [7, 3])
                     if todayRate != nil {
-                        ChartLegendItem(label: "Today", color: todayColor, dash: [5, 4])
+                        ChartLegendItem(label: isHistorical ? "That day" : "Today", color: todayColor, dash: [5, 4])
                     }
                     ChartLegendItem(label: "Historical", color: .secondary.opacity(0.65), dash: [2, 3])
                 }
@@ -209,6 +212,15 @@ struct BurnDownChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [7, 3]))
                 }
 
+                if isHistorical, let last = observed.last, last.date < fetchedAt {
+                    ForEach([last, BurnPoint(date: fetchedAt, remaining: window.remainingPercent)]) { point in
+                        LineMark(x: .value("Time", point.date), y: .value("Last known balance", point.remaining),
+                                 series: .value("Series", "Last known balance"))
+                            .foregroundStyle(accent.opacity(0.45))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
+                    }
+                }
+
                 ForEach(historicalProjection) { point in
                     LineMark(
                         x: .value("Time", point.date),
@@ -229,7 +241,7 @@ struct BurnDownChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
                 }
 
-                RuleMark(x: .value("Now", fetchedAt))
+                RuleMark(x: .value("Reference time", fetchedAt))
                     .foregroundStyle(accent.opacity(0.2))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
                     .annotation(
@@ -237,7 +249,7 @@ struct BurnDownChart: View {
                         spacing: 2,
                         overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
                     ) {
-                        Text("Now")
+                        Text(isHistorical ? "As of" : "Now")
                             .font(UsageChartStyle.axisFont)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 5)
@@ -247,15 +259,15 @@ struct BurnDownChart: View {
                     }
 
                 PointMark(
-                    x: .value("Now", fetchedAt),
-                    y: .value("Remaining now", window.remainingPercent)
+                    x: .value("Reference time", fetchedAt),
+                    y: .value("Balance at reference time", window.remainingPercent)
                 )
                 .foregroundStyle(accent.opacity(0.15))
                 .symbolSize(190)
 
                 PointMark(
-                    x: .value("Now", fetchedAt),
-                    y: .value("Remaining now", window.remainingPercent)
+                    x: .value("Reference time", fetchedAt),
+                    y: .value("Balance at reference time", window.remainingPercent)
                 )
                 .foregroundStyle(accent)
                 .symbolSize(35)
@@ -330,6 +342,10 @@ struct BurnDownChart: View {
                                 if let expiresAt = credit.expiresAt,
                                    let xPosition = proxy.position(forX: expiresAt) {
                                     Button {
+                                        if NSEvent.modifierFlags.contains(.option), let onSelectDate {
+                                            if let selectedDate, selectedDate <= fetchedAt { onSelectDate(selectedDate) }
+                                            return
+                                        }
                                         selectedDate = nil
                                         toggleCredit(credit)
                                     } label: {
@@ -348,6 +364,11 @@ struct BurnDownChart: View {
                             }
                         }
                     }
+                    .simultaneousGesture(SpatialTapGesture().modifiers(.option).onEnded { event in
+                        guard let date = chartDate(at: event.location, proxy: proxy, geometry: geometry),
+                              date <= fetchedAt else { return }
+                        onSelectDate?(date)
+                    })
                     .onContinuousHover { phase in
                         switch phase {
                         case let .active(location):
@@ -397,7 +418,7 @@ struct BurnDownChart: View {
             .padding(.top, 4)
             .accessibilityLabel("Usage forecast")
             .accessibilityValue(
-                "Now has \(Int(window.remainingPercent.rounded())) percent remaining. At reset, the current pace leaves \(Int(forecast.expectedRemainingAtReset.rounded())) percent and the historical pace leaves \(Int(forecast.historicalRemainingAtReset.rounded())) percent."
+                "\(isHistorical ? "The selected time" : "Now") has \(Int(window.remainingPercent.rounded())) percent remaining. At reset, the current pace leaves \(Int(forecast.expectedRemainingAtReset.rounded())) percent and the historical pace leaves \(Int(forecast.historicalRemainingAtReset.rounded())) percent."
             )
         }
     }

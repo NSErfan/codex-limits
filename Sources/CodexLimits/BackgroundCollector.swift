@@ -44,7 +44,8 @@ enum BackgroundCollector {
         let sample = UsageSample(
             observedAt: snapshot.fetchedAt,
             remainingPercent: window.remainingPercent,
-            resetsAt: window.resetsAt
+            resetsAt: window.resetsAt,
+            durationMinutes: window.durationMinutes
         )
         let history = UsageHistory(
             localDirectory: historyDirectory,

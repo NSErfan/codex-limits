@@ -8,6 +8,8 @@ struct MenuContentView: View {
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
     @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
+    @State private var historicalSelection: HistoricalForecastSelection?
+    @State private var datePickerSelection: HistoricalForecastSelection?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @Environment(\.colorScheme) private var colorScheme
@@ -16,7 +18,11 @@ struct MenuContentView: View {
     var body: some View {
         Group {
             if let snapshot = monitor.snapshot, let forecast = monitor.forecast {
-                dashboard(snapshot: snapshot, forecast: forecast)
+                if let historicalSelection, chartRange == .window {
+                    historicalDashboard(snapshot: snapshot, selection: historicalSelection)
+                } else {
+                    dashboard(snapshot: snapshot, forecast: forecast)
+                }
             } else {
                 emptyState
             }
@@ -28,6 +34,9 @@ struct MenuContentView: View {
         .task { await monitor.refresh() }
         .onChange(of: paceTargetCreditID) { _, selectedCreditID in
             monitor.updatePaceTarget(selectedCreditID)
+        }
+        .onChange(of: chartRange) { _, range in
+            if range != .window { historicalSelection = nil }
         }
         .environment(\.locale, Locale(identifier: "en_US"))
     }
@@ -95,7 +104,7 @@ struct MenuContentView: View {
                 color: statusColor(forecast.status)
             )
 
-            ChartRangePicker(selection: $chartRange, accent: accent)
+            rangeControls(snapshot: snapshot, accent: accent)
 
             if let duration = chartRange.duration {
                 HistoryChart(
@@ -103,7 +112,8 @@ struct MenuContentView: View {
                     range: snapshot.fetchedAt.addingTimeInterval(-duration) ... snapshot.fetchedAt,
                     bucketDuration: chartRange.bucketDuration,
                     visibleDuration: chartRange.visibleDuration,
-                    remainingPercent: snapshot.mainLimit.window.remainingPercent
+                    remainingPercent: snapshot.mainLimit.window.remainingPercent,
+                    onSelectDate: { showDatePicker(at: $0) }
                 )
             } else {
                 BurnDownChart(
@@ -115,7 +125,8 @@ struct MenuContentView: View {
                     safetyBuffer: safetyBuffer,
                     resetCredits: snapshot.resetCredits,
                     paceDeadline: paceDeadline,
-                    paceTargetCreditID: $paceTargetCreditID
+                    paceTargetCreditID: $paceTargetCreditID,
+                    onSelectDate: { showDatePicker(at: $0) }
                 )
             }
 
@@ -189,39 +200,112 @@ struct MenuContentView: View {
             }
 
             Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    Text(StatusText.updated(snapshot.fetchedAt, now: context.date))
+            footer(snapshot: snapshot)
+        }
+    }
+
+    private func footer(snapshot: UsageSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(StatusText.updated(snapshot.fetchedAt, now: context.date))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            HStack(spacing: 16) {
+                activityButton
+                Button {
+                    openSettings()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        NSApp.windows.first {
+                            $0.isVisible && $0.styleMask.contains(.titled)
+                        }?.orderFrontRegardless()
+                    }
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                        .padding(.horizontal, 6).frame(minHeight: 30)
+                        .contentShape(Rectangle())
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                HStack(spacing: 16) {
-                    activityButton
-                    Button {
-                        openSettings()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            NSApp.windows.first {
-                                $0.isVisible && $0.styleMask.contains(.titled)
-                            }?.orderFrontRegardless()
-                        }
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                            .padding(.horizontal, 6).frame(minHeight: 30)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Settings")
-                    .accessibilityLabel("Settings")
-                    Spacer()
-                    Button {
-                        NSApplication.shared.terminate(nil)
-                    } label: {
-                        Text("Quit").padding(.horizontal, 6).frame(minHeight: 30)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
+                .buttonStyle(.borderless)
+                .help("Settings")
+                .accessibilityLabel("Settings")
+                Spacer()
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Text("Quit").padding(.horizontal, 6).frame(minHeight: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private func rangeControls(snapshot: UsageSnapshot, accent: Color) -> some View {
+        HStack(spacing: 10) {
+            ChartRangePicker(selection: $chartRange, accent: accent,
+                             windowHelp: historicalSelection == nil ? "Option-click to choose a past date and time" : "Option-click to return to the live forecast",
+                             onOptionClickWindow: {
+                if historicalSelection != nil {
+                    historicalSelection = nil
+                    chartRange = .window
+                } else {
+                    showDatePicker(at: snapshot.fetchedAt)
+                }
+            })
+            Button {
+                datePickerSelection = historicalSelection ?? HistoricalForecastSelection(date: snapshot.fetchedAt)
+            } label: {
+                Image(systemName: "clock.arrow.circlepath").frame(width: 28, height: 28)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Choose a past date and time")
+            .help("Past forecast · Option-click a chart to choose its time")
+            .popover(isPresented: Binding(get: { datePickerSelection != nil }, set: { if !$0 { datePickerSelection = nil } })) {
+                if let draft = datePickerSelection {
+                    ForecastDatePicker(samples: monitor.samples,
+                                       safetyBuffer: safetyBuffer, initialSelection: draft, now: snapshot.fetchedAt,
+                                       onCancel: { datePickerSelection = nil }, onSelect: { selection in
+                        historicalSelection = selection
+                        chartRange = .window
+                        datePickerSelection = nil
+                    })
                 }
             }
+        }
+    }
+
+    private func showDatePicker(at date: Date) {
+        datePickerSelection = HistoricalForecastSelection(date: date,
+            legacyDurationMinutes: historicalSelection?.legacyDurationMinutes ?? 10_080)
+    }
+
+    private func historicalDashboard(snapshot: UsageSnapshot, selection: HistoricalForecastSelection) -> some View {
+        let result = HistoricalForecast.reconstruct(at: selection.date, samples: monitor.samples,
+            legacyDurationMinutes: selection.legacyDurationMinutes,
+            safetyBuffer: safetyBuffer, now: snapshot.fetchedAt)
+        let accent = UsageChartStyle.accent(for: nil, scheme: colorScheme, selection: usageAccent)
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("PAST FORECAST", systemImage: "clock.arrow.circlepath")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                Spacer()
+                Button("Live") { historicalSelection = nil }
+                    .buttonStyle(.borderless)
+                    .help("Return to the live forecast")
+            }
+            rangeControls(snapshot: snapshot, accent: accent)
+            Text(selection.date.formatted(date: .abbreviated, time: .shortened))
+                .font(.system(size: 16, weight: .semibold))
+            switch result {
+            case let .success(value):
+                HistoricalBurndownView(value: value, safetyBuffer: safetyBuffer,
+                                       onSelectDate: { showDatePicker(at: $0) })
+            case let .failure(reason):
+                ContentUnavailableView("No forecast for this time", systemImage: "clock.badge.questionmark",
+                                       description: Text(reason.localizedDescription))
+            }
+            Divider()
+            footer(snapshot: snapshot)
         }
     }
 
