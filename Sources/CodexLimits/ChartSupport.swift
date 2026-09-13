@@ -205,7 +205,7 @@ enum StatusText {
         switch status {
         case .slowDown: "Consider slowing down"
         case .onTrack: "On track"
-        case .roomToUseMore: "Allowance to spare"
+        case .roomToUseMore: "Room to use more"
         }
     }
 

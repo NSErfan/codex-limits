@@ -26,7 +26,7 @@ final class StatusTextTests: XCTestCase {
     func testTitles() {
         XCTAssertEqual(StatusText.title(.slowDown), "Consider slowing down")
         XCTAssertEqual(StatusText.title(.onTrack), "On track")
-        XCTAssertEqual(StatusText.title(.roomToUseMore), "Allowance to spare")
+        XCTAssertEqual(StatusText.title(.roomToUseMore), "Room to use more")
     }
 
     func testSlowDownMessageCountsDaysToTheReset() {
