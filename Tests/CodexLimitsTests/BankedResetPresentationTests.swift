@@ -52,7 +52,7 @@ final class BankedResetPresentationTests: XCTestCase {
             for: [ResetCredit(id: "open-ended", title: nil, expiresAt: nil)]
         )
 
-        XCTAssertEqual(parts.head, "No expiry")
+        XCTAssertEqual(parts.head, "Expiry unknown")
         XCTAssertNil(parts.extra)
     }
 
@@ -71,31 +71,40 @@ final class BankedResetPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             BankedResetPresentation.itemText(inWindow, windowReset: windowReset),
-            "Full reset · expires \(BankedResetPresentation.dateText(inWindow.expiresAt))"
+            "Full reset · Expires \(BankedResetPresentation.dateText(inWindow.expiresAt))"
         )
         XCTAssertEqual(
             BankedResetPresentation.itemText(afterReset, windowReset: windowReset),
-            "Full reset · expires \(BankedResetPresentation.dateText(afterReset.expiresAt)) · after the next reset"
+            "Full reset · Expires \(BankedResetPresentation.dateText(afterReset.expiresAt)) · At or after the scheduled reset"
         )
         XCTAssertEqual(
             BankedResetPresentation.itemText(openEnded, windowReset: windowReset),
-            "Banked reset · no expiry"
+            "Banked reset · Expiry unknown"
         )
     }
 
     func testHintExplainsHowToEnterAndLeaveTheMode() {
         XCTAssertEqual(
             BankedResetPresentation.hint(hasSelection: false),
-            "Pick a banked reset to pace toward its expiry."
+            "Choose a banked reset’s expiry as your pacing target."
         )
         XCTAssertEqual(
             BankedResetPresentation.hint(hasSelection: true),
-            "Pick the checked reset again to pace to the window reset."
+            "Select the checked reset again to use the scheduled reset as your target."
+        )
+    }
+
+    func testExpiryAtScheduledResetUsesInclusiveSuffix() {
+        let credit = ResetCredit(id: "same-time", title: nil, expiresAt: windowReset)
+
+        XCTAssertEqual(
+            BankedResetPresentation.itemText(credit, windowReset: windowReset),
+            "Banked reset · Expires \(BankedResetPresentation.dateText(windowReset)) · At or after the scheduled reset"
         )
     }
 
     func testDateTextUsesFixedLocaleAndHandlesNil() {
-        XCTAssertEqual(BankedResetPresentation.dateText(nil), "no expiry")
+        XCTAssertEqual(BankedResetPresentation.dateText(nil), "Expiry unknown")
         let text = BankedResetPresentation.dateText(Date(timeIntervalSince1970: 1_785_528_250))
         XCTAssertTrue(text.contains("Aug"), "Expected en_US month name, got \(text)")
     }

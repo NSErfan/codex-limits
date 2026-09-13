@@ -4,7 +4,7 @@ import SwiftUI
 struct ChartRangePicker: View {
     @Binding var selection: ChartRange
     let accent: Color
-    var windowHelp = "Window"
+    var windowHelp = "Current period"
     var onOptionClickWindow: (() -> Void)? = nil
     @Namespace private var selectionAnimation
 

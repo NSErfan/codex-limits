@@ -14,8 +14,8 @@ struct WeeklyPercentageWidget: Widget {
                 }
                 .environment(\.usageAccent, entry.accent)
         }
-        .configurationDisplayName("Weekly Percentage")
-        .description("Your remaining weekly Codex limit. One number, a little breathing room.")
+        .configurationDisplayName("Weekly allowance")
+        .description("See your remaining weekly Codex allowance and pace status.")
         .supportedFamilies([.systemSmall])
         .contentMarginsDisabled()
     }

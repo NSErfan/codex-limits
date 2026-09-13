@@ -18,8 +18,8 @@ struct ModelActivityBurnDownChart: View {
         let hoveredReset: Date? = if case let .reset(reset) = selection { reset.date } else { nil }
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Remaining limit").font(.system(size: 13, weight: .semibold))
-                Text("Model activity bands").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("Remaining allowance").font(.system(size: 13, weight: .semibold))
+                Text("Activity by model").font(.system(size: 10)).foregroundStyle(.secondary)
                 ModelActivityRangeNavigation(viewport: viewport, selectedDate: $selectedDate)
                 Spacer()
                 readout
@@ -42,7 +42,7 @@ struct ModelActivityBurnDownChart: View {
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
                 if let latest = history.series.latestPoint {
-                    PointMark(x: .value("Latest", latest.date), y: .value("Remaining", latest.remainingPercent))
+                    PointMark(x: .value("Latest", latest.date), y: .value("Remaining allowance", latest.remainingPercent))
                         .foregroundStyle(accent).symbolSize(20)
                 }
             }
@@ -62,7 +62,7 @@ struct ModelActivityBurnDownChart: View {
             .modifier(ModelActivitySelection(timeline: timeline, viewport: viewport, selectedDate: $selectedDate))
             .modifier(ModelActivityScrolling(viewport: viewport, selectedDate: $selectedDate))
             .frame(height: 150)
-            .accessibilityLabel("Remaining limit over the selected period")
+            .accessibilityLabel("Remaining allowance over the selected period")
         }
     }
 
@@ -70,15 +70,15 @@ struct ModelActivityBurnDownChart: View {
         Group {
             switch selection {
             case let .point(point): Text("\(Int(point.remainingPercent.rounded()))% remaining")
-            case let .estimated(point): Text("≈\(Int(point.remainingPercent.rounded()))% · Estimated — no sample here")
+            case let .estimated(point): Text("About \(Int(point.remainingPercent.rounded()))% remaining · Estimated between readings")
             case let .reset(reset):
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(reset.before.remainingPercent.rounded()))% before reset · \(reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
-                    Text("Last recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                    Text("Last reading before reset: \(Int(reset.before.remainingPercent.rounded()))% · Reset \(reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                    Text("Recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
                         .font(.system(size: 10))
                 }
             case nil:
-                Text(history.series.isEmpty ? "No recorded limit readings" : "Observed usage · Muted gaps are estimated")
+                Text(history.series.isEmpty ? "No allowance readings recorded." : "Recorded allowance · Shaded gaps are estimated")
             }
         }
         .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)

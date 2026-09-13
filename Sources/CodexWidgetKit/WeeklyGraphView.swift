@@ -15,7 +15,7 @@ public struct WeeklyGraphView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date))
-                Text("THIS WEEK")
+                Text("WEEKLY LIMIT")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.4)
                     .foregroundStyle(.secondary)
@@ -35,7 +35,7 @@ public struct WeeklyGraphView: View {
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    Text(status == .stale ? "last known" : "remaining")
+                    Text(status == .stale ? "at last update" : "remaining")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 8)
@@ -58,7 +58,7 @@ public struct WeeklyGraphView: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 5) {
                     Circle().fill(accent).frame(width: 4, height: 4)
-                    Text(snapshot.samples.count < 2 ? "Collecting history" : "Remaining")
+                    Text(snapshot.samples.count < 2 ? "Building usage history" : "Remaining")
                     Spacer(minLength: 0)
                     Text("┄").foregroundStyle(.secondary)
                     Text("Even pace")
@@ -82,9 +82,9 @@ public struct WeeklyGraphView: View {
                 Image(systemName: status == .expired ? "arrow.clockwise" : "chart.xyaxis.line")
                     .font(.system(size: 20, weight: .light))
                     .foregroundStyle(accent)
-                Text(status == .expired ? "Ready for a new week" : "Your week, at a glance")
+                Text(status == .expired ? "New reading needed" : "Weekly usage unavailable")
                     .font(.system(size: 11, weight: .medium))
-                Text("Open Codex Limits to update your weekly usage.")
+                Text("Open Codex Limits to refresh your weekly allowance.")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -100,11 +100,11 @@ public struct WeeklyGraphView: View {
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var resetText: String {
         guard remaining != nil, let reset = snapshot?.window?.resetsAt else {
-            return status == .expired ? "Reset reached" : "Weekly limit"
+            return status == .expired ? "Reset time passed" : "Weekly limit"
         }
         let seconds = max(0, reset.timeIntervalSince(date))
-        if seconds >= 86_400 { return "Resets in \(Int(ceil(seconds / 86_400)))d" }
-        if seconds >= 3_600 { return "Resets in \(Int(ceil(seconds / 3_600)))h" }
-        return "Resets in \(max(1, Int(ceil(seconds / 60))))m"
+        if seconds >= 86_400 { return "Resets in about \(Int(ceil(seconds / 86_400)))d" }
+        if seconds >= 3_600 { return "Resets in about \(Int(ceil(seconds / 3_600)))h" }
+        return "Resets in about \(max(1, Int(ceil(seconds / 60))))m"
     }
 }

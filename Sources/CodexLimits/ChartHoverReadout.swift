@@ -8,8 +8,8 @@ struct ChartHoverReadout: View {
     var hint: String? = nil
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 8) {
                 HStack(spacing: 7) {
                     if let symbol {
                         Image(systemName: symbol)
@@ -19,17 +19,17 @@ struct ChartHoverReadout: View {
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .lineLimit(1)
                 }
-                if let hint {
-                    Text(hint)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Spacer(minLength: 8)
+                Text(detail)
+                    .font(.system(size: 12, weight: .medium))
+                    .fixedSize()
             }
-            Spacer(minLength: 8)
-            Text(detail)
-                .font(.system(size: 12, weight: .medium))
-                .fixedSize()
+            if let hint {
+                Text(hint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .monospacedDigit()
         .foregroundStyle(.primary)

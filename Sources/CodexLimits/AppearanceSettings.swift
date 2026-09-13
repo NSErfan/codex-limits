@@ -59,7 +59,7 @@ final class AppearanceSettings: ObservableObject {
                 reload()
             }
         } catch {
-            widgetError = "The app color is saved, but widgets couldn’t be updated. Choose the color again to retry."
+            widgetError = "Your app color was saved. Widgets couldn’t be updated; select the color again to retry."
         }
     }
 }

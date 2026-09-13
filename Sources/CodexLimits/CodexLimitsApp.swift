@@ -37,7 +37,7 @@ struct CodexLimitsApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Model Activity", id: "model-activity") {
+        Window("Model activity", id: "model-activity") {
             ModelActivityWindow(monitor: monitor)
                 .environment(\.usageAccent, appearance.accent)
         }

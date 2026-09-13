@@ -7,9 +7,9 @@ public enum WeeklyPace: String, Codable, Sendable {
 
     public var title: String {
         switch self {
-        case .slowDown: "Slow down"
+        case .slowDown: "Consider slowing down"
         case .onTrack: "On track"
-        case .roomToUseMore: "Room to use more"
+        case .roomToUseMore: "Allowance to spare"
         }
     }
 }

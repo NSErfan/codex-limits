@@ -93,7 +93,7 @@ struct MenuContentView: View {
                     }
                 }
                 .buttonStyle(.borderless)
-                .help("Refresh")
+                .help("Refresh usage")
                 .accessibilityLabel("Refresh usage")
             }
 
@@ -106,7 +106,7 @@ struct MenuContentView: View {
                     deadline: paceDeadline,
                     windowReset: snapshot.mainLimit.window.resetsAt,
                     safetyBuffer: safetyBuffer,
-                    targetName: target == nil ? nil : "selected target"
+                    targetName: target == nil ? nil : "your pacing target"
                 ),
                 color: statusColor(forecast.status)
             )
@@ -148,19 +148,19 @@ struct MenuContentView: View {
 
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 5) {
                 GridRow {
-                    Text("Reset")
+                    Text("Scheduled reset")
                         .foregroundStyle(.secondary)
                     Text(snapshot.mainLimit.window.resetsAt.formatted(date: .abbreviated, time: .shortened))
                 }
                 if let target {
                     GridRow {
-                        Text("Burndown target").foregroundStyle(.secondary)
+                        Text("Pacing target").foregroundStyle(.secondary)
                         Text(target.date.formatted(date: .abbreviated, time: .shortened))
                             .foregroundStyle(accent)
                     }
                 }
                 GridRow {
-                    Text("Suggested pace")
+                    Text("Usage budget")
                         .foregroundStyle(.secondary)
                     Text(StatusText.pace(
                         recommendedPercentPerDay: forecast.recommendedPercentPerDay,
@@ -168,6 +168,7 @@ struct MenuContentView: View {
                         now: snapshot.fetchedAt
                     ))
                 }
+                .help("Average usage that would leave your \(Int(safetyBuffer.rounded()))% reserve at \(paceDeadline.formatted(date: .abbreviated, time: .shortened)). Percentages refer to the full allowance for this period.")
                 if !snapshot.resetCredits.isEmpty {
                     GridRow(alignment: .firstTextBaseline) {
                         Text("Banked resets")
@@ -178,7 +179,7 @@ struct MenuContentView: View {
                                 HStack(spacing: 3) {
                                     Image(systemName: "arrow.counterclockwise")
                                         .font(.system(size: 8))
-                                    Text("Pacing to banked reset")
+                                    Text("Pacing target: banked reset expiry,")
                                     Text(
                                         paceDeadline,
                                         format: .dateTime.month(.abbreviated).day().hour().minute()
@@ -206,9 +207,9 @@ struct MenuContentView: View {
                         Text(limit.name)
                             .lineLimit(1)
                         Spacer()
-                        Text("\(Int(limit.window.remainingPercent.rounded()))%")
+                        Text("\(Int(limit.window.remainingPercent.rounded()))% remaining")
                             .monospacedDigit()
-                        Text(limit.window.resetsAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+                        Text("Resets \(limit.window.resetsAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
                             .foregroundStyle(.secondary)
                     }
                     .font(.system(size: 11))
@@ -268,7 +269,7 @@ struct MenuContentView: View {
         let target = activeTarget(in: window)
         return HStack(spacing: 10) {
             ChartRangePicker(selection: $chartRange, accent: accent,
-                             windowHelp: target == nil ? "Option-click to choose a future burndown target" : "Option-click to return to the scheduled reset",
+                             windowHelp: target == nil ? "Option-click to choose a pacing target." : "Option-click to use the scheduled reset.",
                              onOptionClickWindow: {
                 if target != nil {
                     burndownTarget = nil
@@ -284,8 +285,8 @@ struct MenuContentView: View {
                     Image(systemName: "clock").frame(width: 28, height: 28)
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("Change burndown target")
-                .help("Change target time or return to the scheduled reset")
+                .accessibilityLabel("Change pacing target")
+                .help("Choose a pacing target or use the scheduled reset.")
             }
         }
         .popover(isPresented: Binding(get: { datePickerSelection != nil }, set: { if !$0 { datePickerSelection = nil } })) {
@@ -324,7 +325,7 @@ struct MenuContentView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .help("Explore model and effort activity")
+        .help("Explore usage by model and reasoning effort.")
         .accessibilityLabel("Open model activity")
     }
 
@@ -332,15 +333,15 @@ struct MenuContentView: View {
         VStack(spacing: 12) {
             if monitor.isRefreshing {
                 ProgressView()
-                Text("Reading Codex usage…")
+                Text("Checking Codex usage…")
                     .foregroundStyle(.secondary)
             } else {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.title2)
-                Text(monitor.errorMessage ?? "Codex usage is not available.")
+                Text(monitor.errorMessage ?? "Usage is unavailable. Try refreshing.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                Button("Try Again") {
+                Button("Try again") {
                     Task { await monitor.refresh() }
                 }
             }
@@ -358,9 +359,9 @@ struct MenuContentView: View {
 
     private func windowTitle(_ window: UsageWindow) -> String {
         switch window.durationMinutes {
-        case 10_080: "THIS WEEK"
-        case 300: "5-HOUR WINDOW"
-        default: "CURRENT WINDOW"
+        case 10_080: "WEEKLY LIMIT"
+        case 300: "5-HOUR LIMIT"
+        default: "CURRENT LIMIT"
         }
     }
 
@@ -387,12 +388,13 @@ struct MenuContentView: View {
             }
             Divider()
             Text(BankedResetPresentation.hint(hasSelection: !paceTargetCreditID.isEmpty))
+            Text("Selecting a pacing target does not use a banked reset.")
         } label: {
             bankedResetsLabel(snapshot.resetCredits)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("Expiry of the next banked reset. Pick one to pace toward it.")
+        .help("Next known banked reset expiry. Choose a reset to use its expiry as your pacing target.")
     }
 
     private func bankedResetsLabel(_ credits: [ResetCredit]) -> Text {
@@ -410,7 +412,7 @@ enum ChartRange: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .window: "Window"
+        case .window: "Current period"
         case .week: "7 days"
         case .month: "30 days"
         }

@@ -32,7 +32,7 @@ struct HistoryChartPlot: ChartContent {
             data.gapArea,
             x: .value("Time", \.date),
             yStart: .value("Zero", \.baseline),
-            yEnd: .value("Remaining", \.remainingPercent),
+            yEnd: .value("Remaining allowance", \.remainingPercent),
             series: .value("Series", \.seriesID)
         )
         .foregroundStyle(Self.gapFill)
@@ -42,7 +42,7 @@ struct HistoryChartPlot: ChartContent {
             data.sampledArea,
             x: .value("Time", \.date),
             yStart: .value("Zero", \.baseline),
-            yEnd: .value("Remaining", \.remainingPercent),
+            yEnd: .value("Remaining allowance", \.remainingPercent),
             series: .value("Series", \.seriesID)
         )
         .foregroundStyle(UsageChartStyle.area(accent))
@@ -51,14 +51,14 @@ struct HistoryChartPlot: ChartContent {
         LinePlot(
             data.linePoints,
             x: .value("Time", \.date),
-            y: .value("Remaining", \.remainingPercent)
+            y: .value("Remaining allowance", \.remainingPercent)
         )
         .foregroundStyle(accent)
         .lineStyle(UsageChartStyle.actualStroke)
         .interpolationMethod(.linear)
 
         if data.linePoints.count == 1, let point = data.linePoints.first {
-            PointMark(x: .value("Time", point.date), y: .value("Remaining", point.remainingPercent))
+            PointMark(x: .value("Time", point.date), y: .value("Remaining allowance", point.remainingPercent))
                 .foregroundStyle(accent)
                 .symbolSize(20)
         }
@@ -71,14 +71,14 @@ struct HistoryChartPlot: ChartContent {
                 AreaMark(
                     x: .value("Time", point.date),
                     yStart: .value("Zero", 0),
-                    yEnd: .value("Remaining", point.remainingPercent),
+                    yEnd: .value("Remaining allowance", point.remainingPercent),
                     series: .value("Series", "gap-\(connector.id)")
                 )
                 .foregroundStyle(Self.gapFill)
                 .interpolationMethod(.linear)
                 LineMark(
                     x: .value("Time", point.date),
-                    y: .value("Remaining", point.remainingPercent),
+                    y: .value("Remaining allowance", point.remainingPercent),
                     series: .value("Series", "gap-\(connector.id)")
                 )
                 .foregroundStyle(accent)
@@ -94,7 +94,7 @@ struct HistoryChartPlot: ChartContent {
                 if data.series.connectors.isEmpty {
                     PointMark(
                         x: .value("Time", point.date),
-                        y: .value("Remaining", point.remainingPercent)
+                        y: .value("Remaining allowance", point.remainingPercent)
                     )
                     .foregroundStyle(accent)
                     .symbolSize(20)
@@ -104,14 +104,14 @@ struct HistoryChartPlot: ChartContent {
                     AreaMark(
                         x: .value("Time", point.date),
                         yStart: .value("Zero", 0),
-                        yEnd: .value("Remaining", point.remainingPercent),
+                        yEnd: .value("Remaining allowance", point.remainingPercent),
                         series: .value("Series", "run-\(run.id)")
                     )
                     .foregroundStyle(UsageChartStyle.area(accent))
                     .interpolationMethod(.linear)
                     LineMark(
                         x: .value("Time", point.date),
-                        y: .value("Remaining", point.remainingPercent),
+                        y: .value("Remaining allowance", point.remainingPercent),
                         series: .value("Series", "run-\(run.id)")
                     )
                     .foregroundStyle(accent)

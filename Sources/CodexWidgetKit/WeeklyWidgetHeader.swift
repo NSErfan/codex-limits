@@ -18,7 +18,7 @@ struct WeeklyWidgetHeader: View {
             if stale {
                 Image(systemName: "clock")
                     .font(.system(size: 10, weight: .medium))
-                    .accessibilityLabel("Reading is over 30 minutes old")
+                    .accessibilityLabel("Last updated at least 30 minutes ago")
             }
         }
         .foregroundStyle(.secondary)

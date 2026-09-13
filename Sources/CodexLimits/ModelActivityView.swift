@@ -30,9 +30,9 @@ struct ModelActivityView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     HStack(spacing: 28) {
-                        statistic("Matching tokens", value: store.visibleTimeline.matched.formatted(.number.notation(.compactName)))
+                        statistic("Tokens matching filters", value: store.visibleTimeline.matched.formatted(.number.notation(.compactName)))
                         statistic("Share of recorded tokens", value: share(store.visibleTimeline.matched, of: store.visibleTimeline.total))
-                        statistic("Intervals matched", value: "\(store.visibleTimeline.matchingIntervals) / \(store.visibleTimeline.activeIntervals)")
+                        statistic("Active intervals matching filters", value: "\(store.visibleTimeline.matchingIntervals) / \(store.visibleTimeline.activeIntervals)")
                         Spacer()
                     }
                     ModelActivityBurnDownChart(history: store.history, timeline: store.timeline,
@@ -44,7 +44,7 @@ struct ModelActivityView: View {
                         }
                         .pickerStyle(.segmented).labelsHidden().frame(width: 270)
                         Spacer()
-                        Picker("Interval", selection: $store.intervalHours) {
+                        Picker("Group by", selection: $store.intervalHours) {
                             Text("30 minutes").tag(0.5)
                             Text("1 hour").tag(1.0)
                             Text("6 hours").tag(6.0)
@@ -60,13 +60,13 @@ struct ModelActivityView: View {
                         if !showsBreakdown {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
-                                    Text("Selected models · Colors match the sidebar")
+                                    Text("Model colors match the filters.")
                                         .font(.system(size: 11)).foregroundStyle(.secondary)
                                     Spacer()
                                 }
                                 ModelActivityChart(timeline: store.timeline, visibleTimeline: store.visibleTimeline,
                                                    viewport: store.viewport, selectedDate: $selectedDate)
-                                Text("Hover an interval to inspect it. Move away to see the whole visible range.")
+                                Text("Hover over the chart to inspect an interval. Move the pointer away to see totals for the visible period.")
                                     .font(.system(size: 11)).foregroundStyle(.secondary)
                             }
                         }
@@ -99,9 +99,9 @@ struct ModelActivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("FILTER ACTIVITY")
+                    Text("FILTERS")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).tracking(1.2)
-                    Text("Choose models and efforts for the graphs and breakdown.")
+                    Text("Filter charts and token breakdowns by model and reasoning effort.")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 filterSection("Models", options: store.models, selection: $store.selectedModels)
@@ -130,7 +130,7 @@ struct ModelActivityView: View {
             }
             .buttonStyle(.borderless).font(.system(size: 11))
             if options.isEmpty {
-                Text(store.isLoading ? "Reading local logs…" : "No recorded activity")
+                Text(store.isLoading ? "Loading local activity…" : "No local activity recorded.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
             ForEach(options, id: \.self) { option in
@@ -146,12 +146,12 @@ struct ModelActivityView: View {
                         Circle().fill(capitalized ? ModelActivityColors.effort(option, scheme: colorScheme)
                                       : ModelActivityColors.model(option, scheme: colorScheme))
                             .frame(width: 7, height: 7)
-                        Text(capitalized ? option.capitalized : option)
+                        Text(capitalized ? ReasoningEffortText.name(option) : option)
                     }
                 }
                 .toggleStyle(.checkbox)
                 .font(.system(size: 12))
-                .help(option)
+                .help(capitalized ? ReasoningEffortText.description(option) : option)
             }
         }
     }
@@ -170,17 +170,17 @@ struct ModelActivityView: View {
                 }
                 .frame(width: 28, height: 28)
                 Picker("Period", selection: $store.days) {
-                    Text("Window").tag(0).disabled(window == nil)
+                    Text("Current period").tag(0).disabled(window == nil)
                     Text("7 days").tag(7)
                     Text("30 days").tag(30)
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 220)
             }
             HStack {
-                Text("Model and effort contribution to recorded local token activity.")
+                Text("Explore tokens recorded on this Mac by model and reasoning effort.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
-                Picker("Count", selection: $store.metric) {
+                Picker("Token count", selection: $store.metric) {
                     ForEach(ModelActivityTimeline.Metric.allCases) { metric in
                         Text(metric.rawValue).tag(metric)
                     }
@@ -212,7 +212,7 @@ struct ModelActivityView: View {
         Group {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(selectedDate == nil ? "Visible range" : "Selected interval")
+                    Text(selectedDate == nil ? "Visible period" : "Selected interval")
                         .font(.system(size: 14, weight: .semibold))
                     Spacer()
                     Text(interval.start.formatted(.dateTime.month(.abbreviated).day().hour().minute())
@@ -220,16 +220,16 @@ struct ModelActivityView: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 if interval.contributions.isEmpty {
-                    Text(selectedDate == nil ? "No activity matches the filters in this range." : "No activity matches the filters in this interval.")
+                    Text(selectedDate == nil ? "No activity matches your filters in this period." : "No activity matches your filters in this interval.")
                         .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 75)
                 } else if showsBreakdown {
                     ModelActivityPieCharts(interval: interval, metric: store.metric, selectedModel: $selectedModel, isRange: selectedDate == nil)
                 } else {
                     HStack {
-                        Text("MODEL / EFFORT")
+                        Text("MODEL / REASONING EFFORT")
                         Spacer()
                         Text(store.metric.rawValue.uppercased()).frame(width: 110, alignment: .trailing)
-                        Text("SHARE").frame(width: 65, alignment: .trailing)
+                        Text("TOKEN SHARE").frame(width: 65, alignment: .trailing)
                     }
                     .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(.secondary)
                     ForEach(interval.contributions) { contribution in
@@ -241,7 +241,7 @@ struct ModelActivityView: View {
                                 HStack(spacing: 5) {
                                     Circle().fill(ModelActivityColors.effort(contribution.group.effort, scheme: colorScheme))
                                         .frame(width: 5, height: 5)
-                                    Text("\(contribution.group.effort.capitalized) effort · \(contribution.events) usage \(contribution.events == 1 ? "event" : "events")")
+                                    Text("\(ReasoningEffortText.description(contribution.group.effort)) · \(contribution.events) usage \(contribution.events == 1 ? "record" : "records")")
                                         .font(.system(size: 11)).foregroundStyle(.secondary)
                                 }
                             }
@@ -266,10 +266,10 @@ struct ModelActivityView: View {
                 Label(notice, systemImage: "exclamationmark.circle")
                     .foregroundStyle(.secondary)
             }
-            Text("Local records only · Token share is not account-limit share. Total tokens include cached inputs; output tokens include reasoning output. Other devices and missing logs are not covered.")
+            Text("Based on records available on this Mac. Token percentages show the share of recorded tokens, not the share of your Codex allowance. Total tokens include cached input; output tokens include reasoning tokens. Activity from other devices or missing records is not included.")
                 .foregroundStyle(.secondary)
             HStack {
-                Text("\(store.filesRead) session files")
+                Text("\(store.filesRead) session files read")
                 if let updated = store.lastUpdated {
                     Text("· Updated \(updated.formatted(date: .omitted, time: .shortened))")
                 }

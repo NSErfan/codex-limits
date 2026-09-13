@@ -29,7 +29,7 @@ final class UsageHistoryTests: XCTestCase {
 
         XCTAssertEqual(state.samples, [sample])
         XCTAssertEqual(state.folderName, "shared")
-        XCTAssertEqual(state.errorMessage, "Sync paused — folder unavailable.")
+        XCTAssertEqual(state.errorMessage, "History sync is paused because the folder is unavailable.")
         XCTAssertFalse(FileManager.default.fileExists(atPath: shared.path))
     }
 
@@ -66,7 +66,7 @@ final class UsageHistoryTests: XCTestCase {
         let state = await history.synchronize()
 
         XCTAssertEqual(state.samples, [sample])
-        XCTAssertEqual(state.errorMessage, "Some usage history couldn’t be read.")
+        XCTAssertEqual(state.errorMessage, "Some saved usage history couldn’t be loaded. Charts may be incomplete.")
     }
 
     func testOversizedDailyFileIsSkipped() async throws {
@@ -103,7 +103,7 @@ final class UsageHistoryTests: XCTestCase {
         let state = await reloaded.load()
 
         XCTAssertTrue(state.samples.isEmpty)
-        XCTAssertEqual(state.errorMessage, "Some usage history couldn’t be read.")
+        XCTAssertEqual(state.errorMessage, "Some saved usage history couldn’t be loaded. Charts may be incomplete.")
     }
 
     func testRepeatedLegacyMigrationAndSyncAreIdempotent() async throws {
@@ -153,7 +153,7 @@ final class UsageHistoryTests: XCTestCase {
 
         XCTAssertEqual(
             state.errorMessage,
-            "This history folder was created by a newer version of Codex Limits."
+            "Update Codex Limits to use this history folder. It was created by a newer version."
         )
         XCTAssertEqual(try Data(contentsOf: marker), unsupportedMarker)
         XCTAssertFalse(FileManager.default.fileExists(
@@ -219,7 +219,7 @@ final class UsageHistoryTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: missing.path))
         XCTAssertNil(state.folderName)
-        XCTAssertEqual(state.errorMessage, "Sync paused — folder unavailable.")
+        XCTAssertEqual(state.errorMessage, "History sync is paused because the folder is unavailable.")
     }
 
     func testMalformedSyncedFileDoesNotBlockValidRemoteHistory() async throws {
@@ -263,7 +263,7 @@ final class UsageHistoryTests: XCTestCase {
         let state = await receiver.synchronize()
 
         XCTAssertEqual(state.samples, [sample])
-        XCTAssertEqual(state.errorMessage, "Some synced history couldn’t be read.")
+        XCTAssertEqual(state.errorMessage, "Couldn’t sync all usage history. Charts may be incomplete.")
     }
 
     func testRetentionDeletesOnlyThisInstallationsExpiredFiles() async throws {
@@ -339,7 +339,7 @@ final class UsageHistoryTests: XCTestCase {
         let state = await reloaded.load()
 
         XCTAssertEqual(state.samples, [sample])
-        XCTAssertEqual(state.errorMessage, "Some usage history couldn’t be read.")
+        XCTAssertEqual(state.errorMessage, "Some saved usage history couldn’t be loaded. Charts may be incomplete.")
     }
 
     func testFailedMigrationKeepsLegacyHistoryAvailable() async throws {
@@ -364,7 +364,7 @@ final class UsageHistoryTests: XCTestCase {
         let state = await history.load(legacySamples: [sample])
 
         XCTAssertEqual(state.samples, [sample])
-        XCTAssertEqual(state.errorMessage, "Usage history couldn’t be saved.")
+        XCTAssertEqual(state.errorMessage, "Couldn’t save usage history.")
     }
 
     func testTwoInstallationsMergeWithoutLosingSamples() async throws {

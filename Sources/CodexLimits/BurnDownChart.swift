@@ -172,18 +172,18 @@ struct BurnDownChart: View {
             HStack(spacing: 12) {
                 if let credit = hoveredCredit, let expiresAt = credit.expiresAt {
                     ChartHoverReadout(
-                        title: "Banked \(credit.title?.lowercased() ?? "reset")",
+                        title: credit.title ?? "Banked reset",
                         detail: "Expires \(BankedResetPresentation.dateText(expiresAt))",
                         symbol: "arrow.counterclockwise",
-                        hint: credit.id == paceTargetCreditID ? "Click to stop pacing to this reset" : "Click to pace to this reset"
+                        hint: credit.id == paceTargetCreditID ? "Click to use the scheduled reset as your target." : "Click to use this expiry as your pacing target."
                     )
                 } else if let selectedDate, BurndownTarget.accepts(selectedDate, in: window, now: .now) {
                     ChartHoverReadout(
-                        title: "Burndown target",
+                        title: "Pacing target",
                         detail: selectedDate.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
                         hint: toggledTargetDate(at: selectedDate) == nil
-                            ? "Option-click to clear this target"
-                            : "Option-click to pace toward this time"
+                            ? "Option-click to clear the custom target."
+                            : "Option-click to use this time as your pacing target."
                     )
                 } else if let hovered = hoveredPoint {
                     ChartHoverReadout(
@@ -193,15 +193,21 @@ struct BurnDownChart: View {
                 } else {
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                         GridRow {
-                            ChartLegendItem(label: "Actual", color: accent)
-                            ChartLegendItem(label: "Target (\(Int(safetyBuffer.rounded()))%)", color: UsageChartStyle.guide, dash: [3, 4])
+                            ChartLegendItem(label: "Usage so far", color: accent)
+                                .help("Remaining allowance over this period. Early values may be estimated from token history.")
+                            ChartLegendItem(label: "Planned pace · \(Int(safetyBuffer.rounded()))% reserve", color: UsageChartStyle.guide, dash: [3, 4])
+                                .help("An even pace from the start of this period to your reserve at the pacing target.")
                             ChartLegendItem(label: "Expected", color: accent, dash: [7, 3])
+                                .help("Forecast using 75% current pace and 25% historical pace.")
                         }
                         GridRow {
-                            ChartLegendItem(label: "Conservative", color: conservativeColor, dash: [8, 3, 2, 3])
-                            ChartLegendItem(label: "Historical", color: .secondary.opacity(0.65), dash: [2, 3])
+                            ChartLegendItem(label: "Higher usage", color: conservativeColor, dash: [8, 3, 2, 3])
+                                .help("Forecast using the higher of current and historical pace, plus 20%.")
+                            ChartLegendItem(label: "Past usage", color: .secondary.opacity(0.65), dash: [2, 3])
+                                .help("Forecast based on previous usage periods, with an estimate used when history is limited.")
                             if todayRate != nil {
-                                ChartLegendItem(label: "Today", color: todayColor, dash: [5, 4])
+                                ChartLegendItem(label: "Today’s pace", color: todayColor, dash: [5, 4])
+                                    .help("Projects the pace since today’s usage began through the scheduled reset. A short burst can make this line steep.")
                             }
                         }
                     }
@@ -228,14 +234,14 @@ struct BurnDownChart: View {
                     AreaMark(
                         x: .value("Time", point.date),
                         yStart: .value("Zero", 0),
-                        yEnd: .value("Actual", point.remaining)
+                        yEnd: .value("Usage so far", point.remaining)
                     )
                     .foregroundStyle(UsageChartStyle.area(accent))
                     .interpolationMethod(.linear)
                     LineMark(
                         x: .value("Time", point.date),
-                        y: .value("Actual", point.remaining),
-                        series: .value("Series", "Actual")
+                        y: .value("Usage so far", point.remaining),
+                        series: .value("Series", "Usage so far")
                     )
                     .foregroundStyle(accent)
                     .lineStyle(UsageChartStyle.actualStroke)
@@ -255,8 +261,8 @@ struct BurnDownChart: View {
                 ForEach(conservativeProjection) { point in
                     LineMark(
                         x: .value("Time", point.date),
-                        y: .value("Conservative", point.remaining),
-                        series: .value("Series", "Conservative")
+                        y: .value("Higher usage", point.remaining),
+                        series: .value("Series", "Higher usage")
                     )
                     .foregroundStyle(conservativeColor)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [8, 3, 2, 3]))
@@ -265,8 +271,8 @@ struct BurnDownChart: View {
                 ForEach(historicalProjection) { point in
                     LineMark(
                         x: .value("Time", point.date),
-                        y: .value("Historical", point.remaining),
-                        series: .value("Series", "Historical")
+                        y: .value("Past usage", point.remaining),
+                        series: .value("Series", "Past usage")
                     )
                     .foregroundStyle(Color.secondary.opacity(0.65))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
@@ -275,14 +281,14 @@ struct BurnDownChart: View {
                 ForEach(todayProjection) { point in
                     LineMark(
                         x: .value("Time", point.date),
-                        y: .value("Today", point.remaining),
-                        series: .value("Series", "Today")
+                        y: .value("Today’s pace", point.remaining),
+                        series: .value("Series", "Today’s pace")
                     )
                     .foregroundStyle(todayColor)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
                 }
 
-                RuleMark(x: .value("Reference time", fetchedAt))
+                RuleMark(x: .value("Latest reading", fetchedAt))
                     .foregroundStyle(accent.opacity(0.2))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
                     .annotation(
@@ -300,15 +306,15 @@ struct BurnDownChart: View {
                     }
 
                 PointMark(
-                    x: .value("Reference time", fetchedAt),
-                    y: .value("Balance at reference time", window.remainingPercent)
+                    x: .value("Latest reading", fetchedAt),
+                    y: .value("Remaining allowance", window.remainingPercent)
                 )
                 .foregroundStyle(accent.opacity(0.15))
                 .symbolSize(190)
 
                 PointMark(
-                    x: .value("Reference time", fetchedAt),
-                    y: .value("Balance at reference time", window.remainingPercent)
+                    x: .value("Latest reading", fetchedAt),
+                    y: .value("Remaining allowance", window.remainingPercent)
                 )
                 .foregroundStyle(accent)
                 .symbolSize(35)
@@ -337,14 +343,14 @@ struct BurnDownChart: View {
 
                     PointMark(
                         x: .value("Hovered", hovered.date),
-                        y: .value("Remaining", hovered.remaining)
+                        y: .value("Remaining allowance", hovered.remaining)
                     )
                     .foregroundStyle(accent)
                     .symbolSize(55)
                 }
 
                 if paceTargetCreditID.isEmpty, paceDeadline != window.resetsAt {
-                    RuleMark(x: .value("Burndown target", paceDeadline))
+                    RuleMark(x: .value("Pacing target", paceDeadline))
                         .foregroundStyle(accent.opacity(0.45))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
                         .annotation(position: .top, spacing: 2,
@@ -375,8 +381,8 @@ struct BurnDownChart: View {
 
                 if let endpoint = conservativeProjection.last {
                     PointMark(
-                        x: .value("Conservative endpoint", endpoint.date),
-                        y: .value("Conservative endpoint", endpoint.remaining)
+                        x: .value("Higher usage endpoint", endpoint.date),
+                        y: .value("Higher usage endpoint", endpoint.remaining)
                     )
                     .foregroundStyle(conservativeColor)
                     .symbolSize(32)
@@ -384,8 +390,8 @@ struct BurnDownChart: View {
 
                 if let endpoint = todayProjection.last {
                     PointMark(
-                        x: .value("Today endpoint", endpoint.date),
-                        y: .value("Today endpoint", endpoint.remaining)
+                        x: .value("Today’s pace endpoint", endpoint.date),
+                        y: .value("Today’s pace endpoint", endpoint.remaining)
                     )
                     .foregroundStyle(todayColor)
                     .symbolSize(32)
@@ -419,7 +425,7 @@ struct BurnDownChart: View {
                                         x: frame.minX + xPosition,
                                         y: frame.midY
                                     )
-                                    .accessibilityLabel("Toggle pacing to banked reset")
+                                    .accessibilityLabel("Use or clear this banked reset expiry as the pacing target.")
                                     .accessibilityValue(BankedResetPresentation.dateText(expiresAt))
                                 }
                             }
@@ -482,7 +488,7 @@ struct BurnDownChart: View {
             .padding(.top, 4)
             .accessibilityLabel("Usage forecast")
             .accessibilityValue(
-                "Now has \(Int(window.remainingPercent.rounded())) percent remaining. The target reserves \(Int(safetyBuffer.rounded())) percent. At the pacing target, the expected forecast leaves \(Int(forecast.expectedRemainingAtReset.rounded())) percent, the conservative forecast leaves \(Int(forecast.safetyRemainingAtReset.rounded())) percent, and the historical forecast leaves \(Int(forecast.historicalRemainingAtReset.rounded())) percent."
+                "Latest reading: \(Int(window.remainingPercent.rounded())) percent remaining. Reserve: \(Int(safetyBuffer.rounded())) percent. At the pacing target, expected remaining allowance is \(Int(forecast.expectedRemainingAtReset.rounded())) percent; with higher usage, \(Int(forecast.safetyRemainingAtReset.rounded())) percent; based on past usage, \(Int(forecast.historicalRemainingAtReset.rounded())) percent."
             )
         }
     }

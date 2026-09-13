@@ -249,7 +249,7 @@ final class UsageMonitorTests: XCTestCase {
         XCTAssertNil(context.monitor.snapshot)
         XCTAssertEqual(
             context.monitor.errorMessage,
-            "Couldn’t read Codex usage. Try refreshing again."
+            "Couldn’t load Codex usage. Refresh to try again."
         )
         XCTAssertFalse(context.monitor.isRefreshing)
     }

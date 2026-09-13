@@ -6,31 +6,31 @@ final class CodexClientTests: XCTestCase {
         let messages: [(CodexClientError, String)] = [
             (
                 .cliNotFound,
-                "Codex CLI was not found. Install it with Homebrew, sign in, and try again."
+                "Codex CLI wasn’t found. Install it and sign in, then try again."
             ),
             (
                 .invalidResponse,
-                "Codex returned data this app could not read. Update Codex CLI and try again."
+                "Couldn’t read the response from Codex. Try refreshing. If this continues, check for updates to Codex CLI and Codex Limits."
             ),
             (
                 .appServerError("Rate limits are temporarily unavailable"),
-                "Codex couldn’t load usage: Rate limits are temporarily unavailable. Refresh to try again."
+                "Couldn’t load Codex usage. Rate limits are temporarily unavailable. Refresh to try again."
             ),
             (
                 .appServerError("  Initialization failed!\n"),
-                "Codex couldn’t load usage: Initialization failed! Refresh to try again."
+                "Couldn’t load Codex usage. Initialization failed! Refresh to try again."
             ),
             (
                 .appServerError(" \n"),
-                "Codex couldn’t load usage. Refresh to try again."
+                "Couldn’t load Codex usage. Refresh to try again."
             ),
             (
                 .mainLimitMissing,
-                "Codex did not return a usable limit. Make sure Codex CLI is signed in."
+                "Codex didn’t return usage-limit information. Check that Codex CLI is signed in, then refresh."
             ),
             (
                 .timedOut,
-                "Codex took too long to respond. Try refreshing again."
+                "Codex didn’t respond in time. Refresh to try again."
             )
         ]
 

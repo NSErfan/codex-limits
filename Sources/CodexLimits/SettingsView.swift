@@ -21,11 +21,15 @@ struct SettingsView: View {
 
             Section("General") {
                 Stepper(value: $safetyBuffer, in: 1 ... 10, step: 1) {
-                    Text("Safety buffer: \(Int(safetyBuffer))%")
+                    Text("Reserve: \(Int(safetyBuffer))%")
                 }
                 .onChange(of: safetyBuffer) { _, value in
                     monitor.updateSafetyBuffer(value)
                 }
+
+                Text("Amount of this period’s allowance you want left at your pacing target.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Toggle("Launch at login", isOn: Binding(
                     get: { launchAtLogin },
@@ -39,19 +43,19 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Background collection") {
-                Toggle("Collect usage while the app is closed", isOn: Binding(
+            Section("Background updates") {
+                Toggle("Record usage while the app is closed", isOn: Binding(
                     get: { collectInBackground },
                     set: updateBackgroundCollection
                 ))
 
-                Text("A background helper records a usage sample every 15 minutes, so charts stay complete for periods when the app isn’t running.")
+                Text("Checks for usage about every 15 minutes while the app is closed to help fill your usage history.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if BackgroundCollection.service.status == .requiresApproval {
                     Label(
-                        "Allow Codex Limits in System Settings → Login Items to enable background collection.",
+                        "Allow Codex Limits to run in the background in System Settings to enable these updates.",
                         systemImage: "exclamationmark.triangle"
                     )
                     .font(.caption)
@@ -66,22 +70,22 @@ struct SettingsView: View {
             }
 
             Section("History sync") {
-                Text("Keep usage history in a folder available on your other Macs.")
+                Text("Choose a shared folder to combine usage history from your Macs.")
                     .foregroundStyle(.secondary)
 
                 if let folderName = monitor.syncFolderName {
                     LabeledContent("Folder", value: folderName)
-                    Button("Stop Syncing") {
+                    Button("Stop syncing") {
                         Task { await monitor.stopHistorySync() }
                     }
                 } else {
-                    Button("Choose Folder…", action: chooseHistoryFolder)
+                    Button("Choose folder…", action: chooseHistoryFolder)
                 }
 
-                Text("Use this folder only on Macs signed in to the same Codex account.")
+                Text("Use the same Codex account on every Mac connected to this folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("Choose a private folder that isn’t shared with other people.")
+                Text("Choose a private folder that only you can access.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -110,7 +114,7 @@ struct SettingsView: View {
             loginItemError = nil
         } catch {
             launchAtLogin = SMAppService.mainApp.status == .enabled
-            loginItemError = "Couldn’t update the login setting."
+            loginItemError = "Couldn’t change whether Codex Limits opens at login. Try again."
         }
     }
 
@@ -125,7 +129,7 @@ struct SettingsView: View {
             backgroundCollectionError = nil
         } catch {
             collectInBackground = BackgroundCollection.service.status == .enabled
-            backgroundCollectionError = "Couldn’t update background collection."
+            backgroundCollectionError = "Couldn’t change background updates. Try again."
         }
     }
 
@@ -135,7 +139,7 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Choose"
+        panel.prompt = "Use this folder"
         guard panel.runModal() == .OK, let directory = panel.url else { return }
         Task { await monitor.connectHistoryFolder(directory) }
     }

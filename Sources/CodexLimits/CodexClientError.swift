@@ -17,15 +17,15 @@ enum CodexClientError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .cliNotFound:
-            "Codex CLI was not found. Install it with Homebrew, sign in, and try again."
+            "Codex CLI wasn’t found. Install it and sign in, then try again."
         case .invalidResponse:
-            "Codex returned data this app could not read. Update Codex CLI and try again."
+            "Couldn’t read the response from Codex. Try refreshing. If this continues, check for updates to Codex CLI and Codex Limits."
         case let .appServerError(message):
             Self.appServerMessage(message)
         case .mainLimitMissing:
-            "Codex did not return a usable limit. Make sure Codex CLI is signed in."
+            "Codex didn’t return usage-limit information. Check that Codex CLI is signed in, then refresh."
         case .timedOut:
-            "Codex took too long to respond. Try refreshing again."
+            "Codex didn’t respond in time. Refresh to try again."
         }
     }
 
@@ -41,10 +41,10 @@ enum CodexClientError: LocalizedError, Sendable {
     private static func appServerMessage(_ message: String) -> String {
         let detail = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !detail.isEmpty else {
-            return "Codex couldn’t load usage. Refresh to try again."
+            return "Couldn’t load Codex usage. Refresh to try again."
         }
         let hasTerminalPunctuation = detail.last.map { ".!?".contains($0) } ?? false
         let punctuation = hasTerminalPunctuation ? "" : "."
-        return "Codex couldn’t load usage: \(detail)\(punctuation) Refresh to try again."
+        return "Couldn’t load Codex usage. \(detail)\(punctuation) Refresh to try again."
     }
 }

@@ -45,8 +45,8 @@ final class BurndownTargetTests: XCTestCase {
         XCTAssertEqual(projection.last?.date, target.date)
         let message = StatusText.message(forecast: custom, remainingPercent: 60, fetchedAt: now,
                                          deadline: target.date, windowReset: window.resetsAt,
-                                         safetyBuffer: 3, targetName: "selected target")
-        XCTAssertTrue(message.contains("selected target"))
+                                         safetyBuffer: 3, targetName: "your pacing target")
+        XCTAssertTrue(message.contains("your pacing target"))
         XCTAssertFalse(message.contains("banked reset"))
     }
 }
