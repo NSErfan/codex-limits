@@ -34,6 +34,7 @@ rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$bin_dir/CodexLimits" "$app_dir/Contents/MacOS/CodexLimits"
 cp Resources/Info.plist "$app_dir/Contents/Info.plist"
+cp Resources/AppIcon.icns "$app_dir/Contents/Resources/AppIcon.icns"
 mkdir -p "$app_dir/Contents/Library/LaunchAgents"
 cp Resources/com.github.nserfan.CodexLimits.collector.plist \
     "$app_dir/Contents/Library/LaunchAgents/"
