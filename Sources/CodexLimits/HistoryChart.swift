@@ -104,6 +104,7 @@ struct HistoryChart: View {
         default: nil
         }
         return Chart {
+            CurrentDayHighlight(range: range)
             HistoryChartPlot(data: data, accent: accent)
 
             HistoryResetMarks(resets: data.series.resets, accent: accent, selectedReset: hoveredReset)
@@ -147,6 +148,10 @@ struct HistoryChart: View {
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))
         .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
+                    .foregroundStyle(Color.primary.opacity(0.10))
+            }
             AxisMarks(values: .stride(by: .day, count: axisDayStride)) { value in
                 AxisValueLabel {
                     if let date = value.as(Date.self) {

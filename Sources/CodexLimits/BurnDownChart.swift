@@ -139,14 +139,15 @@ struct BurnDownChart: View {
     }
 
     private var xAxisDates: [Date] {
-        let step: TimeInterval = window.durationMinutes <= 24 * 60 ? 3_600 : 86_400
+        let calendar = Calendar.current
+        let component: Calendar.Component = window.durationMinutes <= 24 * 60 ? .hour : .day
         var dates: [Date] = []
-        var date = window.startsAt
-        while date < window.resetsAt {
-            dates.append(date)
-            date = date.addingTimeInterval(step)
+        guard var date = calendar.dateInterval(of: component, for: window.startsAt)?.start else { return [] }
+        while date <= window.resetsAt {
+            if date >= window.startsAt { dates.append(date) }
+            guard let next = calendar.date(byAdding: component, value: 1, to: date) else { break }
+            date = next
         }
-        dates.append(window.resetsAt)
         return dates
     }
 
@@ -209,6 +210,7 @@ struct BurnDownChart: View {
             .frame(height: 40)
 
             Chart {
+                CurrentDayHighlight(range: window.startsAt ... window.resetsAt)
                 ForEach([
                     BurnPoint(date: target.startsAt, remaining: target.remainingPercent(at: target.startsAt)),
                     BurnPoint(date: target.deadline, remaining: target.remainingPercent(at: target.deadline))
@@ -445,6 +447,8 @@ struct BurnDownChart: View {
             }
             .chartXAxis {
                 AxisMarks(values: xAxisDates) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
+                        .foregroundStyle(Color.primary.opacity(0.10))
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
                             if window.durationMinutes <= 24 * 60 {
