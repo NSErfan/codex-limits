@@ -24,23 +24,23 @@ struct WeeklyUsageChart: View {
                     AreaMark(
                         x: .value("Date", sample.date),
                         yStart: .value("Zero", 0),
-                        yEnd: .value("Remaining", sample.remainingPercent)
+                        yEnd: .value("Remaining allowance", sample.remainingPercent)
                     )
                     .foregroundStyle(UsageChartStyle.area(accent))
                     .interpolationMethod(.linear)
                     LineMark(
                         x: .value("Date", sample.date),
-                        y: .value("Remaining", sample.remainingPercent),
-                        series: .value("Series", "Actual")
+                        y: .value("Remaining allowance", sample.remainingPercent),
+                        series: .value("Series", "Usage so far")
                     )
                     .foregroundStyle(accent)
                     .lineStyle(UsageChartStyle.actualStroke)
                     .interpolationMethod(.linear)
                 }
-                PointMark(x: .value("Latest", snapshot.fetchedAt), y: .value("Remaining", window.remainingPercent))
+                PointMark(x: .value("Latest", snapshot.fetchedAt), y: .value("Remaining allowance", window.remainingPercent))
                     .foregroundStyle(accent.opacity(0.15))
                     .symbolSize(150)
-                PointMark(x: .value("Latest", snapshot.fetchedAt), y: .value("Remaining", window.remainingPercent))
+                PointMark(x: .value("Latest", snapshot.fetchedAt), y: .value("Remaining allowance", window.remainingPercent))
                     .foregroundStyle(accent)
                     .symbolSize(25)
             }
@@ -48,7 +48,7 @@ struct WeeklyUsageChart: View {
             .chartYScale(domain: 0 ... 100)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .accessibilityLabel("Weekly remaining usage, \(snapshot.samples.count) readings. Dashed line shows an even pace from 100 to zero percent at reset.")
+            .accessibilityLabel("Weekly remaining allowance, with \(snapshot.samples.count) readings. The dashed line shows an even pace from 100 percent at the start to zero at the scheduled reset.")
         }
     }
 }

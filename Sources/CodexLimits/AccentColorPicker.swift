@@ -52,10 +52,10 @@ struct AccentColorPicker: View {
                     ))
                 }
             ), supportsOpacity: false)
-            Text("Applies to the app, graphs, and both widgets. Automatic changes color with your remaining balance.")
+            Text("Used throughout the app, charts, and widgets. Automatic chooses a color based on your remaining allowance.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("Text and graph colors adjust for readability while keeping your chosen background tint.")
+            Text("Text and chart colors adjust for contrast while preserving your chosen background color.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let error = appearance.widgetError {

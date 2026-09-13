@@ -186,7 +186,7 @@ final class UsageMonitor: ObservableObject {
                 scheduleRecovery(afterFailedAttempt: recoveryAttempt)
             }
         } catch {
-            errorMessage = "Couldn’t read Codex usage. Try refreshing again."
+            errorMessage = "Couldn’t load Codex usage. Refresh to try again."
             scheduleRecovery(afterFailedAttempt: recoveryAttempt)
         }
     }
@@ -244,7 +244,7 @@ final class UsageMonitor: ObservableObject {
             configuredSyncDirectory = nil
             historyConnectionActive = false
             syncFolderName = nil
-            syncErrorMessage = "Couldn’t remember the history folder. Choose it again."
+            syncErrorMessage = "Couldn’t save access to the history folder. Choose it again."
         }
     }
 
@@ -320,7 +320,7 @@ final class UsageMonitor: ObservableObject {
             )
         } catch {
             defaults.removeObject(forKey: Self.historySyncBookmarkKey)
-            syncErrorMessage = "Couldn’t reopen the history folder. Choose it again."
+            syncErrorMessage = "Couldn’t access the history folder. Choose it again."
             return
         }
 
@@ -337,7 +337,7 @@ final class UsageMonitor: ObservableObject {
                 )
                 defaults.set(refreshed, forKey: Self.historySyncBookmarkKey)
             } catch {
-                syncErrorMessage = "Couldn’t update the saved history folder."
+                syncErrorMessage = "Couldn’t renew access to the history folder. Choose it again."
             }
         }
     }

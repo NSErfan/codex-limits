@@ -87,7 +87,7 @@ enum ForecastEngine {
         if !aheadOfTarget,
            safety < safetyBuffer || (previousStatus == .slowDown && safety < safetyBuffer + 1) {
             status = .slowDown
-        } else if expected > 8 || (previousStatus == .roomToUseMore && expected > 7) {
+        } else if expected > safetyBuffer + 5 || (previousStatus == .roomToUseMore && expected > safetyBuffer + 4) {
             status = .roomToUseMore
         } else {
             status = .onTrack

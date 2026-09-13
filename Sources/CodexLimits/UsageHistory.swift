@@ -53,10 +53,10 @@ actor UsageHistory {
             let hadCleanupErrors = try removeExpiredOwnFiles(from: localDirectory, coordinated: false)
             try add(legacySamples, to: localDirectory, installationID: installationID, coordinated: false)
             errorMessage = hadCleanupErrors
-                ? "Some usage history couldn’t be read."
+                ? "Some saved usage history couldn’t be loaded. Charts may be incomplete."
                 : nil
         } catch {
-            errorMessage = "Usage history couldn’t be saved."
+            errorMessage = "Couldn’t save usage history."
         }
         return state(fallback: legacySamples)
     }
@@ -74,7 +74,7 @@ actor UsageHistory {
             errorMessage = nil
         } catch {
             errorMessage = syncDirectory == nil
-                ? "Usage history couldn’t be saved."
+                ? "Couldn’t save usage history."
                 : message(for: error)
         }
         return state()
@@ -109,7 +109,7 @@ actor UsageHistory {
             let hadImportErrors = try importHistory(from: syncDirectory)
             try publishOwnHistory(to: syncDirectory)
             errorMessage = hadImportErrors
-                ? "Some synced history couldn’t be read."
+                ? "Couldn’t sync all usage history. Charts may be incomplete."
                 : nil
         } catch {
             errorMessage = message(for: error)
@@ -120,7 +120,7 @@ actor UsageHistory {
     private func state(fallback: [UsageSample] = []) -> State {
         let local = readAll(from: localDirectory)
         if local.hadError && errorMessage == nil {
-            errorMessage = "Some usage history couldn’t be read."
+            errorMessage = "Some saved usage history couldn’t be loaded. Charts may be incomplete."
         }
         let samples = local.hadError || errorMessage != nil
             ? normalized(local.samples + knownSamples + fallback)
@@ -474,11 +474,11 @@ actor UsageHistory {
         case HistoryError.invalidFolder:
             "Choose an empty folder or an existing Codex Limits history folder."
         case HistoryError.unsupportedFolderVersion:
-            "This history folder was created by a newer version of Codex Limits."
+            "Update Codex Limits to use this history folder. It was created by a newer version."
         case HistoryError.unavailableFolder:
-            "Sync paused — folder unavailable."
+            "History sync is paused because the folder is unavailable."
         default:
-            "Some synced history couldn’t be read."
+            "Couldn’t sync all usage history. Charts may be incomplete."
         }
     }
 }

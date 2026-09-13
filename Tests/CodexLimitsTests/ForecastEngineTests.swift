@@ -2,6 +2,40 @@ import XCTest
 @testable import CodexLimits
 
 final class ForecastEngineTests: XCTestCase {
+    func testSpareAllowanceThresholdFollowsReserveAndPreservesRecoveryMargin() {
+        let day: TimeInterval = 86_400
+        let now = Date(timeIntervalSince1970: 200 * day)
+        let reset = now.addingTimeInterval(3.5 * day)
+        let previousReset = now.addingTimeInterval(-3.5 * day)
+        let window = UsageWindow(remainingPercent: 60, resetsAt: reset, durationMinutes: 10_080)
+        let cases: [(headroom: Double, previous: PaceStatus?, expected: PaceStatus)] = [
+            (-1, nil, .onTrack),
+            (0, .roomToUseMore, .onTrack),
+            (3.9, .roomToUseMore, .onTrack),
+            (4.5, nil, .onTrack),
+            (4.5, .roomToUseMore, .roomToUseMore),
+            (5.1, nil, .roomToUseMore)
+        ]
+
+        for reserve in [1.0, 3, 10] {
+            for scenario in cases {
+                let expectedRemaining = reserve + scenario.headroom
+                let historicalRate = (30 - expectedRemaining) / 0.875
+                let samples = [
+                    UsageSample(observedAt: previousReset.addingTimeInterval(-day), remainingPercent: 100, resetsAt: previousReset),
+                    UsageSample(observedAt: previousReset, remainingPercent: 100 - historicalRate, resetsAt: previousReset)
+                ]
+                let forecast = ForecastEngine.evaluate(
+                    window: window, samples: samples, tokenHistory: [], safetyBuffer: reserve,
+                    now: now, previousStatus: scenario.previous
+                )
+
+                XCTAssertEqual(forecast.expectedRemainingAtReset, expectedRemaining, accuracy: 0.001)
+                XCTAssertEqual(forecast.status, scenario.expected, "Reserve: \(reserve), headroom: \(scenario.headroom)")
+            }
+        }
+    }
+
     func testFastPaceNeedsSlowingDown() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let reset = now.addingTimeInterval(2 * 86_400)

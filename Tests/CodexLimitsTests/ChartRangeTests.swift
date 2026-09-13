@@ -3,7 +3,7 @@ import XCTest
 
 final class ChartRangeTests: XCTestCase {
     func testTitles() {
-        XCTAssertEqual(ChartRange.window.title, "Window")
+        XCTAssertEqual(ChartRange.window.title, "Current period")
         XCTAssertEqual(ChartRange.week.title, "7 days")
         XCTAssertEqual(ChartRange.month.title, "30 days")
     }

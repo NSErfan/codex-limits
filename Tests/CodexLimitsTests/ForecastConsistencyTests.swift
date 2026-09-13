@@ -25,14 +25,14 @@ final class ForecastConsistencyTests: XCTestCase {
                                                         remainingAtDeadline: forecast.safetyRemainingAtReset)
         let message = StatusText.message(forecast: forecast, remainingPercent: 79, fetchedAt: now,
                                          deadline: deadline, windowReset: window.resetsAt, safetyBuffer: 3,
-                                         targetName: "selected target")
+                                         targetName: "your pacing target")
 
         XCTAssertEqual(forecast.status, .slowDown)
         XCTAssertEqual(expected.last, BurnPoint(date: deadline, remaining: 3))
         let exhaustion = try XCTUnwrap(conservative.last)
         XCTAssertEqual(exhaustion.remaining, 0)
         XCTAssertLessThan(exhaustion.date, deadline)
-        XCTAssertEqual(message, "Conservative forecast: your limit may run out 21 hours before the selected target.")
+        XCTAssertEqual(message, "With higher usage, your allowance could run out about 21 hours before your pacing target.")
     }
 
     func testStatusUsesTheDrawnTargetForEveryWindowLengthAndDeadline() {
@@ -80,7 +80,7 @@ final class ForecastConsistencyTests: XCTestCase {
                 try XCTUnwrap(BurndownTarget(date: date, window: window, now: now)).date
             }
             let targets: [(deadline: Date?, name: String?)] = [(nil, nil), (banked, nil)]
-                + custom.map { ($0, "selected target") }
+                + custom.map { ($0, "your pacing target") }
 
             for target in targets {
                 let deadline = target.deadline ?? window.resetsAt
@@ -95,7 +95,7 @@ final class ForecastConsistencyTests: XCTestCase {
                     let message = StatusText.message(forecast: forecast, remainingPercent: window.remainingPercent,
                                                      fetchedAt: now, deadline: deadline, windowReset: window.resetsAt,
                                                      safetyBuffer: reserve, targetName: target.name)
-                    let targetName = target.name ?? (target.deadline == nil ? "reset" : "banked reset expiry")
+                    let targetName = target.name ?? (target.deadline == nil ? "the scheduled reset" : "the banked reset’s expiry")
 
                     XCTAssertEqual(points.first, BurnPoint(date: now, remaining: 40))
                     XCTAssertGreaterThan(endpoint.date, now)
@@ -104,11 +104,11 @@ final class ForecastConsistencyTests: XCTestCase {
                     if forecast.status == .slowDown, endpoint.date < deadline {
                         XCTAssertEqual(endpoint.remaining, 0)
                         let early = StatusText.duration(deadline.timeIntervalSince(endpoint.date))
-                        XCTAssertEqual(message, "Conservative forecast: your limit may run out \(early) before the \(targetName).")
+                        XCTAssertEqual(message, "With higher usage, your allowance could run out about \(early) before \(targetName).")
                     } else if forecast.status == .slowDown {
                         XCTAssertEqual(endpoint.date, deadline)
-                        XCTAssertTrue(message.contains("conservative forecast"))
-                        XCTAssertTrue(message.contains("\(Int(reserve))% buffer"))
+                        XCTAssertTrue(message.contains("With higher usage"))
+                        XCTAssertTrue(message.contains("\(Int(reserve))% reserve"))
                     } else {
                         XCTAssertEqual(endpoint.date, deadline)
                         XCTAssertGreaterThanOrEqual(endpoint.remaining, reserve)

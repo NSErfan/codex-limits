@@ -108,6 +108,17 @@ enum MenuPreviewRenderer {
         .padding(24).background(Color.gray.opacity(0.15))
         try render(settingsPreview, to: output.appendingPathComponent("accent-settings.png"))
 
+        let targetPicker = HStack(alignment: .top, spacing: 24) {
+            ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                ForecastTargetPicker(window: window, initialDate: now.addingTimeInterval(86_400),
+                                     onCancel: {}, onSelect: { _ in }, onReset: {})
+                    .environment(\.colorScheme, scheme)
+                    .background(scheme == .dark ? Color(white: 0.12) : Color.white)
+            }
+        }
+        .padding(24).background(Color.gray.opacity(0.15))
+        try render(targetPicker, to: output.appendingPathComponent("pacing-target.png"))
+
         let activityEvents = (0 ..< 400).map { index in
             let model = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna"][index % 3]
             let effort = ["high", "medium", "low"][(index / 3) % 3]
@@ -157,12 +168,12 @@ enum MenuPreviewRenderer {
         let detailStyles = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
                 VStack(spacing: 14) {
-                    PaceStatusView(status: .slowDown, message: "Conservative forecast: your limit may run out 5 days before the reset.", color: UsageChartStyle.accent(for: 0, scheme: scheme))
-                    PaceStatusView(status: .onTrack, message: "You’re on track to have 15% left at the reset.", color: UsageChartStyle.accent(for: 100, scheme: scheme))
+                    PaceStatusView(status: .slowDown, message: "With higher usage, your allowance could run out about 5 days before the scheduled reset.", color: UsageChartStyle.accent(for: 0, scheme: scheme))
+                    PaceStatusView(status: .onTrack, message: "Expected to have about 15% left at the scheduled reset.", color: UsageChartStyle.accent(for: 100, scheme: scheme))
                     ChartHoverReadout(title: "97% remaining", detail: "Sep 6, 2026 at 5:52 AM")
-                    ChartHoverReadout(title: "Reset", detail: "Sep 13 at 5:52 AM", symbol: "arrow.counterclockwise")
-                    ChartHoverReadout(title: "≈72% remaining", detail: "Sep 6 at 5:52 AM", hint: "Estimated · No sample here")
-                    ChartHoverReadout(title: "Banked reset", detail: "Expires Sep 21 at 8:14 AM", symbol: "arrow.counterclockwise", hint: "Click to pace to this reset")
+                    ChartHoverReadout(title: "Last reading before reset: 97%", detail: "Sep 13 at 5:52 AM", symbol: "arrow.counterclockwise", hint: "Recorded Sep 13 at 5:37 AM")
+                    ChartHoverReadout(title: "About 72% remaining", detail: "Sep 6 at 5:52 AM", hint: "Estimated between readings.")
+                    ChartHoverReadout(title: "Banked reset", detail: "Expires Sep 21 at 8:14 AM", symbol: "arrow.counterclockwise", hint: "Click to use this expiry as your pacing target.")
                 }
                 .padding(20).frame(width: 460)
                 .background { UsageSurfaceBackground(remaining: 68) }
@@ -251,7 +262,7 @@ enum MenuPreviewRenderer {
                 status: forecast.status,
                 message: StatusText.message(forecast: forecast, remainingPercent: window.remainingPercent,
                                             fetchedAt: now, deadline: deadline, windowReset: window.resetsAt,
-                                            safetyBuffer: reserve, targetName: isCustom ? "selected target" : nil),
+                                            safetyBuffer: reserve, targetName: isCustom ? "your pacing target" : nil),
                 color: UsageChartStyle.accent(for: forecast.status == .slowDown ? 0 : 100, scheme: scheme)
             )
             BurnDownChart(window: window, samples: samples.filter { $0.resetsAt == window.resetsAt },

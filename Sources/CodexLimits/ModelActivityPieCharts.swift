@@ -16,18 +16,18 @@ struct ModelActivityPieCharts: View {
     var body: some View {
         let data = breakdown
         VStack(alignment: .leading, spacing: 20) {
-            Text("Selected models and efforts in this \(isRange ? "range" : "interval"). Choose a model to see its reasoning efforts.")
+            Text("Token breakdown for the selected \(isRange ? "period" : "interval"). Choose a model to see its reasoning-effort breakdown.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 28) {
                 pie(title: "Models", slices: data.models, isModel: true)
                 Divider()
                 if let model = selectedModel, data.models.contains(where: { $0.name == model }) {
-                    pie(title: model + " · Efforts", slices: data.efforts(for: model), isModel: false)
+                    pie(title: model + " · Reasoning effort", slices: data.efforts(for: model), isModel: false)
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "chart.pie").font(.system(size: 32, weight: .light))
                         Text("Choose a model").font(.system(size: 14, weight: .medium))
-                        Text("Click a slice or a model below the chart to explore how its tokens were spent.")
+                        Text("Click a chart segment or model name to see its reasoning-effort breakdown.")
                             .font(.system(size: 12)).multilineTextAlignment(.center)
                     }
                     .foregroundStyle(.secondary)
@@ -50,7 +50,7 @@ struct ModelActivityPieCharts: View {
         return VStack(alignment: .leading, spacing: 14) {
             Text(title).font(.system(size: 14, weight: .semibold)).textSelection(.enabled)
             if total == 0 {
-                Text("No \(metric.rawValue.lowercased()) recorded.")
+                Text("No \(metric.rawValue.lowercased()) recorded for this selection.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 190)
             } else {
@@ -59,7 +59,7 @@ struct ModelActivityPieCharts: View {
                         .cornerRadius(3)
                         .foregroundStyle(categoryColor(slice.name, isModel: isModel))
                         .opacity(isModel && selectedModel != nil && selectedModel != slice.name ? 0.55 : 1)
-                        .accessibilityLabel(isModel ? slice.name : slice.name.capitalized)
+                        .accessibilityLabel(isModel ? slice.name : ReasoningEffortText.description(slice.name))
                         .accessibilityValue("\(slice.tokens) tokens, \(share(slice.tokens, total: total))")
                 }
                 .chartAngleSelection(value: isModel ? $selectedAngle : .constant(nil))
@@ -83,7 +83,7 @@ struct ModelActivityPieCharts: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(slice.name), \(slice.tokens) tokens, \(share(slice.tokens, total: total)). Show efforts")
+                    .accessibilityLabel("\(slice.name): \(slice.tokens) tokens, \(share(slice.tokens, total: total)) of this breakdown. Show reasoning efforts.")
                     .accessibilityAddTraits(selectedModel == slice.name ? .isSelected : [])
                 } else {
                     legend(slice, total: total, isModel: false).padding(7)
@@ -97,7 +97,7 @@ struct ModelActivityPieCharts: View {
         HStack(spacing: 8) {
             Circle().fill(categoryColor(slice.name, isModel: isModel)).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 3) {
-                Text(isModel ? slice.name : slice.name.capitalized).font(.system(size: 12, weight: .medium))
+                Text(isModel ? slice.name : ReasoningEffortText.name(slice.name)).font(.system(size: 12, weight: .medium))
                 Text("\(slice.tokens.formatted()) tokens").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)

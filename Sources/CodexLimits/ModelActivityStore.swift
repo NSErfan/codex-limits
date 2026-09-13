@@ -54,12 +54,12 @@ final class ModelActivityStore: ObservableObject {
             filesRead = snapshot.filesRead
             anchor = now
             lastUpdated = now
-            notice = !snapshot.folderExists ? "No session folders found at \(home.path)."
-                : snapshot.issueCount > 0 ? "Some local records could not be read. Activity coverage may be incomplete." : nil
+            notice = !snapshot.folderExists ? "No Codex session records found at \(home.path)."
+                : snapshot.issueCount > 0 ? "Some local activity records couldn’t be read. Totals may be incomplete." : nil
             updateOptions()
             rebuild()
         } catch is CancellationError { }
-        catch { notice = "Local activity could not be read. Try refreshing again." }
+        catch { notice = "Couldn’t load local activity. Refresh to try again." }
     }
 
     func updateHistory(_ samples: [UsageSample]) {

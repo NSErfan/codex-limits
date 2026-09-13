@@ -173,26 +173,26 @@ enum BankedResetPresentation {
     }
 
     static func labelParts(for credits: [ResetCredit]) -> (head: String, extra: String?) {
-        let head = credits.compactMap(\.expiresAt).min().map { dateText($0) } ?? "No expiry"
+        let head = credits.compactMap(\.expiresAt).min().map { dateText($0) } ?? "Expiry unknown"
         let extraCount = credits.count - 1
         return (head, extraCount > 0 ? "+\(extraCount) more" : nil)
     }
 
     static func itemText(_ credit: ResetCredit, windowReset: Date?) -> String {
         let title = credit.title ?? "Banked reset"
-        guard let expiresAt = credit.expiresAt else { return "\(title) · no expiry" }
-        let suffix = windowReset.map { expiresAt >= $0 ? " · after the next reset" : "" } ?? ""
-        return "\(title) · expires \(dateText(expiresAt))\(suffix)"
+        guard let expiresAt = credit.expiresAt else { return "\(title) · Expiry unknown" }
+        let suffix = windowReset.map { expiresAt >= $0 ? " · At or after the scheduled reset" : "" } ?? ""
+        return "\(title) · Expires \(dateText(expiresAt))\(suffix)"
     }
 
     static func hint(hasSelection: Bool) -> String {
         hasSelection
-            ? "Pick the checked reset again to pace to the window reset."
-            : "Pick a banked reset to pace toward its expiry."
+            ? "Select the checked reset again to use the scheduled reset as your target."
+            : "Choose a banked reset’s expiry as your pacing target."
     }
 
     static func dateText(_ date: Date?) -> String {
-        guard let date else { return "no expiry" }
+        guard let date else { return "Expiry unknown" }
         return date.formatted(
             .dateTime.month(.abbreviated).day().hour().minute()
                 .locale(Locale(identifier: "en_US"))
@@ -203,7 +203,7 @@ enum BankedResetPresentation {
 enum StatusText {
     static func title(_ status: PaceStatus) -> String {
         switch status {
-        case .slowDown: "Slow down"
+        case .slowDown: "Consider slowing down"
         case .onTrack: "On track"
         case .roomToUseMore: "Room to use more"
         }
@@ -218,20 +218,23 @@ enum StatusText {
         safetyBuffer: Double,
         targetName: String? = nil
     ) -> String {
-        let target = targetName ?? (deadline == windowReset ? "reset" : "banked reset expiry")
+        let target = targetName ?? (deadline == windowReset ? "the scheduled reset" : "the banked reset’s expiry")
         switch forecast.status {
         case .slowDown:
             let timeLeft = deadline.timeIntervalSince(fetchedAt)
             let timeToEmpty = remainingPercent / max(forecast.safetyPercentPerDay, 0.01) * 86_400
             let early = max(timeLeft - timeToEmpty, 0)
-            return early > 0
-                ? "Conservative forecast: your limit may run out \(duration(early)) before the \(target)."
-                : "The conservative forecast is too close to the \(Int(safetyBuffer.rounded()))% buffer at the \(target)."
+            if early > 0 {
+                return "With higher usage, your allowance could run out about \(duration(early)) before \(target)."
+            }
+            if forecast.safetyRemainingAtReset < safetyBuffer {
+                return "With higher usage, you may have less than your \(Int(safetyBuffer.rounded()))% reserve left at \(target)."
+            }
+            return "With higher usage, you may finish close to your \(Int(safetyBuffer.rounded()))% reserve at \(target)."
         case .onTrack:
-            return "You’re on track to have \(Int(forecast.expectedRemainingAtReset.rounded()))% left at the \(target)."
+            return "Expected to have about \(Int(forecast.expectedRemainingAtReset.rounded()))% left at \(target)."
         case .roomToUseMore:
-            let room = max(forecast.expectedRemainingAtReset - safetyBuffer, 0)
-            return "You can use about \(Int(room.rounded()))% more before the \(target)."
+            return "Expected to have about \(Int(forecast.expectedRemainingAtReset.rounded()))% left at \(target). Your reserve is \(Int(safetyBuffer.rounded()))%."
         }
     }
 

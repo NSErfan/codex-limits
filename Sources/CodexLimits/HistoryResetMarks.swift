@@ -41,10 +41,10 @@ struct HistoryResetMarks: ChartContent {
                     .background(.regularMaterial, in: Capsule())
                     .overlay { Capsule().strokeBorder(accent.opacity(0.2), lineWidth: 0.5) }
                     .fixedSize()
-                    .help("Last recorded before reset: \(Int(reset.before.remainingPercent.rounded()))% remaining at \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())). Reset: \(reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())).")
+                    .help("Last reading before reset: \(Int(reset.before.remainingPercent.rounded()))% remaining, recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())). The reset was at \(reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute())).")
                 }
-                .accessibilityLabel("Last recorded before reset")
-                .accessibilityValue("\(Int(reset.before.remainingPercent.rounded())) percent remaining, recorded \(reset.before.date.formatted()). Reset \(reset.date.formatted()).")
+                .accessibilityLabel("Last reading before reset")
+                .accessibilityValue("Last reading before reset: \(Int(reset.before.remainingPercent.rounded())) percent remaining, recorded \(reset.before.date.formatted()). Reset at \(reset.date.formatted()).")
         }
     }
 }

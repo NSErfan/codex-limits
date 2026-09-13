@@ -20,17 +20,17 @@ struct ForecastTargetPicker: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 14) {
-                Text("Burndown target").font(.headline)
+                Text("Pacing target").font(.headline)
                 if context.date < window.resetsAt {
-                    DatePicker("Target time", selection: $date,
+                    DatePicker("Target date and time", selection: $date,
                                in: context.date ... window.resetsAt,
                                displayedComponents: [.date, .hourAndMinute])
                         .datePickerStyle(.field)
-                    Text("\(TimeZone.current.identifier) · Pace your remaining allowance toward a future time before the window resets.")
+                    Text("Choose when you want to reach your reserve. This changes your forecast, not your scheduled reset. Times shown in \(TimeZone.current.identifier).")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("This window has ended. Refresh usage to choose a new target.")
+                    Text("This usage period has ended. Refresh usage to set a new pacing target.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

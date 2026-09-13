@@ -193,7 +193,7 @@ final class HistorySeriesBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             series.accessibilitySummary(days: 7),
-            "Remaining percentage over the last 7 days, most recently 70 percent. 1 gap is shown as an estimated connector."
+            "Remaining allowance over the last 7 days. Latest reading: 70 percent. 1 gap between readings is estimated."
         )
     }
 
@@ -206,7 +206,7 @@ final class HistorySeriesBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             series.accessibilitySummary(days: 30),
-            "No usage history in the last 30 days."
+            "No usage readings recorded in the last 30 days."
         )
     }
 

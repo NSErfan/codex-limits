@@ -45,7 +45,7 @@ public struct WeeklyPercentageView: View {
         }
         .padding(16)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Codex weekly limit")
+        .accessibilityLabel("Weekly Codex allowance")
         .accessibilityValue(accessibilityValue)
     }
 
@@ -56,16 +56,16 @@ public struct WeeklyPercentageView: View {
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var caption: String {
         switch status {
-        case .current: "Weekly remaining"
-        case .stale: "Weekly · last known"
-        case .expired: "Reset reached · refresh app"
-        case .unavailable: "Open app to get started"
+        case .current: "Weekly allowance left"
+        case .stale: "Weekly · Last reading"
+        case .expired: "Reset time passed · Open app"
+        case .unavailable: "Open Codex Limits to start"
         }
     }
     private var accessibilityValue: String {
         if let remaining {
-            let pace = snapshot?.pace(at: date).map { ", \($0.title)" } ?? ""
-            return "\(Int(remaining.rounded())) percent remaining\(status == .stale ? ", last known reading" : "")\(pace)"
+            let pace = snapshot?.pace(at: date).map { " \($0.title)." } ?? ""
+            return "Last reading: \(Int(remaining.rounded())) percent remaining.\(pace)"
         }
         return caption
     }

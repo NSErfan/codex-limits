@@ -17,7 +17,7 @@ struct CurrentDayHighlight: ChartContent {
                     yEnd: .value("Full", 100)
                 )
                 .foregroundStyle(Color.green.opacity(0.08))
-                .accessibilityLabel("Today")
+                .accessibilityLabel("Current calendar day")
             }
         }
     }

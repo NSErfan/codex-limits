@@ -40,8 +40,8 @@ struct ModelActivityChart: View {
         }
         .frame(height: 170)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Model activity timeline")
-        .accessibilityValue("\(visibleTimeline.matchingIntervals) matching intervals out of \(visibleTimeline.activeIntervals) active intervals")
+        .accessibilityLabel("Recorded tokens by model over time")
+        .accessibilityValue("Activity matches your filters in \(visibleTimeline.matchingIntervals) of \(visibleTimeline.activeIntervals) active intervals.")
         .accessibilityAdjustableAction { direction in
             let current = visibleTimeline.interval(at: selectedDate)
             let index = visibleTimeline.intervals.firstIndex { $0.id == current?.id } ?? 0

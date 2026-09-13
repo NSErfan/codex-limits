@@ -14,8 +14,8 @@ struct WeeklyGraphWidget: Widget {
                 }
                 .environment(\.usageAccent, entry.accent)
         }
-        .configurationDisplayName("Weekly Graph")
-        .description("Your weekly balance and usage curve, with an even-pace guide to reset.")
+        .configurationDisplayName("Weekly usage chart")
+        .description("Track your remaining weekly allowance against an even pace to the scheduled reset.")
         .supportedFamilies([.systemMedium])
         .contentMarginsDisabled()
     }

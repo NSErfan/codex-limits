@@ -40,7 +40,7 @@ struct HistoryChart: View {
         VStack(alignment: .leading, spacing: 3) {
             readout(selection: selection)
             if data.series.isEmpty {
-                Text("No history yet")
+                Text("No usage history recorded yet.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 190)
             } else {
@@ -56,16 +56,16 @@ struct HistoryChart: View {
         Group {
             if case let .reset(reset) = selection {
                 ChartHoverReadout(
-                    title: "\(Int(reset.before.remainingPercent.rounded()))% before reset",
+                    title: "Last reading before reset: \(Int(reset.before.remainingPercent.rounded()))%",
                     detail: reset.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
                     symbol: "arrow.counterclockwise",
-                    hint: "Last recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
+                    hint: "Recorded \(reset.before.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
                 )
             } else if case let .estimated(point) = selection {
                 ChartHoverReadout(
-                    title: "≈\(Int(point.remainingPercent.rounded()))% remaining",
+                    title: "About \(Int(point.remainingPercent.rounded()))% remaining",
                     detail: point.date.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
-                    hint: "Estimated · No sample here"
+                    hint: "Estimated between readings."
                 )
             } else if case let .point(point) = selection {
                 ChartHoverReadout(
@@ -85,7 +85,7 @@ struct HistoryChart: View {
                                         .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
                                 }
                                 .frame(width: 12, height: 8)
-                            Text("No samples")
+                            Text("Missing readings")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -116,17 +116,17 @@ struct HistoryChart: View {
 
                 PointMark(
                     x: .value("Hovered", hovered.date),
-                    y: .value("Remaining", hovered.remainingPercent)
+                    y: .value("Remaining allowance", hovered.remainingPercent)
                 )
                 .foregroundStyle(accent)
                 .symbolSize(55)
             }
 
             if let latest = data.series.latestPoint {
-                PointMark(x: .value("Latest", latest.date), y: .value("Remaining", latest.remainingPercent))
+                PointMark(x: .value("Latest", latest.date), y: .value("Remaining allowance", latest.remainingPercent))
                     .foregroundStyle(accent.opacity(0.15))
                     .symbolSize(190)
-                PointMark(x: .value("Latest", latest.date), y: .value("Remaining", latest.remainingPercent))
+                PointMark(x: .value("Latest", latest.date), y: .value("Remaining allowance", latest.remainingPercent))
                     .foregroundStyle(accent)
                     .symbolSize(35)
             }
