@@ -1,6 +1,6 @@
 import Foundation
 
-struct BurndownTarget: Hashable {
+struct BurndownTarget: Codable, Hashable {
     let date: Date
     private let windowReset: Date
 

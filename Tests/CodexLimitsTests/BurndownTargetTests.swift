@@ -24,6 +24,18 @@ final class BurndownTargetTests: XCTestCase {
         XCTAssertFalse(target.isValid(in: resetWindow, now: now))
     }
 
+    func testSavedTargetPreservesItsDateAndWindowValidation() throws {
+        let target = try XCTUnwrap(BurndownTarget(date: now.addingTimeInterval(86_400), window: window, now: now))
+        let restored = try JSONDecoder().decode(BurndownTarget.self, from: JSONEncoder().encode(target))
+
+        XCTAssertEqual(restored, target)
+        XCTAssertTrue(restored.isValid(in: window, now: now.addingTimeInterval(60)))
+        XCTAssertFalse(restored.isValid(in: window, now: target.date))
+
+        let resetWindow = UsageWindow(remainingPercent: 100, resetsAt: now.addingTimeInterval(7 * 86_400), durationMinutes: 10_080)
+        XCTAssertFalse(restored.isValid(in: resetWindow, now: now))
+    }
+
     func testFutureTargetChangesTheForecastHorizonWithoutChangingObservedUsage() throws {
         let target = try XCTUnwrap(BurndownTarget(date: now.addingTimeInterval(86_400), window: window, now: now))
         let samples = [

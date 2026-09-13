@@ -8,7 +8,7 @@ struct MenuContentView: View {
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
     @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
-    @State private var burndownTarget: BurndownTarget?
+    @AppStorage("burndownTarget") private var savedBurndownTarget = Data()
     @State private var datePickerSelection: Date?
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
@@ -301,6 +301,13 @@ struct MenuContentView: View {
                     datePickerSelection = nil
                 })
             }
+        }
+    }
+
+    private var burndownTarget: BurndownTarget? {
+        get { try? JSONDecoder().decode(BurndownTarget.self, from: savedBurndownTarget) }
+        nonmutating set {
+            savedBurndownTarget = newValue.flatMap { try? JSONEncoder().encode($0) } ?? Data()
         }
     }
 

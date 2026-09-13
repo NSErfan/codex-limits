@@ -76,7 +76,9 @@ clear the target. **Option-click Window** also clears an active target; when no
 custom target is set, it opens the precise date picker. All times are local.
 
 Switching to **7 days** or **30 days** keeps the custom target, including when you
-return to **Window**. Choosing a banked reset clears it. The target expires at
+return to **Window**. Custom pacing targets are saved immediately and restored
+after quitting, force-quitting, or relaunching the app. Choosing a banked reset
+or returning to the scheduled reset clears the saved target. The target expires at
 the selected time and is not reused in a different limit window. This is a local
 pacing preview; it does not change your actual reset, redeem credits, or change
 widget pacing.
