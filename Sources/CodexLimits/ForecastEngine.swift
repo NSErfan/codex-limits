@@ -80,12 +80,8 @@ enum ForecastEngine {
         // Being at or above the target line means the pace so far is fine,
         // whatever past windows looked like; a projection built from history
         // must not raise the alarm on its own.
-        let targetSpan = target.timeIntervalSince(window.startsAt)
-        let elapsedFraction = targetSpan > 0
-            ? min(max(now.timeIntervalSince(window.startsAt) / targetSpan, 0), 1)
-            : 1
-        let onPaceRemaining = 100 - (100 - safetyBuffer) * elapsedFraction
-        let aheadOfTarget = window.remainingPercent >= onPaceRemaining
+        let paceTarget = PaceTarget(startsAt: window.startsAt, deadline: target, reservePercent: safetyBuffer)
+        let aheadOfTarget = window.remainingPercent >= paceTarget.remainingPercent(at: now)
 
         let status: PaceStatus
         if !aheadOfTarget,

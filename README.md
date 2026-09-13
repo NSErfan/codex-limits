@@ -45,13 +45,14 @@ Desktop widgets always show the weekly limit, so their percentage can differ fro
 
 Choose **Window** for the current limit's forecast:
 
-- **Target** runs from 100% to empty at the pacing deadline.
+- **Target** runs from 100% to the configured safety buffer at the pacing deadline. Its legend shows the reserved percentage.
 - **Actual** shows recorded percentage samples. Before those cover the window, daily token totals can estimate the earlier part of the curve.
-- **Current** projects a blend of recent, current-window, and historical use toward the pacing deadline, or until the balance reaches zero.
+- **Expected** projects a blend of recent, current-window, and historical use toward the pacing deadline, or until the balance reaches zero.
+- **Conservative** projects the faster of the current-use and historical rates with a 20% margin. The **Slow down** warning names this forecast, and any early-exhaustion time matches its endpoint.
 - **Today** projects today's observed pace to the scheduled window reset. It appears when the app can measure consumption today and excludes the observed idle period before usage began.
 - **Historical** projects the pace from earlier usage toward the pacing deadline.
 
-Suggested pace reserves a safety buffer, 3% by default, which you can change in Settings. The drawn **Target** line ends at zero; the buffer affects the recommendation and status calculation.
+The target line, suggested pace, and status calculation use the same safety buffer, 3% by default, which you can change in Settings. **Slow down** appears when the recorded balance is below the target line and the conservative forecast leaves too little margin. The expected forecast can still reach the deadline with usage remaining; the conservative line shows why the warning appears.
 
 In **Settings → Appearance**, choose an accent preset or a custom color for the app, graphs, and both widgets. Presets adapt to light and dark appearance. Foreground colors adjust for readability, including black and white custom colors, while the picker and background tint retain your selection. **Automatic** keeps the balance-based mint, amber, and coral colors; warning text retains its warning color with any selection. Changes are saved locally and request a widget refresh, which macOS schedules.
 
@@ -65,7 +66,7 @@ When Codex reports banked resets, select an eligible reset from the **Banked res
 Option-click the active target's vertical marker to clear it and return to the
 scheduled reset. Option-click another future time to move the target.
 The target must be ahead of now and within the current limit window. The target
-line, current and historical projections, status, and suggested pace update from
+line, expected, conservative, and historical projections, status, and suggested pace update from
 your latest recorded usage. The full window remains visible; the Today projection
 continues to show the scheduled reset.
 
@@ -311,6 +312,11 @@ swift test
 ```
 
 The tests use synthetic usage data. Do not commit exported account data or local app state as fixtures.
+
+For forecast visual checks, run `PREVIEW_FORECASTS_ONLY=1 Scripts/render-menu-previews.sh`.
+It renders the production warning and chart for weekly and five-hour windows with
+scheduled, custom, banked-reset, and imminent targets in light and dark appearance.
+The images use synthetic data and are saved under `.build/menu-previews/`.
 
 For manual scrolling checks, run `Scripts/run-history-scroll-preview.sh`. It opens
 the production 7-day chart in a separate window with a month of synthetic readings,

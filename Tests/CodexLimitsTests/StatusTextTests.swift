@@ -40,7 +40,7 @@ final class StatusTextTests: XCTestCase {
             safetyBuffer: 3
         )
 
-        XCTAssertEqual(message, "At this pace, your limit may run out 5 days before the reset.")
+        XCTAssertEqual(message, "Conservative forecast: your limit may run out 5 days before the reset.")
     }
 
     func testSlowDownMessageAgainstBankedExpiryNamesTheTarget() {
@@ -58,7 +58,7 @@ final class StatusTextTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "At this pace, your limit may run out 5 hours before the banked reset expiry."
+            "Conservative forecast: your limit may run out 5 hours before the banked reset expiry."
         )
     }
 
@@ -74,7 +74,22 @@ final class StatusTextTests: XCTestCase {
             safetyBuffer: 3
         )
 
-        XCTAssertEqual(message, "Your current pace is too close to the limit.")
+        XCTAssertEqual(message, "The conservative forecast is too close to the 3% buffer at the reset.")
+    }
+
+    func testRecoveryWarningNamesConfiguredBufferAndCustomTarget() {
+        let deadline = fetchedAt.addingTimeInterval(day)
+        let message = StatusText.message(
+            forecast: forecast(status: .slowDown, safetyRate: 35.5),
+            remainingPercent: 46,
+            fetchedAt: fetchedAt,
+            deadline: deadline,
+            windowReset: deadline.addingTimeInterval(day),
+            safetyBuffer: 10,
+            targetName: "selected target"
+        )
+
+        XCTAssertEqual(message, "The conservative forecast is too close to the 10% buffer at the selected target.")
     }
 
     func testOnTrackAndRoomMessages() {

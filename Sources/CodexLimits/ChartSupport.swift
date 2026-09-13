@@ -225,8 +225,8 @@ enum StatusText {
             let timeToEmpty = remainingPercent / max(forecast.safetyPercentPerDay, 0.01) * 86_400
             let early = max(timeLeft - timeToEmpty, 0)
             return early > 0
-                ? "At this pace, your limit may run out \(duration(early)) before the \(target)."
-                : "Your current pace is too close to the limit."
+                ? "Conservative forecast: your limit may run out \(duration(early)) before the \(target)."
+                : "The conservative forecast is too close to the \(Int(safetyBuffer.rounded()))% buffer at the \(target)."
         case .onTrack:
             return "You’re on track to have \(Int(forecast.expectedRemainingAtReset.rounded()))% left at the \(target)."
         case .roomToUseMore:

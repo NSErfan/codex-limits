@@ -10,6 +10,8 @@ enum MenuPreviewRenderer {
         let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let now = Date()
+        try renderForecasts(at: now, to: output)
+        if ProcessInfo.processInfo.environment["PREVIEW_FORECASTS_ONLY"] == "1" { return }
         let suite = "MenuPreviewRenderer.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
@@ -155,7 +157,7 @@ enum MenuPreviewRenderer {
         let detailStyles = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
                 VStack(spacing: 14) {
-                    PaceStatusView(status: .slowDown, message: "At this pace, your limit may run out 5 days before the reset.", color: UsageChartStyle.accent(for: 0, scheme: scheme))
+                    PaceStatusView(status: .slowDown, message: "Conservative forecast: your limit may run out 5 days before the reset.", color: UsageChartStyle.accent(for: 0, scheme: scheme))
                     PaceStatusView(status: .onTrack, message: "You’re on track to have 15% left at the reset.", color: UsageChartStyle.accent(for: 100, scheme: scheme))
                     ChartHoverReadout(title: "97% remaining", detail: "Sep 6, 2026 at 5:52 AM")
                     ChartHoverReadout(title: "Reset", detail: "Sep 13 at 5:52 AM", symbol: "arrow.counterclockwise")
@@ -205,6 +207,81 @@ enum MenuPreviewRenderer {
 
     private struct ActivityHistoryDay: Decodable {
         let samples: [UsageSample]
+    }
+
+    @MainActor private static func renderForecasts(at now: Date, to output: URL) throws {
+        let windows = [
+            UsageWindow(remainingPercent: 79, resetsAt: now.addingTimeInterval(6 * 86_400), durationMinutes: 10_080),
+            UsageWindow(remainingPercent: 40, resetsAt: now.addingTimeInterval(4 * 3_600), durationMinutes: 300)
+        ]
+        for window in windows {
+            let timeLeft = window.resetsAt.timeIntervalSince(now)
+            let targets: [(name: String, date: Date)] = [
+                ("scheduled", window.resetsAt),
+                ("custom", now.addingTimeInterval(timeLeft * 2 / 3)),
+                ("banked", now.addingTimeInterval(timeLeft / 2)),
+                ("imminent", now.addingTimeInterval(60))
+            ]
+            for target in targets {
+                let credit: ResetCredit? = target.name == "banked"
+                    ? .init(id: "preview-credit", title: "Banked reset", expiresAt: target.date) : nil
+                let previews = HStack(alignment: .top, spacing: 24) {
+                    ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                        forecastPreview(window: window, now: now, deadline: target.date, credit: credit, scheme: scheme)
+                    }
+                }
+                .padding(24).background(Color.gray.opacity(0.15))
+                try render(previews, to: output.appendingPathComponent("forecast-\(window.durationMinutes)-\(target.name).png"))
+            }
+        }
+    }
+
+    @MainActor private static func forecastPreview(
+        window: UsageWindow, now: Date, deadline: Date, credit: ResetCredit?, scheme: ColorScheme
+    ) -> some View {
+        let samples = forecastSamples(window: window, now: now)
+        let reserve = 3.0
+        let forecast = ForecastEngine.evaluate(window: window, samples: samples, tokenHistory: [],
+                                               safetyBuffer: reserve, now: now, previousStatus: nil, deadline: deadline)
+        let isCustom = credit == nil && deadline != window.resetsAt
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("\(Int(window.remainingPercent))% remaining")
+                .font(.system(size: 28, weight: .medium, design: .rounded))
+            PaceStatusView(
+                status: forecast.status,
+                message: StatusText.message(forecast: forecast, remainingPercent: window.remainingPercent,
+                                            fetchedAt: now, deadline: deadline, windowReset: window.resetsAt,
+                                            safetyBuffer: reserve, targetName: isCustom ? "selected target" : nil),
+                color: UsageChartStyle.accent(for: forecast.status == .slowDown ? 0 : 100, scheme: scheme)
+            )
+            BurnDownChart(window: window, samples: samples.filter { $0.resetsAt == window.resetsAt },
+                          tokenHistory: [], fetchedAt: now, forecast: forecast, safetyBuffer: reserve,
+                          resetCredits: credit.map { [$0] } ?? [], paceDeadline: deadline,
+                          paceTargetCreditID: .constant(credit?.id ?? ""), customTargetDate: isCustom ? deadline : nil)
+            Text("Target: \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+            Text("SYNTHETIC PREVIEW DATA").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .frame(width: 420).padding(20)
+        .background { UsageSurfaceBackground(remaining: window.remainingPercent) }
+        .clipShape(RoundedRectangle(cornerRadius: 23))
+        .environment(\.colorScheme, scheme)
+        .environment(\.usageAccent, .blue)
+    }
+
+    private static func forecastSamples(window: UsageWindow, now: Date) -> [UsageSample] {
+        let elapsed = now.timeIntervalSince(window.startsAt)
+        let current = [
+            UsageSample(observedAt: window.startsAt, remainingPercent: 100, resetsAt: window.resetsAt),
+            UsageSample(observedAt: now.addingTimeInterval(-min(elapsed / 2, 4 * 3_600)),
+                        remainingPercent: window.remainingPercent + 5, resetsAt: window.resetsAt),
+            UsageSample(observedAt: now, remainingPercent: window.remainingPercent, resetsAt: window.resetsAt)
+        ]
+        guard window.durationMinutes == 10_080 else { return current }
+        return [
+            UsageSample(observedAt: window.startsAt.addingTimeInterval(-6 * 86_400), remainingPercent: 100, resetsAt: window.startsAt),
+            UsageSample(observedAt: window.startsAt.addingTimeInterval(-86_400), remainingPercent: 35, resetsAt: window.startsAt)
+        ] + current
     }
 
     @MainActor private static func menu(monitor: UsageMonitor, defaults: UserDefaults, scheme: ColorScheme) -> some View {
