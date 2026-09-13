@@ -75,7 +75,8 @@ Click it to adjust the exact date and time, or choose **Use scheduled reset** to
 clear the target. **Option-click Window** also clears an active target; when no
 custom target is set, it opens the precise date picker. All times are local.
 
-Choosing a history tab or a banked reset leaves the custom target. It expires at
+Switching to **7 days** or **30 days** keeps the custom target, including when you
+return to **Window**. Choosing a banked reset clears it. The target expires at
 the selected time and is not reused in a different limit window. This is a local
 pacing preview; it does not change your actual reset, redeem credits, or change
 widget pacing.

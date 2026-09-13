@@ -31,9 +31,6 @@ struct MenuContentView: View {
         .onChange(of: paceTargetCreditID) { _, selectedCreditID in
             monitor.updatePaceTarget(selectedCreditID)
         }
-        .onChange(of: chartRange) { _, range in
-            if range != .window { burndownTarget = nil }
-        }
         .task(id: burndownTarget) {
             guard let target = burndownTarget else { return }
             do {
