@@ -49,7 +49,7 @@ Choose **Window** for the current limit's forecast:
 - **Actual** shows recorded percentage samples. Before those cover the window, daily token totals can estimate the earlier part of the curve.
 - **Expected** projects a blend of recent, current-window, and historical use toward the pacing deadline, or until the balance reaches zero.
 - **Conservative** projects the faster of the current-use and historical rates with a 20% margin. The **Slow down** warning names this forecast, and any early-exhaustion time matches its endpoint.
-- **Today** projects today's observed pace to the scheduled window reset. It appears when the app can measure consumption today and excludes the observed idle period before usage began.
+- **Today’s pace** projects today's observed pace to the pacing deadline, or until the balance reaches zero. It appears when the app can measure consumption today and excludes the observed idle period before usage began.
 - **Historical** projects the pace from earlier usage toward the pacing deadline.
 
 The target line, suggested pace, and status calculation use the same safety buffer, 3% by default, which you can change in Settings. **Slow down** appears when the recorded balance is below the target line and the conservative forecast leaves too little margin. The expected forecast can still reach the deadline with usage remaining; the conservative line shows why the warning appears.
@@ -58,7 +58,7 @@ In **Settings → Appearance**, choose an accent preset or a custom color for th
 
 Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples. Hover a reset to show a badge with its last recorded percentage. Badges disappear when you move away from a reset. Hover details include the reading time, and minute-level readings remain available even when the drawn chart is downsampled. Hovering inside a gap shows a percentage interpolated between the surrounding readings, labeled **Estimated · No sample here**.
 
-When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation; it does not redeem the reset. The **Today** line and desktop widgets continue to use the scheduled window reset.
+When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation, including **Today’s pace**; it does not redeem the reset. Desktop widgets continue to use the scheduled window reset.
 
 ### Custom burndown target
 
@@ -66,9 +66,9 @@ When Codex reports banked resets, select an eligible reset from the **Banked res
 Option-click the active target's vertical marker to clear it and return to the
 scheduled reset. Option-click another future time to move the target.
 The target must be ahead of now and within the current limit window. The target
-line, expected, conservative, and historical projections, status, and suggested pace update from
-your latest recorded usage. The full window remains visible; the Today projection
-continues to show the scheduled reset.
+line, expected, conservative, historical, and today’s pace projections, status, and suggested pace update from
+your latest recorded usage. The full window remains visible; projections stop at
+the selected target or earlier if the allowance runs out.
 
 A clock button appears beside the chart tabs only while a custom target is set.
 Click it to adjust the exact date and time, or choose **Use scheduled reset** to

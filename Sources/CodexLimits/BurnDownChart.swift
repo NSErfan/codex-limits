@@ -124,15 +124,13 @@ struct BurnDownChart: View {
         )
     }
 
-    /// Projects today's pace to the window reset, so the endpoint shows
-    /// when the limit runs out if the whole week continues like today.
-    private var todayProjection: [BurnPoint] {
+    var todayProjection: [BurnPoint] {
         guard let rate = todayRate else { return [] }
-        let daysLeft = max(window.resetsAt.timeIntervalSince(fetchedAt) / 86_400, 0)
+        let daysLeft = max(paceDeadline.timeIntervalSince(fetchedAt) / 86_400, 0)
         return WindowChartSeries.projection(
             window: window,
             fetchedAt: fetchedAt,
-            deadline: window.resetsAt,
+            deadline: paceDeadline,
             rate: rate,
             remainingAtDeadline: max(window.remainingPercent - rate * daysLeft, 0)
         )
@@ -201,13 +199,13 @@ struct BurnDownChart: View {
                                 .help("Forecast using 75% current pace and 25% historical pace.")
                         }
                         GridRow {
-                            ChartLegendItem(label: "Higher usage", color: conservativeColor, dash: [8, 3, 2, 3])
+                            ChartLegendItem(label: "Conservative", color: conservativeColor, dash: [8, 3, 2, 3])
                                 .help("Forecast using the higher of current and historical pace, plus 20%.")
                             ChartLegendItem(label: "Past usage", color: .secondary.opacity(0.65), dash: [2, 3])
                                 .help("Forecast based on previous usage periods, with an estimate used when history is limited.")
                             if todayRate != nil {
                                 ChartLegendItem(label: "Today’s pace", color: todayColor, dash: [5, 4])
-                                    .help("Projects the pace since today’s usage began through the scheduled reset. A short burst can make this line steep.")
+                                    .help("Projects the pace since today’s usage began to the pacing target, or until your allowance runs out. A short burst can make this line steep.")
                             }
                         }
                     }
@@ -261,8 +259,8 @@ struct BurnDownChart: View {
                 ForEach(conservativeProjection) { point in
                     LineMark(
                         x: .value("Time", point.date),
-                        y: .value("Higher usage", point.remaining),
-                        series: .value("Series", "Higher usage")
+                        y: .value("Conservative", point.remaining),
+                        series: .value("Series", "Conservative")
                     )
                     .foregroundStyle(conservativeColor)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [8, 3, 2, 3]))
@@ -381,8 +379,8 @@ struct BurnDownChart: View {
 
                 if let endpoint = conservativeProjection.last {
                     PointMark(
-                        x: .value("Higher usage endpoint", endpoint.date),
-                        y: .value("Higher usage endpoint", endpoint.remaining)
+                        x: .value("Conservative endpoint", endpoint.date),
+                        y: .value("Conservative endpoint", endpoint.remaining)
                     )
                     .foregroundStyle(conservativeColor)
                     .symbolSize(32)
