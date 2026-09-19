@@ -176,15 +176,16 @@ struct MenuContentView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             bankedResetsMenu(snapshot: snapshot)
                             if target == nil, paceDeadline != snapshot.mainLimit.window.resetsAt {
-                                HStack(spacing: 3) {
+                                HStack(alignment: .firstTextBaseline, spacing: 3) {
                                     Image(systemName: "arrow.counterclockwise")
                                         .font(.system(size: 8))
-                                    Text("Pacing target: banked reset expiry,")
-                                    Text(
-                                        paceDeadline,
-                                        format: .dateTime.month(.abbreviated).day().hour().minute()
-                                    )
-                                    .foregroundStyle(.secondary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Pacing target")
+                                            .fontWeight(.medium)
+                                        Text("Banked reset expiry · \(paceDeadline, format: .dateTime.month(.abbreviated).day().hour().minute())")
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                    }
                                 }
                                 .font(.caption)
                                 .foregroundStyle(Color.orange)

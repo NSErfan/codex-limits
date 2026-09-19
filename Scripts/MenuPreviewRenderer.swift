@@ -25,7 +25,11 @@ enum MenuPreviewRenderer {
             mainLimit: .init(limitId: "codex", name: "Codex", window: window),
             otherLimits: [.init(limitId: "codex", name: "5-hour limit", window: .init(remainingPercent: 92, resetsAt: now.addingTimeInterval(9_000), durationMinutes: 300))],
             tokenHistory: [],
-            resetCredits: [.init(id: "sample-reset", title: "Banked reset", expiresAt: now.addingTimeInterval(2 * 86_400))],
+            resetCredits: [
+                .init(id: "sample-reset", title: "Banked reset", expiresAt: now.addingTimeInterval(2 * 86_400)),
+                .init(id: "later-reset", title: "Banked reset", expiresAt: now.addingTimeInterval(10 * 86_400)),
+                .init(id: "last-reset", title: "Banked reset", expiresAt: now.addingTimeInterval(20 * 86_400))
+            ],
             fetchedAt: now
         )
         let samples = (0 ... 1_440).map { index in
@@ -60,6 +64,9 @@ enum MenuPreviewRenderer {
         .padding(24)
         .background(Color.gray.opacity(0.15))
         try render(menus, to: output.appendingPathComponent("menu-window.png"))
+        monitor.updatePaceTarget("sample-reset")
+        try render(menus, to: output.appendingPathComponent("menu-banked-reset-target.png"))
+        monitor.updatePaceTarget("")
 
         let comparison = VStack(alignment: .leading, spacing: 24) {
             Text("CODEX LIMITS · ONE VISUAL LANGUAGE")
