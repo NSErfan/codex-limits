@@ -52,6 +52,8 @@ Choose **Window** for the current limit's forecast:
 - **Today’s pace** projects today's observed pace to the pacing deadline, or until the balance reaches zero. It appears when the app can measure consumption today and excludes the observed idle period before usage began.
 - **Historical** projects the pace from earlier usage toward the pacing deadline.
 
+The expected forecast includes idle time. With enough samples, it weights the roughly last-24-hour rate at 52.5%, the current period’s average at 22.5%, and past usage at 25%. Limited recent coverage falls back to the current period’s average; limited history uses a token-based estimate or current pace. A quiet day can therefore flatten the expected line even when today’s active-use projection is steep. These are estimates, not guarantees of the balance at reset.
+
 The target line, suggested pace, and status calculation use the same safety buffer, 3% by default, which you can change in Settings. **Slow down** appears when the recorded balance is below the target line and the conservative forecast leaves too little margin. The expected forecast can still reach the deadline with usage remaining; the conservative line shows why the warning appears.
 
 In **Settings → Appearance**, choose an accent preset or a custom color for the app, graphs, and both widgets. Presets adapt to light and dark appearance. Foreground colors adjust for readability, including black and white custom colors, while the picker and background tint retain your selection. **Automatic** keeps the balance-based mint, amber, and coral colors; warning text retains its warning color with any selection. Changes are saved locally and request a widget refresh, which macOS schedules.

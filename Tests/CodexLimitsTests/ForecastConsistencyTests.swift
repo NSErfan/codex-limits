@@ -5,6 +5,37 @@ final class ForecastConsistencyTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_000_000)
     private let day: TimeInterval = 86_400
 
+    func testQuietTrailingDayForecastMatchesEndpointDespiteTodaysBurst() throws {
+        let window = UsageWindow(remainingPercent: 51, resetsAt: now.addingTimeInterval(3.4 * day), durationMinutes: 10_080)
+        let previousReset = window.startsAt
+        let samples = [
+            UsageSample(observedAt: previousReset.addingTimeInterval(-5 * day), remainingPercent: 100, resetsAt: previousReset),
+            UsageSample(observedAt: previousReset, remainingPercent: 26, resetsAt: previousReset),
+            UsageSample(observedAt: window.startsAt, remainingPercent: 100, resetsAt: window.resetsAt),
+            UsageSample(observedAt: now.addingTimeInterval(-day), remainingPercent: 55, resetsAt: window.resetsAt),
+            UsageSample(observedAt: now.addingTimeInterval(-3_600), remainingPercent: 54, resetsAt: window.resetsAt),
+            UsageSample(observedAt: now, remainingPercent: 51, resetsAt: window.resetsAt)
+        ]
+        let forecast = ForecastEngine.evaluate(window: window, samples: samples, tokenHistory: [],
+                                               safetyBuffer: 3, now: now, previousStatus: nil)
+        let projection = WindowChartSeries.projection(window: window, fetchedAt: now, deadline: window.resetsAt,
+                                                      rate: forecast.currentPercentPerDay,
+                                                      remainingAtDeadline: forecast.expectedRemainingAtReset)
+        let endpoint = try XCTUnwrap(projection.last)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let todayRate = try XCTUnwrap(WindowChartSeries.todayRate(window: window, samples: samples,
+                                                                 fetchedAt: now, calendar: calendar))
+
+        XCTAssertEqual(todayRate, 72, accuracy: 0.0001)
+        XCTAssertEqual(forecast.historicalPercentPerDay, 14.8, accuracy: 0.0001)
+        XCTAssertEqual(forecast.currentPercentPerDay, 8.8625, accuracy: 0.0001)
+        XCTAssertEqual(forecast.expectedRemainingAtReset, 20.8675, accuracy: 0.0001)
+        XCTAssertEqual(projection.first, BurnPoint(date: now, remaining: 51))
+        XCTAssertEqual(endpoint.date, window.resetsAt)
+        XCTAssertEqual(endpoint.remaining, 20.8675, accuracy: 0.0001)
+    }
+
     func testWarningNamesConservativeForecastWhenExpectedPaceMeetsCustomTarget() throws {
         let window = UsageWindow(remainingPercent: 79, resetsAt: now.addingTimeInterval(6 * day), durationMinutes: 10_080)
         let deadline = now.addingTimeInterval(4 * day)

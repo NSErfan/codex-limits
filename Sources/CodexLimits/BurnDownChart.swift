@@ -196,7 +196,7 @@ struct BurnDownChart: View {
                             ChartLegendItem(label: "Planned pace · \(Int(safetyBuffer.rounded()))% reserve", color: UsageChartStyle.guide, dash: [3, 4])
                                 .help("An even pace from the start of this period to your reserve at the pacing target.")
                             ChartLegendItem(label: "Expected", color: accent, dash: [7, 3])
-                                .help("Forecast using 75% current pace and 25% historical pace.")
+                                .help("Blends recent usage, this period’s average, and past usage, including idle hours. A quiet day can flatten this forecast; Today’s pace projects from today’s first observed usage.")
                         }
                         GridRow {
                             ChartLegendItem(label: "Conservative", color: conservativeColor, dash: [8, 3, 2, 3])
@@ -395,8 +395,8 @@ struct BurnDownChart: View {
                     .symbolSize(32)
                 }
             }
-            .chartXScale(domain: window.startsAt ... window.resetsAt)
-            .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))
+            .chartXScale(domain: window.startsAt ... window.resetsAt, range: .plotDimension(padding: 10))
+            .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 10))
             .chartOverlay { proxy in
                 GeometryReader { geometry in
                     ZStack(alignment: .topLeading) {
@@ -453,14 +453,12 @@ struct BurnDownChart: View {
                 AxisMarks(values: xAxisDates) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
                         .foregroundStyle(Color.primary.opacity(0.10))
-                    AxisValueLabel {
+                    AxisValueLabel(anchor: value.index == 0 ? .topLeading : value.index == value.count - 1 ? .topTrailing : .top) {
                         if let date = value.as(Date.self) {
                             if window.durationMinutes <= 24 * 60 {
                                 Text(date, format: .dateTime.hour())
-                                    .offset(x: date == window.startsAt ? 8 : date == window.resetsAt ? -8 : 0)
                             } else {
                                 Text(date, format: .dateTime.weekday(.abbreviated))
-                                    .offset(x: date == window.startsAt ? 8 : date == window.resetsAt ? -8 : 0)
                             }
                         }
                     }
