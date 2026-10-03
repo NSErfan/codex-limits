@@ -8,7 +8,7 @@ struct ProviderMenuLabel: View {
         HStack(spacing: 4) {
             if displayMode != .textOnly {
                 ProviderIcon(provider: monitor.provider)
-                    .padding(.trailing, 2)
+                    .padding(.trailing, 5)
             }
             if displayMode != .iconOnly {
                 Text(monitor.provider.displayName)
