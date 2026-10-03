@@ -38,7 +38,8 @@ The **5-hour** and **Weekly** cards show both account balances and their reset t
 together. Select either card to switch the detailed chart, forecast, and usage budget
 to that window. The app remembers your selection and chart settings separately for
 each provider and period. Switching cards uses saved readings without making another
-usage request. If a provider omits a window, its card says **Not reported**.
+usage request. If either provider omits its five-hour window, that card is hidden
+and the weekly card fills the row. An unavailable weekly window says **Not reported**.
 After a window resets, its saved balance is labeled **last reading** and pacing
 waits for a new reading; its recorded history remains available.
 
