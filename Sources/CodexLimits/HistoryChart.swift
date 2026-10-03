@@ -148,18 +148,32 @@ struct HistoryChart: View {
         .chartXScale(domain: range)
         .chartYScale(domain: 0 ... 100, range: .plotDimension(padding: 6))
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day)) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
-                    .foregroundStyle(Color.primary.opacity(0.10))
-            }
-            AxisMarks(values: .stride(by: .day, count: axisDayStride)) { value in
-                AxisValueLabel {
-                    if let date = value.as(Date.self) {
-                        Text(date, format: .dateTime.month(.abbreviated).day())
+            if range.upperBound.timeIntervalSince(range.lowerBound) <= 86_400 {
+                AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                    AxisGridLine(stroke: UsageChartStyle.gridStroke)
+                        .foregroundStyle(UsageChartStyle.grid)
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(date, format: .dateTime.hour().minute())
+                        }
                     }
+                    .font(UsageChartStyle.axisFont)
+                    .foregroundStyle(Color.secondary)
                 }
-                .font(UsageChartStyle.axisFont)
-                .foregroundStyle(Color.secondary)
+            } else {
+                AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
+                        .foregroundStyle(Color.primary.opacity(0.10))
+                }
+                AxisMarks(values: .stride(by: .day, count: axisDayStride)) { value in
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(date, format: .dateTime.month(.abbreviated).day())
+                        }
+                    }
+                    .font(UsageChartStyle.axisFont)
+                    .foregroundStyle(Color.secondary)
+                }
             }
         }
         .chartYAxis {
@@ -180,9 +194,9 @@ struct HistoryChart: View {
         .padding(.top, 4)
         .accessibilityLabel("Usage history")
         .accessibilityValue(
-            data.series.accessibilitySummary(
-                days: Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400)
-            )
+            range.upperBound.timeIntervalSince(range.lowerBound) < 86_400
+                ? data.series.accessibilitySummary(period: "this period")
+                : data.series.accessibilitySummary(days: Int(range.upperBound.timeIntervalSince(range.lowerBound) / 86_400))
         )
     }
 }

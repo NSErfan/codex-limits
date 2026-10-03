@@ -10,6 +10,8 @@ enum MenuPreviewRenderer {
         let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let now = Date()
+        try await renderPeriods(at: now, to: output)
+        if ProcessInfo.processInfo.environment["PREVIEW_PERIODS_ONLY"] == "1" { return }
         try renderForecasts(at: now, to: output)
         if ProcessInfo.processInfo.environment["PREVIEW_FORECASTS_ONLY"] == "1" { return }
         let suite = "MenuPreviewRenderer.\(UUID().uuidString)"
@@ -39,7 +41,8 @@ enum MenuPreviewRenderer {
             let cycleStart = window.startsAt.addingTimeInterval(cycle * 7 * 86_400)
             let days = date.timeIntervalSince(cycleStart) / 86_400
             let remaining = max(0, 100 - days * (cycle == 0 ? 32.0 / 3 : 13))
-            return UsageSample(observedAt: date, remainingPercent: remaining, resetsAt: cycleStart.addingTimeInterval(7 * 86_400))
+            return UsageSample(observedAt: date, remainingPercent: remaining,
+                               resetsAt: cycleStart.addingTimeInterval(7 * 86_400), durationMinutes: 10_080)
         }.filter { sample in
             // Collection gaps check continuous connections and the muted fill.
             let age = now.timeIntervalSince(sample.observedAt)
@@ -102,9 +105,11 @@ enum MenuPreviewRenderer {
         .padding(24)
         .background(Color.gray.opacity(0.15))
         try render(menus, to: output.appendingPathComponent("menu-window.png"))
-        monitor.updatePaceTarget("sample-reset")
+        let creditPreference = UsageDashboardPreferences.key(UsageMonitor.paceTargetCreditIDKey,
+                                                              provider: .codex, period: .weekly)
+        defaults.set("sample-reset", forKey: creditPreference)
         try render(menus, to: output.appendingPathComponent("menu-banked-reset-target.png"))
-        monitor.updatePaceTarget("")
+        defaults.set("", forKey: creditPreference)
 
         let comparison = VStack(alignment: .leading, spacing: 24) {
             Text("CODEX LIMITS · ONE VISUAL LANGUAGE")
@@ -265,6 +270,59 @@ enum MenuPreviewRenderer {
         let samples: [UsageSample]
     }
 
+    @MainActor private static func renderPeriods(at now: Date, to output: URL) async throws {
+        for provider in UsageProvider.allCases {
+            for scenario in ["both", "missing-five-hour", "expired-five-hour"] {
+                let missingFiveHour = scenario == "missing-five-hour"
+                let expiredFiveHour = scenario == "expired-five-hour"
+                let suite = "MenuPreviewRenderer.periods.\(UUID().uuidString)"
+                let defaults = UserDefaults(suiteName: suite)!
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+                defer {
+                    defaults.removePersistentDomain(forName: suite)
+                    try? FileManager.default.removeItem(at: directory)
+                }
+                let reset = now.addingTimeInterval(2 * 3_600)
+                let fetchedAt = expiredFiveHour ? now.addingTimeInterval(-600) : now
+                let fiveHour = LimitReading(limitId: provider.rawValue, name: "5-hour", window: UsageWindow(
+                    remainingPercent: 42, resetsAt: expiredFiveHour ? now.addingTimeInterval(-300) : reset,
+                    durationMinutes: 300))
+                let weekly = LimitReading(limitId: provider.rawValue, name: "Weekly", window: UsageWindow(
+                    remainingPercent: 71, resetsAt: reset, durationMinutes: 10_080))
+                let model = LimitReading(limitId: "\(provider.rawValue)-model", name: "Model weekly", window: UsageWindow(
+                    remainingPercent: 84, resetsAt: reset, durationMinutes: 10_080))
+                let snapshot = UsageSnapshot(mainLimit: missingFiveHour ? weekly : fiveHour,
+                                             otherLimits: missingFiveHour ? [model] : [weekly, model],
+                                             tokenHistory: [], resetCredits: [], fetchedAt: fetchedAt)
+                let samples = [fiveHour, weekly].filter { !missingFiveHour || $0.id == weekly.id }.flatMap { reading in
+                    (0 ... 30).map { index in
+                        let progress = Double(index) / 30
+                        let elapsed = fetchedAt.timeIntervalSince(reading.window.startsAt) * progress
+                        return UsageSample(observedAt: reading.window.startsAt.addingTimeInterval(elapsed),
+                                           remainingPercent: 100 - (100 - reading.window.remainingPercent) * progress,
+                                           resetsAt: reading.window.resetsAt, durationMinutes: reading.window.durationMinutes)
+                    }
+                }
+                defaults.set(try JSONEncoder().encode(State(snapshot: snapshot, samples: samples, previousStatus: nil)),
+                             forKey: provider.preferenceKey("usageState"))
+                let monitor = UsageMonitor(provider: provider, defaults: defaults, historyDirectory: directory,
+                                           widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"),
+                                                                         provider: provider),
+                                           fetchUsage: { snapshot }, startsAutomatically: false)
+                await monitor.refresh()
+                for period in UsagePeriod.allCases where !missingFiveHour || period == .weekly {
+                    defaults.set(period.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: provider))
+                    let comparison = HStack(alignment: .top, spacing: 24) {
+                        menu(monitor: monitor, defaults: defaults, scheme: .dark)
+                        menu(monitor: monitor, defaults: defaults, scheme: .light)
+                    }.padding(24).background(Color.gray.opacity(0.15))
+                    let suffix = scenario == "both" ? period.rawValue : "\(scenario)-\(period.rawValue)"
+                    try render(comparison, to: output.appendingPathComponent("period-\(provider.rawValue)-\(suffix).png"))
+                }
+            }
+        }
+    }
+
     @MainActor private static func renderForecasts(at now: Date, to output: URL) throws {
         let windows = [
             UsageWindow(remainingPercent: 79, resetsAt: now.addingTimeInterval(6 * 86_400), durationMinutes: 10_080),
@@ -341,7 +399,7 @@ enum MenuPreviewRenderer {
     }
 
     @MainActor private static func menu(monitor: UsageMonitor, defaults: UserDefaults, scheme: ColorScheme) -> some View {
-        MenuContentView(monitor: monitor, refreshesOnAppear: false)
+        MenuContentView(monitor: monitor, refreshesOnAppear: false, defaults: defaults)
             .defaultAppStorage(defaults)
             .environment(\.colorScheme, scheme)
             .clipShape(RoundedRectangle(cornerRadius: 23))

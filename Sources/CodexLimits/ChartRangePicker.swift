@@ -4,6 +4,7 @@ import SwiftUI
 struct ChartRangePicker: View {
     @Binding var selection: ChartRange
     let accent: Color
+    var windowTitle = "Current period"
     var windowHelp = "Current period"
     var onOptionClickWindow: (() -> Void)? = nil
     @Namespace private var selectionAnimation
@@ -20,7 +21,7 @@ struct ChartRangePicker: View {
                         selection = range
                     }
                 } label: {
-                    Text(range.title)
+                    Text(range == .window ? windowTitle : range.title)
                         .font(.system(size: 11, weight: selection == range ? .semibold : .regular))
                         .foregroundStyle(selection == range ? accent : .secondary)
                         .padding(.vertical, 6)

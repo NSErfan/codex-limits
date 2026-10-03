@@ -34,6 +34,14 @@ The menu-bar label identifies the selected provider. Both providers refresh inde
 with separate saved readings, history, chart preferences, and weekly widgets. Your existing
 Codex history stays in place.
 
+The **5-hour** and **Weekly** cards show both account balances and their reset times
+together. Select either card to switch the detailed chart, forecast, and usage budget
+to that window. The app remembers your selection and chart settings separately for
+each provider and period. Switching cards uses saved readings without making another
+usage request. If a provider omits a window, its card says **Not reported**.
+After a window resets, its saved balance is labeled **last reading** and pacing
+waits for a new reading; its recorded history remains available.
+
 Claude Code uses your existing CLI sign-in. On macOS the app reads its OAuth credentials
 from Keychain, with the CLI credentials file as a fallback. Choose **Refresh** if macOS
 needs your permission to read the login. Automatic and background refreshes never open
@@ -89,7 +97,7 @@ Each provider reports how much usage remains. That number does not tell you whet
 
 Open the menu to see:
 
-- The percentage left in the selected provider’s main window with the lowest remaining percentage, also shown in the menu bar. This can be the five-hour or weekly window.
+- Both five-hour and weekly percentages, with selectable charts for each. The menu-bar label continues to show the account window with the lowest remaining percentage.
 - A status: `Slow down`, `On track`, or `Room to use more`.
 - A suggested hourly or daily pace.
 - Current and past use plotted against the target.
@@ -99,7 +107,7 @@ Desktop widgets always show the weekly limit, so their percentage can differ fro
 
 ## How to read the charts
 
-Choose **Window** for the current limit's forecast:
+Select **5-hour** or **Weekly**, then choose **Current period** for that limit's forecast:
 
 - **Target** runs from 100% to the configured safety buffer at the pacing deadline. Its legend shows the reserved percentage.
 - **Actual** shows recorded percentage samples. Before those cover the window, daily token totals can estimate the earlier part of the curve.
@@ -114,7 +122,7 @@ The target line, suggested pace, and status calculation use the same safety buff
 
 In **Settings → Appearance**, choose an accent preset or a custom color for the app, graphs, and both widgets. Presets adapt to light and dark appearance. Foreground colors adjust for readability, including black and white custom colors, while the picker and background tint retain your selection. **Automatic** keeps the balance-based mint, amber, and coral colors; warning text retains its warning color with any selection. Changes are saved locally and request a widget refresh, which macOS schedules.
 
-Choose **7 days** for a scrollable week of recorded history or **30 days** for the full month. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples. Hover a reset to show a badge with its last recorded percentage. Badges disappear when you move away from a reset. Hover details include the reading time, and minute-level readings remain available even when the drawn chart is downsampled. Hovering inside a gap shows a percentage interpolated between the surrounding readings, labeled **Estimated · No sample here**.
+Choose **7 days** for a scrollable week of the selected period's recorded history or **30 days** for the full month. Five-hour and weekly histories are collected separately, including while the other chart is selected. Existing readings with a known window duration are retained; older readings without that information cannot safely be assigned to a period. Hover over charts for percentages and times. History views mark detected resets and distinguish gaps in recorded samples. Hover a reset to show a badge with its last recorded percentage. Badges disappear when you move away from a reset. Hover details include the reading time, and minute-level readings remain available even when the drawn chart is downsampled. Hovering inside a gap shows a percentage interpolated between the surrounding readings, labeled **Estimated · No sample here**.
 
 When Codex reports banked resets, select an eligible reset from the **Banked resets** menu or its chart marker to pace toward its expiry. Select it again to return to the scheduled reset. This changes the pacing calculation, including **Today’s pace**; it does not redeem the reset. Desktop widgets continue to use the scheduled window reset.
 
@@ -130,23 +138,28 @@ the selected target or earlier if the allowance runs out.
 
 A clock button appears beside the chart tabs only while a custom target is set.
 Click it to adjust the exact date and time, or choose **Use scheduled reset** to
-clear the target. **Option-click Window** also clears an active target; when no
+clear the target. **Option-click Current period** also clears an active target; when no
 custom target is set, it opens the precise date picker. All times are local.
 
 Switching to **7 days** or **30 days** keeps the custom target, including when you
-return to **Window**. Custom pacing targets are saved immediately and restored
+return to **Current period**. Custom pacing targets are saved immediately and restored
 after quitting, force-quitting, or relaunching the app. Choosing a banked reset
 or returning to the scheduled reset clears the saved target. The target expires at
 the selected time and is not reused in a different limit window. This is a local
 pacing preview; it does not change your actual reset, redeem credits, or change
 widget pacing.
 
+Five-hour and weekly charts keep their own pacing targets. Switching periods or
+providers does not reuse a target from the other chart. Old targets migrate only
+when their saved window can be identified unambiguously.
+
 ## Features
 
 - Switches between Codex and Claude Code, with each provider’s account and model-specific limits.
-- Saves main-limit history and a separate weekly history for widgets.
+- Shows five-hour and weekly balances together, with separately selectable charts and pacing targets.
+- Saves each account period's history and a separate weekly history for widgets.
 - Estimates the percentage left at reset from current and past use.
-- Keeps up to 90 days of main-limit history in versioned daily JSON files, with 7-day and 30-day chart views.
+- Keeps up to 90 days of each period's history in versioned daily JSON files, with 7-day and 30-day chart views.
 - Can copy history to a private folder that you choose.
 - Checks on launch, after wake, when you open the menu, and on request; Codex refreshes every ten minutes, while Claude uses a shared 15-minute minimum interval and rate-limit cooldowns.
 - Preserves the last successful reading and cached history, including the account email and original reading time.
@@ -158,7 +171,7 @@ widget pacing.
 
 In Settings, **Collect usage while the app is closed** controls a bundled background helper. On first app launch, Codex Limits attempts to register it automatically; macOS may require approval in **System Settings → Login Items**. Settings reports when approval is needed or registration fails.
 
-The helper runs a single collection on a 15-minute schedule, writing main-limit history and weekly widget data. Codex keeps its ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and rate-limit cooldowns, so simultaneous checks send only one request. Each provider is checked independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
+The helper runs a single collection on a 15-minute schedule, writing five-hour and weekly histories and weekly widget data. Codex keeps its ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and rate-limit cooldowns, so simultaneous checks send only one request. Each provider is checked independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
 
 Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 
@@ -233,6 +246,8 @@ Each pair always uses its provider’s account-wide seven-day limit, even when t
 constrained limit is the five-hour window. They keep their own weekly readings;
 the dashed chart guide is a straight line from 100% to 0% at the scheduled reset,
 independent of the dashboard's forecast and banked-reset pacing settings.
+
+Clicking a weekly widget opens that provider's **Weekly** chart in the app.
 Weekly history begins when you first run a build with widget support. Older dashboard history cannot be imported
 reliably because it mixes five-hour and weekly readings without identifying them.
 Until there are two weekly readings, the graph says **Collecting history**.
@@ -306,7 +321,7 @@ flowchart LR
     CLI --> Collector[Background collector]
     Claude[Claude OAuth usage API] --> App
     Claude --> Collector
-    App --> History[Main-limit history]
+    App --> History[5-hour and weekly histories]
     Collector --> History
     App --> Weekly[Weekly snapshots]
     Collector --> Weekly
@@ -319,11 +334,11 @@ Codex Limits keeps usage data on your Mac:
 
 - It does not copy or store provider credentials. Claude credentials are read into memory only to authenticate requests to Anthropic.
 - It sends no telemetry or analytics. Its Claude client contacts Anthropic’s usage endpoint directly over HTTPS.
-- It stores main-limit samples in the app's Application Support directory.
+- It stores percentage samples for each period in the app's Application Support directory.
 - Signed builds share weekly percentages, observation/reset times, and the selected accent color with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for local storage.
 - If you enable history sync, it copies only usage samples to the selected folder. Preferences and raw usage responses are not synced; credentials are never written to history or widget files.
 - Synced JSON files contain observation times, remaining percentages, and reset times. Choose a folder that you do not share with other people.
-- Folder sync covers main-limit history; the separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same account for each provider. Claude uses a separate `Claude` subfolder, so choosing the same parent folder cannot mix its history with Codex.
+- Folder sync covers the five-hour and weekly chart histories, alongside the legacy main-limit history. The separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same account for each provider. Claude uses a separate `Claude` subfolder, and each chart period has its own folder, so choosing the same parent folder cannot mix providers or periods.
 - The Codex CLI may contact the Codex service as part of its normal operation.
 
 Do not attach raw CLI output or screenshots containing account usage to public issues.

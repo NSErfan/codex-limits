@@ -81,14 +81,19 @@ actor UsageHistory {
     }
 
     func connect(to directory: URL, subdirectory: String? = nil) -> State {
+        syncDirectory = nil
         do {
             try prepareRoot(directory, createIfMissing: false, coordinated: true)
             let destination: URL
             if let subdirectory {
-                // Validate and mark the chosen root before adding a provider folder,
-                // so the same root remains usable by legacy Codex installations.
-                destination = directory.appendingPathComponent(subdirectory, isDirectory: true)
-                try prepareRoot(destination, createIfMissing: true, coordinated: true)
+                // Keep the chosen root usable by legacy installations. Prepare
+                // nested roots in order so iCloud coordination has an existing parent.
+                var nested = directory
+                for component in subdirectory.split(separator: "/") {
+                    nested.appendPathComponent(String(component), isDirectory: true)
+                    try prepareRoot(nested, createIfMissing: true, coordinated: true)
+                }
+                destination = nested
             } else {
                 destination = directory
             }

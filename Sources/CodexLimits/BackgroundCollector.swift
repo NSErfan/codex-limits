@@ -80,6 +80,12 @@ enum BackgroundCollector {
             installationID: installationID(in: defaults)
         )
         let recorded = await history.record(sample)
+        let periodHistory = UsagePeriodHistory(
+            localDirectory: historyDirectory,
+            installationID: installationID(in: defaults),
+            provider: provider
+        )
+        let periods = await periodHistory.record(snapshot)
         let store = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
             directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true),
             provider: provider
@@ -87,7 +93,7 @@ enum BackgroundCollector {
         WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store,
                                       safetyBuffer: defaults.object(forKey: UsageMonitor.safetyBufferKey) as? Double ?? 3,
                                       provider: provider)
-        return recorded.errorMessage == nil
+        return recorded.errorMessage == nil && periods.errorMessage == nil
     }
 
     /// The collector writes under its own history installation so its files
