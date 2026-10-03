@@ -40,7 +40,8 @@ either segment to switch the detailed chart, forecast, and usage budget to that 
 hover for its reset time. The app remembers your selection and chart settings separately
 for each provider and period. Switching windows uses saved readings without making
 another usage request. If either provider omits its five-hour window, the entire
-usage-window selector is hidden and the weekly chart remains visible. An unavailable
+usage-window selector is hidden and a large weekly percentage appears above the weekly
+chart. Expired weekly readings are labeled **last weekly reading**. An unavailable
 weekly window says **Not reported** when the selector is shown.
 After a window resets, its saved balance is labeled **(last)** and pacing waits for a
 new reading; its recorded history remains available.

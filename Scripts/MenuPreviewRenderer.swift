@@ -272,8 +272,9 @@ enum MenuPreviewRenderer {
 
     @MainActor private static func renderPeriods(at now: Date, to output: URL) async throws {
         for provider in UsageProvider.allCases {
-            for scenario in ["both", "missing-five-hour", "missing-weekly", "expired-five-hour"] {
-                let missingFiveHour = scenario == "missing-five-hour"
+            for scenario in ["both", "missing-five-hour", "missing-weekly", "expired-five-hour", "weekly-only-expired"] {
+                let expiredWeekly = scenario == "weekly-only-expired"
+                let missingFiveHour = scenario == "missing-five-hour" || expiredWeekly
                 let missingWeekly = scenario == "missing-weekly"
                 let expiredFiveHour = scenario == "expired-five-hour"
                 let suite = "MenuPreviewRenderer.periods.\(UUID().uuidString)"
@@ -284,12 +285,13 @@ enum MenuPreviewRenderer {
                     try? FileManager.default.removeItem(at: directory)
                 }
                 let reset = now.addingTimeInterval(2 * 3_600)
-                let fetchedAt = expiredFiveHour ? now.addingTimeInterval(-600) : now
+                let fetchedAt = expiredFiveHour || expiredWeekly ? now.addingTimeInterval(-600) : now
                 let fiveHour = LimitReading(limitId: provider.rawValue, name: "5-hour", window: UsageWindow(
                     remainingPercent: 42, resetsAt: expiredFiveHour ? now.addingTimeInterval(-300) : reset,
                     durationMinutes: 300))
                 let weekly = LimitReading(limitId: provider.rawValue, name: "Weekly", window: UsageWindow(
-                    remainingPercent: 71, resetsAt: reset, durationMinutes: 10_080))
+                    remainingPercent: 71, resetsAt: expiredWeekly ? now.addingTimeInterval(-300) : reset,
+                    durationMinutes: 10_080))
                 let model = LimitReading(limitId: "\(provider.rawValue)-model", name: "Model weekly", window: UsageWindow(
                     remainingPercent: 84, resetsAt: reset, durationMinutes: 10_080))
                 let snapshot = UsageSnapshot(mainLimit: missingFiveHour ? weekly : fiveHour,

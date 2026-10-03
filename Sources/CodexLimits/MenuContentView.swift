@@ -91,6 +91,8 @@ struct MenuContentView: View {
             if snapshot.limit(for: .fiveHour, provider: monitor.provider) != nil {
                 UsagePeriodPicker(snapshot: snapshot, provider: monitor.provider, selection: period, now: now,
                                   onSelect: { savedPeriod = $0.rawValue })
+            } else if let weekly = snapshot.limit(for: .weekly, provider: monitor.provider)?.window {
+                weeklyBalance(window: weekly, now: now)
             }
 
             if let period, let limit = snapshot.limit(for: period, provider: monitor.provider) {
@@ -133,6 +135,28 @@ struct MenuContentView: View {
             Divider()
             footer(snapshot: snapshot)
         }
+    }
+
+    private func weeklyBalance(window: UsageWindow, now: Date) -> some View {
+        let hasExpired = window.resetsAt <= now
+        let accent = UsageChartStyle.accent(for: window.remainingPercent, scheme: colorScheme, selection: usageAccent)
+        return HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(window.remainingPercent, format: .number.precision(.fractionLength(0)))
+                .font(.system(size: 52, weight: .medium, design: .rounded))
+                .tracking(-2)
+                .monospacedDigit()
+            Text("%")
+                .font(.system(size: 25, design: .rounded))
+                .foregroundStyle(accent)
+            Text(hasExpired ? "last weekly reading" : "weekly allowance left")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 5)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(hasExpired
+            ? "Weekly limit, last reading \(Int(window.remainingPercent.rounded())) percent, awaiting next reading"
+            : "Weekly limit, \(Int(window.remainingPercent.rounded())) percent remaining")
     }
 
     private var refreshButton: some View {
