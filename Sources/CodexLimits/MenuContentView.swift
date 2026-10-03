@@ -87,13 +87,12 @@ struct MenuContentView: View {
             }
             .foregroundStyle(.secondary)
 
-            HStack(spacing: 10) {
-                ForEach(UsagePeriod.allCases) { candidate in
-                    let window = snapshot.limit(for: candidate, provider: monitor.provider)?.window
-                    if candidate != .fiveHour || window != nil {
+            if snapshot.limit(for: .fiveHour, provider: monitor.provider) != nil {
+                HStack(spacing: 10) {
+                    ForEach(UsagePeriod.allCases) { candidate in
                         UsagePeriodCard(
                             period: candidate,
-                            window: window,
+                            window: snapshot.limit(for: candidate, provider: monitor.provider)?.window,
                             isSelected: candidate == period,
                             now: now,
                             select: { savedPeriod = candidate.rawValue }
