@@ -80,12 +80,21 @@ actor UsageHistory {
         return state()
     }
 
-    func connect(to directory: URL) -> State {
+    func connect(to directory: URL, subdirectory: String? = nil) -> State {
         do {
             try prepareRoot(directory, createIfMissing: false, coordinated: true)
+            let destination: URL
+            if let subdirectory {
+                // Validate and mark the chosen root before adding a provider folder,
+                // so the same root remains usable by legacy Codex installations.
+                destination = directory.appendingPathComponent(subdirectory, isDirectory: true)
+                try prepareRoot(destination, createIfMissing: true, coordinated: true)
+            } else {
+                destination = directory
+            }
             let existing = readAll(from: localDirectory).samples
             try add(existing, to: localDirectory, installationID: installationID, coordinated: false)
-            syncDirectory = directory
+            syncDirectory = destination
             errorMessage = nil
             return synchronize()
         } catch {

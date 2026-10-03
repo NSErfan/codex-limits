@@ -5,6 +5,12 @@ import SwiftUI
 
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
+    @Binding var selectedProvider: UsageProvider
+    var onSignIn: () -> Void
+    var loginMessage: String?
+    var isOpeningLogin: Bool
+    var showsFooterActions: Bool
+    var refreshesOnAppear: Bool
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
     @AppStorage(UsageMonitor.paceTargetCreditIDKey) private var paceTargetCreditID = ""
     @AppStorage("chartRange") private var chartRange = ChartRange.window
@@ -15,8 +21,30 @@ struct MenuContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.usageAccent) private var usageAccent
 
+    init(
+        monitor: UsageMonitor,
+        selectedProvider: Binding<UsageProvider>? = nil,
+        onSignIn: @escaping () -> Void = {},
+        loginMessage: String? = nil,
+        isOpeningLogin: Bool = false,
+        showsFooterActions: Bool = true,
+        refreshesOnAppear: Bool = true
+    ) {
+        self.monitor = monitor
+        _selectedProvider = selectedProvider ?? .constant(monitor.provider)
+        self.onSignIn = onSignIn
+        self.loginMessage = loginMessage
+        self.isOpeningLogin = isOpeningLogin
+        self.showsFooterActions = showsFooterActions
+        self.refreshesOnAppear = refreshesOnAppear
+        _paceTargetCreditID = AppStorage(wrappedValue: "", monitor.provider.preferenceKey(UsageMonitor.paceTargetCreditIDKey))
+        _chartRange = AppStorage(wrappedValue: ChartRange.window, monitor.provider.preferenceKey("chartRange"))
+        _savedBurndownTarget = AppStorage(wrappedValue: Data(), monitor.provider.preferenceKey("burndownTarget"))
+    }
+
     var body: some View {
-        Group {
+        VStack(spacing: 16) {
+            ProviderPicker(selection: $selectedProvider)
             if let snapshot = monitor.snapshot, let forecast = monitor.forecast {
                 dashboard(snapshot: snapshot, forecast: forecast)
             } else {
@@ -27,7 +55,9 @@ struct MenuContentView: View {
         .padding(20)
         .background { UsageSurfaceBackground(remaining: monitor.snapshot?.mainLimit.window.remainingPercent) }
         .tint(UsageChartStyle.accent(for: nil, scheme: colorScheme, selection: usageAccent))
-        .task { await monitor.refresh() }
+        .task {
+            if refreshesOnAppear { await monitor.refresh() }
+        }
         .onChange(of: paceTargetCreditID) { _, selectedCreditID in
             monitor.updatePaceTarget(selectedCreditID)
         }
@@ -59,7 +89,7 @@ struct MenuContentView: View {
             HStack(spacing: 7) {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 12, weight: .semibold))
-                Text("CODEX")
+                Text(monitor.provider.displayName.uppercased())
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .tracking(2)
                 Spacer()
@@ -83,7 +113,7 @@ struct MenuContentView: View {
                     .padding(.leading, 5)
                 Spacer()
                 Button {
-                    Task { await monitor.refresh() }
+                    Task { await monitor.refresh(allowCredentialPrompt: true) }
                 } label: {
                     if monitor.isRefreshing {
                         ProgressView()
@@ -224,6 +254,10 @@ struct MenuContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if monitor.requiresLogin {
+                signInControls
+            }
+
             Divider()
             footer(snapshot: snapshot)
         }
@@ -236,32 +270,40 @@ struct MenuContentView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            HStack(spacing: 16) {
-                activityButton
-                Button {
-                    openSettings()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        NSApp.windows.first {
-                            $0.isVisible && $0.styleMask.contains(.titled)
-                        }?.orderFrontRegardless()
-                    }
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                        .padding(.horizontal, 6).frame(minHeight: 30)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .help("Settings")
-                .accessibilityLabel("Settings")
-                Spacer()
-                Button {
-                    NSApplication.shared.terminate(nil)
-                } label: {
-                    Text("Quit").padding(.horizontal, 6).frame(minHeight: 30)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
+            if showsFooterActions {
+                footerActions
             }
+        }
+    }
+
+    private var footerActions: some View {
+        HStack(spacing: 16) {
+            if monitor.provider == .codex {
+                activityButton
+            }
+            Button {
+                openSettings()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSApp.windows.first {
+                        $0.isVisible && $0.styleMask.contains(.titled)
+                    }?.orderFrontRegardless()
+                }
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+                    .padding(.horizontal, 6).frame(minHeight: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .help("Settings")
+            .accessibilityLabel("Settings")
+            Spacer()
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Text("Quit").padding(.horizontal, 6).frame(minHeight: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
         }
     }
 
@@ -341,7 +383,7 @@ struct MenuContentView: View {
         VStack(spacing: 12) {
             if monitor.isRefreshing {
                 ProgressView()
-                Text("Checking Codex usage…")
+                Text("Checking \(monitor.provider.displayName) usage…")
                     .foregroundStyle(.secondary)
             } else {
                 Image(systemName: "exclamationmark.triangle")
@@ -350,12 +392,32 @@ struct MenuContentView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                 Button("Try again") {
-                    Task { await monitor.refresh() }
+                    Task { await monitor.refresh(allowCredentialPrompt: true) }
+                }
+                if monitor.requiresLogin {
+                    signInControls
                 }
             }
-            activityButton
+            if showsFooterActions {
+                Divider()
+                footerActions
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 170)
+    }
+
+    private var signInControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button("Sign in to \(monitor.provider.displayName)…", action: onSignIn)
+                .disabled(isOpeningLogin)
+            if let loginMessage {
+                Text(loginMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Link("Install \(monitor.provider.displayName) CLI", destination: ProviderLogin.installationURL(for: monitor.provider))
+                .font(.caption)
+        }
     }
 
     private func statusColor(_ status: PaceStatus) -> Color {

@@ -6,20 +6,39 @@ public struct WeeklyWidgetStore: Sendable {
     public static let percentageKind = "CodexWeeklyPercentage"
     public static let graphKind = "CodexWeeklyGraph"
     public let directory: URL
+    public let provider: UsageProvider
 
-    public init(directory: URL) {
+    public var percentageKind: String { Self.percentageKind(for: provider) }
+    public var graphKind: String { Self.graphKind(for: provider) }
+
+    public init(directory: URL, provider: UsageProvider = .codex) {
         self.directory = directory
+        self.provider = provider
+    }
+
+    public static func percentageKind(for provider: UsageProvider) -> String {
+        switch provider {
+        case .codex: percentageKind
+        case .claude: "ClaudeWeeklyPercentage"
+        }
+    }
+
+    public static func graphKind(for provider: UsageProvider) -> String {
+        switch provider {
+        case .codex: graphKind
+        case .claude: "ClaudeWeeklyGraph"
+        }
     }
 
     /// The signing/build script injects the identical group into both bundles.
     /// An ad-hoc build has no authorized group and deliberately returns nil.
-    public static func shared(bundle: Bundle = .main) -> Self? {
+    public static func shared(provider: UsageProvider = .codex, bundle: Bundle = .main) -> Self? {
         guard let group = bundle.object(forInfoDictionaryKey: "CodexWidgetAppGroup") as? String,
               !group.isEmpty,
               let container = FileManager.default.containerURL(
                 forSecurityApplicationGroupIdentifier: group
               ) else { return nil }
-        return Self(directory: container.appendingPathComponent("WeeklyWidget", isDirectory: true))
+        return Self(directory: container.appendingPathComponent("WeeklyWidget", isDirectory: true), provider: provider)
     }
 
     public func read() -> WeeklyWidgetSnapshot? {
@@ -65,7 +84,9 @@ public struct WeeklyWidgetStore: Sendable {
     }
 
     private func file(for writer: Writer) -> URL {
-        directory.appendingPathComponent("\(writer.rawValue).json")
+        // Preserve the original Codex files so existing widgets retain history.
+        let prefix = provider == .codex ? "" : "\(provider.rawValue)-"
+        return directory.appendingPathComponent("\(prefix)\(writer.rawValue).json")
     }
 
     private func readRecord(at url: URL) -> WeeklyWidgetSnapshot? {

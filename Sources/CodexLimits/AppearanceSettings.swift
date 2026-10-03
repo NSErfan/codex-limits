@@ -19,8 +19,10 @@ final class AppearanceSettings: ObservableObject {
         defaults: UserDefaults = .standard,
         widgetStore: WeeklyWidgetStore? = .shared(),
         reloadWidgets: @escaping () -> Void = {
-            WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.percentageKind)
-            WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.graphKind)
+            for provider in UsageProvider.allCases {
+                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.percentageKind(for: provider))
+                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.graphKind(for: provider))
+            }
         }
     ) {
         self.defaults = defaults

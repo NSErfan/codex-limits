@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum CodexClientError: LocalizedError, Sendable {
+enum CodexClientError: UsageFetchError, Sendable {
     case cliNotFound
     case invalidResponse
     case appServerError(String)
@@ -34,6 +34,20 @@ enum CodexClientError: LocalizedError, Sendable {
         case .invalidResponse, .appServerError, .timedOut:
             true
         case .cliNotFound, .mainLimitMissing:
+            false
+        }
+    }
+
+    var requiresLogin: Bool {
+        switch self {
+        case .cliNotFound, .mainLimitMissing:
+            true
+        case let .appServerError(message):
+            message.localizedCaseInsensitiveContains("sign in")
+                || message.localizedCaseInsensitiveContains("log in")
+                || message.localizedCaseInsensitiveContains("unauthorized")
+                || message.localizedCaseInsensitiveContains("not authenticated")
+        case .invalidResponse, .timedOut:
             false
         }
     }

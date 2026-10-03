@@ -3,17 +3,19 @@ import SwiftUI
 public struct WeeklyPercentageView: View {
     public let snapshot: WeeklyWidgetSnapshot?
     public let date: Date
+    public let provider: UsageProvider
     @Environment(\.colorScheme) private var scheme
     @Environment(\.usageAccent) private var usageAccent
 
-    public init(snapshot: WeeklyWidgetSnapshot?, date: Date) {
+    public init(snapshot: WeeklyWidgetSnapshot?, date: Date, provider: UsageProvider = .codex) {
         self.snapshot = snapshot
         self.date = date
+        self.provider = provider
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date))
+            WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date), provider: provider)
             Spacer(minLength: 4)
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(remaining.map { String(Int($0.rounded())) } ?? "—")
@@ -45,7 +47,7 @@ public struct WeeklyPercentageView: View {
         }
         .padding(16)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Weekly Codex allowance")
+        .accessibilityLabel("Weekly \(provider.displayName) allowance")
         .accessibilityValue(accessibilityValue)
     }
 
@@ -59,7 +61,12 @@ public struct WeeklyPercentageView: View {
         case .current: "Weekly allowance left"
         case .stale: "Weekly · Last reading"
         case .expired: "Reset time passed · Open app"
-        case .unavailable: "Open Codex Limits to start"
+        case .unavailable:
+            if provider == .claude {
+                snapshot == nil ? "Connect Claude Code in app" : "Weekly usage unavailable"
+            } else {
+                "Open Codex Limits to start"
+            }
         }
     }
     private var accessibilityValue: String {

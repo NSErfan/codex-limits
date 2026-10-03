@@ -8,6 +8,8 @@ final class UsageMonitor: ObservableObject {
     nonisolated static let safetyBufferKey = "safetyBuffer"
     nonisolated static let paceTargetCreditIDKey = "paceTargetCreditID"
 
+    let provider: UsageProvider
+    @Published private(set) var requiresLogin = false
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var forecast: Forecast?
     @Published private(set) var samples: [UsageSample] = []
@@ -16,11 +18,11 @@ final class UsageMonitor: ObservableObject {
     @Published private(set) var syncFolderName: String?
     @Published private(set) var syncErrorMessage: String?
 
-    private static let stateKey = "usageState"
+    private var stateKey: String { provider.preferenceKey("usageState") }
     private static let historyInstallationIDKey = "historyInstallationID"
-    private static let historySyncBookmarkKey = "historySyncBookmark"
+    private var historySyncBookmarkKey: String { provider.preferenceKey("historySyncBookmark") }
     private let defaults: UserDefaults
-    private let fetchUsage: @Sendable () async throws -> UsageSnapshot
+    private let fetchUsage: @Sendable (Bool) async throws -> UsageSnapshot
     private let recoveryDelaysNanoseconds: [UInt64]
     private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
     private let history: UsageHistory
@@ -35,13 +37,12 @@ final class UsageMonitor: ObservableObject {
     private var historyConnectionActive = false
 
     init(
+        provider: UsageProvider = .codex,
         defaults: UserDefaults = .standard,
         historyDirectory: URL? = nil,
         historyNow: @escaping @Sendable () -> Date = { Date() },
-        widgetStore: WeeklyWidgetStore? = .shared(),
-        fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot = {
-            try await CodexClient.fetch()
-        },
+        widgetStore: WeeklyWidgetStore? = nil,
+        fetchUsage: (@Sendable () async throws -> UsageSnapshot)? = nil,
         recoveryDelaysNanoseconds: [UInt64] = [
             2_000_000_000,
             10_000_000_000,
@@ -52,15 +53,21 @@ final class UsageMonitor: ObservableObject {
         },
         startsAutomatically: Bool = true
     ) {
+        self.provider = provider
         self.defaults = defaults
-        self.widgetStore = widgetStore ?? WeeklyWidgetStore(
-            directory: (historyDirectory ?? Self.historyDirectory())
-                .appendingPathComponent("WeeklyWidget", isDirectory: true)
+        self.widgetStore = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
+            directory: (historyDirectory ?? Self.historyDirectory(provider: provider))
+                .appendingPathComponent("WeeklyWidget", isDirectory: true),
+            provider: provider
         )
-        self.fetchUsage = fetchUsage
+        if let fetchUsage {
+            self.fetchUsage = { _ in try await fetchUsage() }
+        } else {
+            self.fetchUsage = { try await provider.fetchUsage(allowCredentialPrompt: $0) }
+        }
         self.recoveryDelaysNanoseconds = recoveryDelaysNanoseconds
         self.sleepBeforeRecovery = sleepBeforeRecovery
-        if let data = defaults.data(forKey: Self.stateKey),
+        if let data = defaults.data(forKey: provider.preferenceKey("usageState")),
            let state = try? JSONDecoder().decode(StoredState.self, from: data) {
             snapshot = state.snapshot
             samples = state.samples
@@ -76,7 +83,7 @@ final class UsageMonitor: ObservableObject {
             defaults.set(installationID, forKey: Self.historyInstallationIDKey)
         }
         history = UsageHistory(
-            localDirectory: historyDirectory ?? Self.historyDirectory(),
+            localDirectory: historyDirectory ?? Self.historyDirectory(provider: provider),
             installationID: installationID,
             now: historyNow
         )
@@ -134,13 +141,13 @@ final class UsageMonitor: ObservableObject {
         await refresh()
     }
 
-    func refresh() async {
+    func refresh(allowCredentialPrompt: Bool = false) async {
         recoveryTask?.cancel()
         recoveryTask = nil
-        await refresh(recoveryAttempt: 0)
+        await refresh(recoveryAttempt: 0, allowCredentialPrompt: allowCredentialPrompt)
     }
 
-    private func refresh(recoveryAttempt: Int) async {
+    private func refresh(recoveryAttempt: Int, allowCredentialPrompt: Bool = false) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -153,7 +160,7 @@ final class UsageMonitor: ObservableObject {
         }
 
         let fetchUsage = self.fetchUsage
-        let fetchTask = Task { try await fetchUsage() }
+        let fetchTask = Task { try await fetchUsage(allowCredentialPrompt) }
         let historyState = await exchangeHistory()
         apply(historyState, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
         let exchangeErrorMessage = historyState.errorMessage
@@ -176,17 +183,21 @@ final class UsageMonitor: ObservableObject {
             }
             snapshot = newSnapshot
             WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore,
-                                          safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3)
+                                          safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3,
+                                          provider: provider)
             errorMessage = nil
+            requiresLogin = false
             recalculate()
             persist()
-        } catch let error as CodexClientError {
+        } catch let error as any UsageFetchError {
             errorMessage = error.localizedDescription
+            requiresLogin = error.requiresLogin
             if error.shouldRetryAutomatically {
                 scheduleRecovery(afterFailedAttempt: recoveryAttempt)
             }
         } catch {
-            errorMessage = "Couldn’t load Codex usage. Refresh to try again."
+            errorMessage = "Couldn’t load \(provider.displayName) usage. Refresh to try again."
+            requiresLogin = false
             scheduleRecovery(afterFailedAttempt: recoveryAttempt)
         }
     }
@@ -211,21 +222,21 @@ final class UsageMonitor: ObservableObject {
 
     func updateSafetyBuffer(_ value: Double) {
         if let snapshot {
-            WeeklyWidgetPublisher.publish(snapshot, writer: .app, store: widgetStore, safetyBuffer: value)
+            WeeklyWidgetPublisher.publish(snapshot, writer: .app, store: widgetStore, safetyBuffer: value, provider: provider)
         }
         recalculate(safetyBuffer: value)
         persist()
     }
 
     func updatePaceTarget(_ selectedCreditID: String) {
-        defaults.set(selectedCreditID, forKey: Self.paceTargetCreditIDKey)
+        defaults.set(selectedCreditID, forKey: provider.preferenceKey(Self.paceTargetCreditIDKey))
         recalculate(selectedCreditID: selectedCreditID)
         persist()
     }
 
     func connectHistoryFolder(_ directory: URL) async {
         await prepareHistory()
-        let state = await history.connect(to: directory)
+        let state = await history.connect(to: directory, subdirectory: provider.historySubdirectory)
         apply(state)
         historyConnectionActive = state.folderName != nil
         guard historyConnectionActive else { return }
@@ -236,7 +247,7 @@ final class UsageMonitor: ObservableObject {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            defaults.set(bookmark, forKey: Self.historySyncBookmarkKey)
+            defaults.set(bookmark, forKey: historySyncBookmarkKey)
             configuredSyncDirectory = directory
             syncFolderName = directory.lastPathComponent
         } catch {
@@ -249,7 +260,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     func stopHistorySync() async {
-        defaults.removeObject(forKey: Self.historySyncBookmarkKey)
+        defaults.removeObject(forKey: historySyncBookmarkKey)
         configuredSyncDirectory = nil
         historyConnectionActive = false
         apply(await history.disconnect())
@@ -274,7 +285,7 @@ final class UsageMonitor: ObservableObject {
                 resetCredits: snapshot.resetCredits,
                 now: snapshot.fetchedAt,
                 selectedCreditID: selectedCreditID
-                    ?? defaults.string(forKey: Self.paceTargetCreditIDKey)
+                    ?? defaults.string(forKey: provider.preferenceKey(Self.paceTargetCreditIDKey))
             )
         )
         forecast = result
@@ -291,7 +302,7 @@ final class UsageMonitor: ObservableObject {
             previousStatus: previousStatus
         )
         if let data = try? JSONEncoder().encode(state) {
-            defaults.set(data, forKey: Self.stateKey)
+            defaults.set(data, forKey: stateKey)
         }
     }
 
@@ -306,7 +317,7 @@ final class UsageMonitor: ObservableObject {
             persist()
         }
 
-        guard let bookmark = defaults.data(forKey: Self.historySyncBookmarkKey) else {
+        guard let bookmark = defaults.data(forKey: historySyncBookmarkKey) else {
             return
         }
         let directory: URL
@@ -319,13 +330,13 @@ final class UsageMonitor: ObservableObject {
                 bookmarkDataIsStale: &isStale
             )
         } catch {
-            defaults.removeObject(forKey: Self.historySyncBookmarkKey)
+            defaults.removeObject(forKey: historySyncBookmarkKey)
             syncErrorMessage = "Couldn’t access the history folder. Choose it again."
             return
         }
 
         configuredSyncDirectory = directory
-        let connectedState = await history.connect(to: directory)
+        let connectedState = await history.connect(to: directory, subdirectory: provider.historySubdirectory)
         historyConnectionActive = connectedState.folderName != nil
         apply(connectedState, configuredFolderName: directory.lastPathComponent)
         if isStale, historyConnectionActive {
@@ -335,7 +346,7 @@ final class UsageMonitor: ObservableObject {
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
-                defaults.set(refreshed, forKey: Self.historySyncBookmarkKey)
+                defaults.set(refreshed, forKey: historySyncBookmarkKey)
             } catch {
                 syncErrorMessage = "Couldn’t renew access to the history folder. Choose it again."
             }
@@ -344,7 +355,7 @@ final class UsageMonitor: ObservableObject {
 
     private func exchangeHistory() async -> UsageHistory.State {
         if let configuredSyncDirectory, !historyConnectionActive {
-            let state = await history.connect(to: configuredSyncDirectory)
+            let state = await history.connect(to: configuredSyncDirectory, subdirectory: provider.historySubdirectory)
             historyConnectionActive = state.folderName != nil
             return state
         }
@@ -358,7 +369,7 @@ final class UsageMonitor: ObservableObject {
         // Merge instead of replace: a partial or failed history read must
         // never shrink what the charts already know within this session.
         samples = Self.mergedSamples(samples, state.samples)
-        syncFolderName = state.folderName ?? configuredFolderName
+        syncFolderName = configuredFolderName ?? state.folderName
         syncErrorMessage = state.errorMessage
     }
 
@@ -397,7 +408,7 @@ final class UsageMonitor: ObservableObject {
         return lhs.resetsAt < rhs.resetsAt
     }
 
-    nonisolated static func historyDirectory() -> URL {
+    nonisolated static func historyDirectory(provider: UsageProvider = .codex) -> URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -407,7 +418,7 @@ final class UsageMonitor: ObservableObject {
                 Bundle.main.bundleIdentifier ?? LegacyBundleMigration.legacyIdentifier,
                 isDirectory: true
             )
-            .appendingPathComponent("History", isDirectory: true)
+            .appendingPathComponent(provider == .codex ? "History" : "ClaudeHistory", isDirectory: true)
     }
 }
 

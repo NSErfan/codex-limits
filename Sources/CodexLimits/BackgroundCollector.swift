@@ -26,17 +26,24 @@ enum BackgroundCollector {
     private static func collectOnce() async -> Bool {
         // Must precede any preference or history access.
         LegacyBundleMigration.run()
-        return await collectOnce(
-            defaults: .standard,
-            historyDirectory: UsageMonitor.historyDirectory(),
-            fetchUsage: { try await CodexClient.fetch() }
-        )
+        var collectedAny = false
+        for provider in UsageProvider.allCases {
+            let collected = await collectOnce(
+                defaults: .standard,
+                historyDirectory: UsageMonitor.historyDirectory(provider: provider),
+                provider: provider,
+                fetchUsage: { try await provider.fetchUsage() }
+            )
+            collectedAny = collectedAny || collected
+        }
+        return collectedAny
     }
 
     static func collectOnce(
         defaults: UserDefaults,
         historyDirectory: URL,
-        widgetStore: WeeklyWidgetStore? = .shared(),
+        widgetStore: WeeklyWidgetStore? = nil,
+        provider: UsageProvider = .codex,
         fetchUsage: @Sendable () async throws -> UsageSnapshot
     ) async -> Bool {
         guard let snapshot = try? await fetchUsage() else { return false }
@@ -52,11 +59,13 @@ enum BackgroundCollector {
             installationID: installationID(in: defaults)
         )
         let recorded = await history.record(sample)
-        let store = widgetStore ?? WeeklyWidgetStore(
-            directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true)
+        let store = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
+            directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true),
+            provider: provider
         )
         WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store,
-                                      safetyBuffer: defaults.object(forKey: UsageMonitor.safetyBufferKey) as? Double ?? 3)
+                                      safetyBuffer: defaults.object(forKey: UsageMonitor.safetyBufferKey) as? Double ?? 3,
+                                      provider: provider)
         return recorded.errorMessage == nil
     }
 

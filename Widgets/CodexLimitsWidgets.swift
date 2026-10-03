@@ -6,5 +6,7 @@ struct CodexLimitsWidgets: WidgetBundle {
     var body: some Widget {
         WeeklyPercentageWidget()
         WeeklyGraphWidget()
+        ClaudeWeeklyPercentageWidget()
+        ClaudeWeeklyGraphWidget()
     }
 }

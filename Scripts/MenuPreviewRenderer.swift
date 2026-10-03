@@ -57,6 +57,44 @@ enum MenuPreviewRenderer {
             fetchUsage: { snapshot },
             startsAutomatically: false
         )
+        let claudeSnapshot = UsageSnapshot(
+            mainLimit: .init(limitId: "claude", name: "All models", window: window),
+            otherLimits: [.init(limitId: "claude", name: "5-hour limit", window: .init(remainingPercent: 92, resetsAt: now.addingTimeInterval(9_000), durationMinutes: 300))],
+            tokenHistory: [], resetCredits: [], fetchedAt: now
+        )
+        defaults.set(try JSONEncoder().encode(State(snapshot: claudeSnapshot, samples: samples, previousStatus: nil)), forKey: "claude.usageState")
+        let claudeMonitor = UsageMonitor(
+            provider: .claude, defaults: defaults,
+            historyDirectory: temporary.appendingPathComponent("claude"),
+            widgetStore: WeeklyWidgetStore(directory: temporary.appendingPathComponent("claude-widget"), provider: .claude),
+            fetchUsage: { claudeSnapshot }, startsAutomatically: false
+        )
+        let providers = UsageProviders(defaults: defaults, codex: monitor, claude: claudeMonitor)
+        let login = ProviderLoginSession(providers: providers)
+        let claudeMenus = HStack(alignment: .top, spacing: 24) {
+            menu(monitor: claudeMonitor, defaults: defaults, scheme: .dark)
+            menu(monitor: claudeMonitor, defaults: defaults, scheme: .light)
+        }
+        .padding(24)
+        .background(Color.gray.opacity(0.15))
+        try render(claudeMenus, to: output.appendingPathComponent("menu-claude.png"))
+        let signedOutSuite = suite + ".signed-out"
+        let signedOutDefaults = UserDefaults(suiteName: signedOutSuite)!
+        defer { signedOutDefaults.removePersistentDomain(forName: signedOutSuite) }
+        let signedOutMonitor = UsageMonitor(
+            provider: .claude, defaults: signedOutDefaults,
+            historyDirectory: temporary.appendingPathComponent("signed-out"),
+            widgetStore: WeeklyWidgetStore(directory: temporary.appendingPathComponent("signed-out-widget"), provider: .claude),
+            fetchUsage: { throw ClaudeClientError.credentialsMissing }, startsAutomatically: false
+        )
+        await signedOutMonitor.refresh()
+        try render(
+            HStack(alignment: .top, spacing: 24) {
+                menu(monitor: signedOutMonitor, defaults: signedOutDefaults, scheme: .dark)
+                menu(monitor: signedOutMonitor, defaults: signedOutDefaults, scheme: .light)
+            }.padding(24).background(Color.gray.opacity(0.15)),
+            to: output.appendingPathComponent("menu-claude-sign-in.png")
+        )
         let menus = HStack(alignment: .top, spacing: 24) {
             menu(monitor: monitor, defaults: defaults, scheme: .dark)
             menu(monitor: monitor, defaults: defaults, scheme: .light)
@@ -106,7 +144,7 @@ enum MenuPreviewRenderer {
         appearance.setAccent(.blue)
         let settingsPreview = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
-                SettingsView(monitor: monitor, appearance: appearance)
+                SettingsView(providers: providers, appearance: appearance, login: login)
                     .defaultAppStorage(defaults)
                     .frame(height: 720)
                     .environment(\.colorScheme, scheme)
@@ -303,7 +341,7 @@ enum MenuPreviewRenderer {
     }
 
     @MainActor private static func menu(monitor: UsageMonitor, defaults: UserDefaults, scheme: ColorScheme) -> some View {
-        MenuContentView(monitor: monitor)
+        MenuContentView(monitor: monitor, refreshesOnAppear: false)
             .defaultAppStorage(defaults)
             .environment(\.colorScheme, scheme)
             .clipShape(RoundedRectangle(cornerRadius: 23))

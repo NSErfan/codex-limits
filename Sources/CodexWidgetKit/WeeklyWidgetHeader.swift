@@ -3,14 +3,17 @@ import SwiftUI
 struct WeeklyWidgetHeader: View {
     let stale: Bool
     var pace: WeeklyPace? = nil
+    var provider: UsageProvider = .codex
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "terminal.fill")
+            Image(systemName: provider == .claude ? "sparkle" : "terminal.fill")
                 .font(.system(size: 11, weight: .semibold))
-            Text("CODEX")
+                .accessibilityHidden(true)
+            Text(provider == .claude ? "CLAUDE" : "CODEX")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .tracking(2)
+                .accessibilityLabel(provider.displayName)
             Spacer(minLength: 4)
             if let pace {
                 WeeklyPaceIndicator(pace: pace)

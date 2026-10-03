@@ -13,6 +13,7 @@ struct WeeklyPercentageWidget: Widget {
                         .environment(\.usageAccent, entry.accent)
                 }
                 .environment(\.usageAccent, entry.accent)
+                .widgetURL(URL(string: "codexlimits://usage/codex"))
         }
         .configurationDisplayName("Weekly allowance")
         .description("See your remaining weekly Codex allowance and pace status.")

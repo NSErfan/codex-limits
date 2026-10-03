@@ -1,11 +1,11 @@
 <h1 align="center">Codex Limits</h1>
 
 <p align="center">
-  <strong>Know whether your Codex limit will last until reset.</strong>
+  <strong>Know whether your Codex and Claude Code limits will last until reset.</strong>
 </p>
 
 <p align="center">
-  A native macOS menu-bar app and desktop widgets for tracking your Codex limits, usage history, and sustainable pace.
+  A native macOS menu-bar app and desktop widgets for tracking your Codex and Claude Code limits, usage history, and sustainable pace.
 </p>
 
 <p align="center">
@@ -22,18 +22,59 @@
 </p>
 
 > [!NOTE]
-> Codex Limits is an independent, unofficial project. It is not affiliated with or endorsed by OpenAI.
+> Codex Limits is an independent, unofficial project. It is not affiliated with or endorsed by OpenAI or Anthropic.
 
 > [!NOTE]
 > This is an independently developed fork of [thrr87/codex-limits](https://github.com/thrr87/codex-limits), released under the same MIT license. It follows its own direction and does not track the original.
 
+## Codex and Claude Code
+
+Use the selector at the top of the menu to switch between **Codex** and **Claude Code**.
+The menu-bar label identifies the selected provider. Both providers refresh independently,
+with separate saved readings, history, chart preferences, and weekly widgets. Your existing
+Codex history stays in place.
+
+Claude Code uses your existing CLI sign-in. On macOS the app reads its OAuth credentials
+from Keychain, with the CLI credentials file as a fallback. Choose **Refresh** if macOS
+needs your permission to read the login. Automatic and background refreshes never open
+Keychain permission dialogs. The app respects `CLAUDE_CONFIG_DIR` when present in its environment.
+
+If sign-in is needed, use **Sign in** in the menu or **Settings → Accounts**. The app opens
+Terminal with the provider's official CLI login command. Complete that flow, then return
+to the app and refresh. Expired Claude credentials are renewed through Claude Code;
+Codex Limits does not rotate or rewrite the CLI's tokens. Claude usage requires a
+claude.ai subscription login with usage access; API-key-only and inference-only tokens
+are not supported.
+
+Claude shows account-wide five-hour and seven-day quotas, plus model-specific limits
+when Anthropic reports them. Weekly widgets use only the account-wide seven-day quota.
+Missing quotas remain unavailable. Claude forecasts start with observed quota readings;
+local model/effort token activity remains a Codex feature.
+
+The Claude OAuth approach was informed by
+[CodexBar's Claude provider documentation](https://github.com/steipete/CodexBar/blob/main/docs/claude.md).
+This implementation does not import CodexBar or read browser cookies.
+
+<p align="center">
+  <img src="docs/images/claude-menu.png" width="820" alt="Claude Code selected in the menu, with remaining allowance, forecast, and five-hour limit in dark and light appearance">
+  <br>
+  <sub>Claude Code dashboard with synthetic example data.</sub>
+</p>
+
+<details>
+<summary>Claude desktop widgets</summary>
+<p align="center">
+  <img src="docs/images/claude-widgets.png" width="720" alt="Claude weekly percentage and graph widgets in light and dark appearance, using synthetic example data">
+</p>
+</details>
+
 ## What it tells you
 
-Codex shows how much usage remains. That number does not tell you whether it will last. Codex Limits compares your use with the time left before reset.
+Each provider reports how much usage remains. That number does not tell you whether it will last. Codex Limits compares your use with the time left before reset.
 
 Open the menu to see:
 
-- The percentage left in the main Codex window with the lowest remaining percentage, also shown in the menu bar. This can be the five-hour or weekly window.
+- The percentage left in the selected provider’s main window with the lowest remaining percentage, also shown in the menu bar. This can be the five-hour or weekly window.
 - A status: `Slow down`, `On track`, or `Room to use more`.
 - A suggested hourly or daily pace.
 - Current and past use plotted against the target.
@@ -87,7 +128,7 @@ widget pacing.
 
 ## Features
 
-- Shows the main Codex limit and model-specific limits.
+- Switches between Codex and Claude Code, with each provider’s account and model-specific limits.
 - Saves main-limit history and a separate weekly history for widgets.
 - Estimates the percentage left at reset from current and past use.
 - Keeps up to 90 days of main-limit history in versioned daily JSON files, with 7-day and 30-day chart views.
@@ -96,13 +137,13 @@ widget pacing.
 - Retries transient read failures automatically and preserves the last successful reading and cached history.
 - Can collect usage on a 15-minute schedule while the menu-bar app is closed.
 - Runs as a native SwiftUI menu-bar app with no third-party runtime dependencies.
-- Includes two native desktop widgets: a small weekly percentage and a medium weekly usage graph.
+- Includes four native desktop widgets: weekly percentage and usage graph widgets for each provider.
 
 ## Background collection
 
 In Settings, **Collect usage while the app is closed** controls a bundled background helper. On first app launch, Codex Limits attempts to register it automatically; macOS may require approval in **System Settings → Login Items**. Settings reports when approval is needed or registration fails.
 
-The helper runs a single collection on a 15-minute schedule, writing main-limit history and weekly widget data. The menu-bar app continues to refresh on its own ten-minute schedule. Background execution depends on macOS scheduling and the Codex CLI being available; it is not continuous polling while the Mac sleeps.
+The helper runs a single collection on a 15-minute schedule, writing main-limit history and weekly widget data. The menu-bar app continues to refresh on its own ten-minute schedule. It checks both providers independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
 
 Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 
@@ -161,8 +202,8 @@ The menu preview renderer also generates light/dark activity-window images using
 
 ## Desktop widgets
 
-**Weekly Percentage** shows the percentage of your weekly Codex limit remaining,
-with a segmented balance indicator. **Weekly Graph** adds the current week's
+**Weekly Percentage** and **Claude Weekly Percentage** show the percentage of the selected provider’s weekly limit remaining,
+with a segmented balance indicator. **Weekly Graph** and **Claude Weekly Graph** add the current week's
 recorded usage curve, an even-pace guide, and time until reset. Both adapt to light
 and dark appearance, with amber and coral accents at 25% and 10% remaining.
 
@@ -173,7 +214,7 @@ toward the scheduled weekly reset. The indicator is hidden for stale, expired, o
 unavailable readings; VoiceOver announces its meaning. Existing installations gain
 the indicator after the next successful refresh.
 
-These widgets always use the seven-day `codex` limit, even when the menu bar's most
+Each pair always uses its provider’s account-wide seven-day limit, even when the menu bar's most
 constrained limit is the five-hour window. They keep their own weekly readings;
 the dashed chart guide is a straight line from 100% to 0% at the scheduled reset,
 independent of the dashboard's forecast and banked-reset pacing settings.
@@ -183,6 +224,7 @@ Until there are two weekly readings, the graph says **Collecting history**.
 
 To add a widget, Control-click your desktop, choose **Edit Widgets**, and search
 for **Codex Limits**. macOS provides the previews and handles adding both sizes.
+Choose the Codex or Claude widget by its gallery title. Both can be placed on the desktop at once. Clicking a widget opens its provider in the app.
 Use the installed build in `/Applications`; if the macOS widget gallery was already
 open during an update, close and reopen it.
 
@@ -236,8 +278,8 @@ full, low, empty, stale, expired, and unavailable states.
 
 ## How it works
 
-1. Codex Limits starts your installed Codex CLI and reads usage through its local app server.
-2. It saves percentage samples on your Mac. Daily token history supplies data for the first forecast.
+1. Codex usage comes from your installed CLI’s local app server. Claude usage comes from Anthropic’s OAuth usage endpoint using the CLI’s saved login.
+2. It saves percentage samples separately for each provider on your Mac. Codex daily token history can supply data for the first forecast.
 3. It calculates a sustainable pace toward the scheduled reset or a selected banked reset's expiry, reserving your chosen buffer.
 4. It shows a status and suggests how much you can use per hour or day.
 
@@ -247,6 +289,8 @@ Forecasts improve as the app records more samples. They are estimates, not guara
 flowchart LR
     CLI[Local Codex app server] --> App[Menu-bar app]
     CLI --> Collector[Background collector]
+    Claude[Claude OAuth usage API] --> App
+    Claude --> Collector
     App --> History[Main-limit history]
     Collector --> History
     App --> Weekly[Weekly snapshots]
@@ -258,13 +302,13 @@ flowchart LR
 
 Codex Limits keeps usage data on your Mac:
 
-- It does not copy or store your Codex credentials.
-- It sends no telemetry or analytics. It has no notifications or direct network client.
+- It does not copy or store provider credentials. Claude credentials are read into memory only to authenticate requests to Anthropic.
+- It sends no telemetry or analytics. Its Claude client contacts Anthropic’s usage endpoint directly over HTTPS.
 - It stores main-limit samples in the app's Application Support directory.
 - Signed builds share weekly percentages, observation/reset times, and the selected accent color with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for local storage.
-- If you enable history sync, it copies only usage samples to the selected folder. Preferences, credentials, and raw Codex responses stay on your Mac.
+- If you enable history sync, it copies only usage samples to the selected folder. Preferences and raw usage responses are not synced; credentials are never written to history or widget files.
 - Synced JSON files contain observation times, remaining percentages, and reset times. Choose a folder that you do not share with other people.
-- Folder sync covers main-limit history; the separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same Codex account.
+- Folder sync covers main-limit history; the separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same account for each provider. Claude uses a separate `Claude` subfolder, so choosing the same parent folder cannot mix its history with Codex.
 - The Codex CLI may contact the Codex service as part of its normal operation.
 
 Do not attach raw CLI output or screenshots containing account usage to public issues.
@@ -273,7 +317,7 @@ Do not attach raw CLI output or screenshots containing account usage to public i
 
 - macOS 14 or later
 - Xcode 16.4 or later
-- A signed-in, Homebrew-managed Codex CLI at `/opt/homebrew/bin/codex` or `/usr/local/bin/codex`
+- A signed-in standalone Codex CLI and/or Claude Code CLI. The app discovers CLIs on its `PATH` and in common Homebrew, npm, and `~/.local/bin` locations.
 
 Codex Limits does not use a Codex binary bundled with another app. Install and update the standalone CLI yourself.
 
@@ -345,7 +389,8 @@ hover values resume after scrolling stops.
 
 - You must build the app from source.
 - The forecast needs local samples to improve.
-- Codex CLI responses may change between versions. If parsing fails, update the CLI before reporting a problem.
+- Codex CLI responses and Anthropic’s OAuth usage endpoint may change between versions. Update the CLI if authentication or parsing stops working.
+- Claude token renewal stays with the official CLI. Run Claude Code or sign in again when the app reports expired credentials.
 
 ## Security
 

@@ -4,14 +4,9 @@ import Foundation
 enum CodexClient {
     private static let retryDelayNanoseconds: UInt64 = 250_000_000
     private static let timeoutNanoseconds: UInt64 = 15_000_000_000
-    private static let executablePaths = [
-        "/opt/homebrew/bin/codex",
-        "/usr/local/bin/codex"
-    ]
-
     static func fetch() async throws -> UsageSnapshot {
         try await fetch(
-            executablePaths: executablePaths,
+            executablePaths: [ProviderExecutable.path(for: .codex)].compactMap { $0 },
             isExecutable: FileManager.default.isExecutableFile(atPath:),
             retryDelayNanoseconds: retryDelayNanoseconds,
             timeoutNanoseconds: timeoutNanoseconds,
