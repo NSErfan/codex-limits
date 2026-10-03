@@ -6,8 +6,10 @@ import WidgetKit
 @MainActor
 final class AppearanceSettings: ObservableObject {
     static let preferenceKey = "usageAccent"
+    static let menuBarDisplayModeKey = "menuBarDisplayMode"
 
     @Published private(set) var accent: UsageAccent
+    @Published private(set) var menuBarDisplayMode: MenuBarDisplayMode
     @Published private(set) var widgetError: String?
 
     private let defaults: UserDefaults
@@ -28,6 +30,8 @@ final class AppearanceSettings: ObservableObject {
         self.defaults = defaults
         self.widgetStore = widgetStore
         self.reloadWidgets = reloadWidgets
+        menuBarDisplayMode = defaults.string(forKey: Self.menuBarDisplayModeKey)
+            .flatMap(MenuBarDisplayMode.init(rawValue:)) ?? .iconOnly
         if let data = defaults.data(forKey: Self.preferenceKey),
            let saved = try? JSONDecoder().decode(UsageAccent.self, from: data), saved.isValid {
             accent = saved
@@ -45,6 +49,11 @@ final class AppearanceSettings: ObservableObject {
         defaults.set(data, forKey: Self.preferenceKey)
         accent = selection
         synchronizeWidgets()
+    }
+
+    func setMenuBarDisplayMode(_ mode: MenuBarDisplayMode) {
+        defaults.set(mode.rawValue, forKey: Self.menuBarDisplayModeKey)
+        menuBarDisplayMode = mode
     }
 
     private func synchronizeWidgets() {

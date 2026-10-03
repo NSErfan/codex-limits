@@ -25,6 +25,15 @@ struct SettingsView: View {
             }
 
             Section("Appearance") {
+                Picker("Menu bar", selection: Binding(
+                    get: { appearance.menuBarDisplayMode },
+                    set: appearance.setMenuBarDisplayMode
+                )) {
+                    ForEach(MenuBarDisplayMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
                 AccentColorPicker(appearance: appearance)
             }
 

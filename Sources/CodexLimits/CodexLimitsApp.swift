@@ -41,7 +41,7 @@ struct CodexLimitsApp: App {
                 .id(providers.selectedProvider)
                 .environment(\.usageAccent, appearance.accent)
         } label: {
-            ProviderMenuLabel(monitor: providers.selectedMonitor)
+            ProviderMenuLabel(monitor: providers.selectedMonitor, displayMode: appearance.menuBarDisplayMode)
         }
         .menuBarExtraStyle(.window)
 

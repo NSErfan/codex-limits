@@ -5,6 +5,36 @@ import XCTest
 
 @MainActor
 final class AppearanceSettingsTests: XCTestCase {
+    func testMenuBarDefaultsToIconOnlyForMissingOrInvalidPreference() throws {
+        let suite = UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(try JSONEncoder().encode(UsageAccent.blue), forKey: AppearanceSettings.preferenceKey)
+
+        let settings = AppearanceSettings(defaults: defaults, widgetStore: nil)
+        XCTAssertEqual(settings.menuBarDisplayMode, .iconOnly)
+        XCTAssertEqual(settings.accent, .blue)
+
+        defaults.set("unknown-mode", forKey: AppearanceSettings.menuBarDisplayModeKey)
+        XCTAssertEqual(AppearanceSettings(defaults: defaults, widgetStore: nil).menuBarDisplayMode, .iconOnly)
+    }
+
+    func testMenuBarModesUpdateAndPersistIndependentlyOfAccent() throws {
+        let suite = UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = AppearanceSettings(defaults: defaults, widgetStore: nil)
+        settings.setAccent(.violet)
+
+        for mode in MenuBarDisplayMode.allCases {
+            settings.setMenuBarDisplayMode(mode)
+            XCTAssertEqual(settings.menuBarDisplayMode, mode)
+            let relaunched = AppearanceSettings(defaults: defaults, widgetStore: nil)
+            XCTAssertEqual(relaunched.menuBarDisplayMode, mode)
+            XCTAssertEqual(relaunched.accent, .violet)
+        }
+    }
+
     func testSelectionPersistsAcrossRelaunchAndSharesWithWidgets() throws {
         let suite = UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!

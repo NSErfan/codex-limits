@@ -30,8 +30,11 @@
 ## Codex and Claude Code
 
 Use the selector at the top of the menu to switch between **Codex** and **Claude Code**.
-The menu-bar label identifies the selected provider with its monochrome product icon
-and name. [Icon sources and attribution](docs/provider-icons.md). Both providers refresh independently,
+The menu bar shows the selected provider’s monochrome product icon by default.
+Choose **Icon only**, **Text only**, or **Icon and text** in **Settings → Appearance → Menu bar**.
+Text includes the provider name and usage percentage. This preference applies to both
+providers and is saved across launches. [Icon sources and attribution](docs/provider-icons.md).
+Both providers refresh independently,
 with separate saved readings, history, chart preferences, and weekly widgets. Your existing
 Codex history stays in place.
 

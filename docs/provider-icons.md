@@ -17,7 +17,11 @@ compact arc syntax in the original Codex path. The conversion preserves the
 24-by-24 viewbox, monochrome fill, and transparent interior details. `NSImage`
 template rendering lets macOS choose the menu-bar foreground color.
 
-Light and dark synthetic previews at menu-bar size:
+The default menu-bar style is **Icon only**. **Settings → Appearance → Menu bar**
+also offers **Text only** and **Icon and text**. Text includes the provider name
+and usage percentage. The menu header continues to show its icon and name.
+
+Light and dark synthetic previews of all three modes at menu-bar size:
 
 ![Codex menu-bar label](images/menu-bar-codex.png)
 

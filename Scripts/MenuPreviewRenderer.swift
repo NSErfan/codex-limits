@@ -316,17 +316,7 @@ enum MenuPreviewRenderer {
                                            fetchUsage: { snapshot }, startsAutomatically: false)
                 await monitor.refresh()
                 if scenario == "both" {
-                    let labels = HStack(spacing: 24) {
-                        ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
-                            ProviderMenuLabel(monitor: monitor)
-                                .font(.system(size: 13))
-                                .padding(.horizontal, 16)
-                                .frame(height: 24)
-                                .background(scheme == .dark ? Color(white: 0.15) : Color(white: 0.95))
-                                .environment(\.colorScheme, scheme)
-                        }
-                    }.padding(24).background(Color.gray.opacity(0.15))
-                    try render(labels, to: output.appendingPathComponent("menu-bar-\(provider.rawValue).png"))
+                    try renderMenuBarLabels(monitor: monitor, to: output)
                 }
                 for period in UsagePeriod.allCases where !missingFiveHour || period == .weekly {
                     defaults.set(period.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: provider))
@@ -339,6 +329,27 @@ enum MenuPreviewRenderer {
                 }
             }
         }
+    }
+
+    @MainActor private static func renderMenuBarLabels(monitor: UsageMonitor, to output: URL) throws {
+        let labels = VStack(alignment: .leading, spacing: 12) {
+            ForEach(MenuBarDisplayMode.allCases) { mode in
+                HStack(spacing: 24) {
+                    Text(mode.title)
+                        .font(.system(size: 11))
+                        .frame(width: 90, alignment: .leading)
+                    ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                        ProviderMenuLabel(monitor: monitor, displayMode: mode)
+                            .font(.system(size: 13))
+                            .padding(.horizontal, 16)
+                            .frame(height: 24)
+                            .background(scheme == .dark ? Color(white: 0.15) : Color(white: 0.95))
+                            .environment(\.colorScheme, scheme)
+                    }
+                }
+            }
+        }.padding(24).background(Color.gray.opacity(0.15))
+        try render(labels, to: output.appendingPathComponent("menu-bar-\(monitor.provider.rawValue).png"))
     }
 
     @MainActor private static func renderForecasts(at now: Date, to output: URL) throws {
