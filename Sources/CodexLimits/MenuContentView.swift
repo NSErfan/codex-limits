@@ -41,6 +41,7 @@ struct MenuContentView: View {
     var body: some View {
         VStack(spacing: 16) {
             ProviderPicker(selection: $selectedProvider)
+                .frame(maxWidth: 250)
             if let snapshot = monitor.snapshot {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     dashboard(snapshot: snapshot, now: context.date)
@@ -88,17 +89,8 @@ struct MenuContentView: View {
             .foregroundStyle(.secondary)
 
             if snapshot.limit(for: .fiveHour, provider: monitor.provider) != nil {
-                HStack(spacing: 10) {
-                    ForEach(UsagePeriod.allCases) { candidate in
-                        UsagePeriodCard(
-                            period: candidate,
-                            window: snapshot.limit(for: candidate, provider: monitor.provider)?.window,
-                            isSelected: candidate == period,
-                            now: now,
-                            select: { savedPeriod = candidate.rawValue }
-                        )
-                    }
-                }
+                UsagePeriodPicker(snapshot: snapshot, provider: monitor.provider, selection: period, now: now,
+                                  onSelect: { savedPeriod = $0.rawValue })
             }
 
             if let period, let limit = snapshot.limit(for: period, provider: monitor.provider) {

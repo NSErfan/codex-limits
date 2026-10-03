@@ -272,8 +272,9 @@ enum MenuPreviewRenderer {
 
     @MainActor private static func renderPeriods(at now: Date, to output: URL) async throws {
         for provider in UsageProvider.allCases {
-            for scenario in ["both", "missing-five-hour", "expired-five-hour"] {
+            for scenario in ["both", "missing-five-hour", "missing-weekly", "expired-five-hour"] {
                 let missingFiveHour = scenario == "missing-five-hour"
+                let missingWeekly = scenario == "missing-weekly"
                 let expiredFiveHour = scenario == "expired-five-hour"
                 let suite = "MenuPreviewRenderer.periods.\(UUID().uuidString)"
                 let defaults = UserDefaults(suiteName: suite)!
@@ -292,9 +293,11 @@ enum MenuPreviewRenderer {
                 let model = LimitReading(limitId: "\(provider.rawValue)-model", name: "Model weekly", window: UsageWindow(
                     remainingPercent: 84, resetsAt: reset, durationMinutes: 10_080))
                 let snapshot = UsageSnapshot(mainLimit: missingFiveHour ? weekly : fiveHour,
-                                             otherLimits: missingFiveHour ? [model] : [weekly, model],
+                                             otherLimits: missingFiveHour || missingWeekly ? [model] : [weekly, model],
                                              tokenHistory: [], resetCredits: [], fetchedAt: fetchedAt)
-                let samples = [fiveHour, weekly].filter { !missingFiveHour || $0.id == weekly.id }.flatMap { reading in
+                let samples = [fiveHour, weekly].filter { reading in
+                    snapshot.limit(for: reading.window.durationMinutes == 300 ? .fiveHour : .weekly, provider: provider) != nil
+                }.flatMap { reading in
                     (0 ... 30).map { index in
                         let progress = Double(index) / 30
                         let elapsed = fetchedAt.timeIntervalSince(reading.window.startsAt) * progress

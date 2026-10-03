@@ -5,13 +5,10 @@ struct ProviderPicker: View {
     @Binding var selection: UsageProvider
 
     var body: some View {
-        Picker("Usage provider", selection: $selection) {
-            ForEach(UsageProvider.allCases) { provider in
-                Text(provider.displayName).tag(provider)
-            }
+        SegmentedControl(options: UsageProvider.allCases, selection: selection, onSelect: { selection = $0 }) { provider in
+            Text(provider.displayName)
+                .help("Show \(provider.displayName) usage")
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
         .accessibilityLabel("Usage provider")
     }
 }

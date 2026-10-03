@@ -93,7 +93,7 @@ struct UsageDashboardView: View {
                 color: statusColor(forecast.status)
             )
 
-            rangeControls(accent: accent)
+            rangeControls
 
             if let duration = chartRange.duration {
                 HistoryChart(
@@ -181,7 +181,6 @@ struct UsageDashboardView: View {
     }
 
     private var expiredDashboard: some View {
-        let accent = UsageChartStyle.accent(for: window.remainingPercent, scheme: colorScheme, selection: usageAccent)
         return VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
                 Label("Awaiting next reading", systemImage: "clock")
@@ -191,7 +190,7 @@ struct UsageDashboardView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ChartRangePicker(selection: $chartRange, accent: accent, windowTitle: "Last period",
+            ChartRangePicker(selection: $chartRange, windowTitle: "Last period",
                              windowHelp: "Usage recorded during the last reported period.")
             if let duration = chartRange.duration {
                 HistoryChart(samples: samples,
@@ -207,10 +206,10 @@ struct UsageDashboardView: View {
         }
     }
 
-    private func rangeControls(accent: Color) -> some View {
+    private var rangeControls: some View {
         let target = activeTarget(in: window)
         return HStack(spacing: 10) {
-            ChartRangePicker(selection: $chartRange, accent: accent,
+            ChartRangePicker(selection: $chartRange,
                              windowHelp: target == nil ? "Option-click to choose a pacing target." : "Option-click to use the scheduled reset.",
                              onOptionClickWindow: {
                 if target != nil {

@@ -34,15 +34,16 @@ The menu-bar label identifies the selected provider. Both providers refresh inde
 with separate saved readings, history, chart preferences, and weekly widgets. Your existing
 Codex history stays in place.
 
-The **5-hour** and **Weekly** cards show both account balances and their reset times
-together. Select either card to switch the detailed chart, forecast, and usage budget
-to that window. The app remembers your selection and chart settings separately for
-each provider and period. Switching cards uses saved readings without making another
-usage request. If either provider omits its five-hour window, the entire limit-selection
-row is hidden and the weekly chart remains visible. An unavailable weekly window
-says **Not reported** when the selection row is shown.
-After a window resets, its saved balance is labeled **last reading** and pacing
-waits for a new reading; its recorded history remains available.
+The provider, usage-window, and chart-range selectors share a subtle segmented style.
+The **5-hour** and **Weekly** segments show both remaining balances together. Select
+either segment to switch the detailed chart, forecast, and usage budget to that window;
+hover for its reset time. The app remembers your selection and chart settings separately
+for each provider and period. Switching windows uses saved readings without making
+another usage request. If either provider omits its five-hour window, the entire
+usage-window selector is hidden and the weekly chart remains visible. An unavailable
+weekly window says **Not reported** when the selector is shown.
+After a window resets, its saved balance is labeled **(last)** and pacing waits for a
+new reading; its recorded history remains available.
 
 Claude Code uses your existing CLI sign-in. On macOS the app reads its OAuth credentials
 from Keychain, with the CLI credentials file as a fallback. Choose **Refresh** if macOS
