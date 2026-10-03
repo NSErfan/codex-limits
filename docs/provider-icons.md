@@ -18,8 +18,9 @@ compact arc syntax in the original Codex path. The conversion preserves the
 template rendering lets macOS choose the menu-bar foreground color.
 
 The default menu-bar style is **Icon only**. **Settings → Appearance → Menu bar**
-also offers **Text only** and **Icon and text**. Text includes the provider name
-and usage percentage. The menu header continues to show its icon and name.
+also offers **Text only** and **Icon and text**. Every style shows the usage
+percentage alongside the provider icon, name, or both. The menu header continues
+to show its icon and name.
 
 Light and dark synthetic previews of all three modes at menu-bar size:
 

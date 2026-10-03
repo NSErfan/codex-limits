@@ -10,9 +10,10 @@ struct ProviderMenuLabel: View {
                 ProviderIcon(provider: monitor.provider)
             }
             if displayMode != .iconOnly {
-                Text("\(monitor.provider.displayName) \(monitor.menuBarText)")
-                    .monospacedDigit()
+                Text(monitor.provider.displayName)
             }
+            Text(monitor.menuBarText)
+                .monospacedDigit()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(usageDescription)

@@ -34,6 +34,9 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                Text("The usage percentage is always shown.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 AccentColorPicker(appearance: appearance)
             }
 
