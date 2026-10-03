@@ -400,6 +400,12 @@ swift test
 
 The tests use synthetic usage data. Do not commit exported account data or local app state as fixtures.
 
+For native menu-bar label checks, run `Scripts/check-menu-bar-labels.sh` on an active
+macOS desktop. It briefly launches a separate app with synthetic usage for each
+provider and display mode, verifies the actual status button's title and image
+size, and saves button captures under `.build/menu-bar-labels/`. This catches
+percentage or spacing changes that standalone SwiftUI previews can miss.
+
 For forecast visual checks, run `PREVIEW_FORECASTS_ONLY=1 Scripts/render-menu-previews.sh`.
 It renders the production warning and chart for weekly and five-hour windows with
 scheduled, custom, banked-reset, and imminent targets in light and dark appearance.

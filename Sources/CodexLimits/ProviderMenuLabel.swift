@@ -5,20 +5,26 @@ struct ProviderMenuLabel: View {
     var displayMode: MenuBarDisplayMode = .iconOnly
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             if displayMode != .textOnly {
-                ProviderIcon(provider: monitor.provider)
-                    .padding(.trailing, 5)
+                if let image = ProviderMenuIcon.image(for: monitor.provider) {
+                    Image(nsImage: image)
+                        .accessibilityHidden(true)
+                }
             }
-            if displayMode != .iconOnly {
-                Text(monitor.provider.displayName)
-            }
-            Text(monitor.menuBarText)
+            // MenuBarExtra uses one native title; separate Text views can lose the percentage.
+            Text(title)
                 .monospacedDigit()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(usageDescription)
         .help(usageDescription)
+    }
+
+    private var title: String {
+        displayMode == .iconOnly
+            ? monitor.menuBarText
+            : "\(monitor.provider.displayName) \(monitor.menuBarText)"
     }
 
     private var usageDescription: String {

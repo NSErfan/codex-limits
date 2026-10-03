@@ -31,6 +31,19 @@ Light and dark synthetic previews of all three modes at menu-bar size:
 The icon library's [MIT license](https://github.com/lobehub/lobe-icons/blob/82e641b4fece9d1028a127149af9ded00df5ac0c/LICENSE)
 is included in the source and installed resource bundle as `LobeIcons-LICENSE.txt`.
 
+## Native menu-bar rendering
+
+The status label uses one title containing the percentage and optional provider
+name. Its template image includes seven transparent trailing points. On macOS
+27.0.1, the native status control ignores SwiftUI padding and uses only the first
+text view; standalone SwiftUI previews therefore cannot validate these behaviors.
+The image margin adds to the system's own spacing (two points on that version).
+
+Run `Scripts/check-menu-bar-labels.sh` on a Mac with an active desktop to inspect
+the actual `MenuBarExtra` status buttons for both providers in every display mode.
+The check uses synthetic usage and saves native button captures alongside its
+title and image-size assertions.
+
 ## Regenerating the PDFs
 
 With librsvg's `rsvg-convert` available, run from the repository root:
