@@ -272,7 +272,7 @@ final class UsageMonitorTests: XCTestCase {
         XCTAssertTrue(context.monitor.isRefreshing)
 
         await source.resume(with: expected)
-        await firstRefresh.value
+        _ = await firstRefresh.value
 
         XCTAssertEqual(context.monitor.snapshot, expected)
         XCTAssertFalse(context.monitor.isRefreshing)

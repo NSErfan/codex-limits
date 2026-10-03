@@ -15,6 +15,7 @@ final class UsageMonitor: ObservableObject {
     @Published private(set) var samples: [UsageSample] = []
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var refreshMessage: String?
     @Published private(set) var syncFolderName: String?
     @Published private(set) var syncErrorMessage: String?
 
@@ -22,7 +23,7 @@ final class UsageMonitor: ObservableObject {
     private static let historyInstallationIDKey = "historyInstallationID"
     private var historySyncBookmarkKey: String { provider.preferenceKey("historySyncBookmark") }
     private let defaults: UserDefaults
-    private let fetchUsage: @Sendable (Bool) async throws -> UsageSnapshot
+    private let fetchUsage: @Sendable (Bool) async throws -> UsageFetchResult
     private let recoveryDelaysNanoseconds: [UInt64]
     private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
     private let history: UsageHistory
@@ -30,6 +31,7 @@ final class UsageMonitor: ObservableObject {
     private var previousStatus: PaceStatus?
     private var cancellables: Set<AnyCancellable> = []
     private var recoveryTask: Task<Void, Never>?
+    private var automaticRefreshTask: Task<Void, Never>?
     private var started = false
     private var historyPrepared = false
     private var historyUsesFiles = false
@@ -43,6 +45,7 @@ final class UsageMonitor: ObservableObject {
         historyNow: @escaping @Sendable () -> Date = { Date() },
         widgetStore: WeeklyWidgetStore? = nil,
         fetchUsage: (@Sendable () async throws -> UsageSnapshot)? = nil,
+        fetchResult: (@Sendable (Bool) async throws -> UsageFetchResult)? = nil,
         recoveryDelaysNanoseconds: [UInt64] = [
             2_000_000_000,
             10_000_000_000,
@@ -60,8 +63,10 @@ final class UsageMonitor: ObservableObject {
                 .appendingPathComponent("WeeklyWidget", isDirectory: true),
             provider: provider
         )
-        if let fetchUsage {
-            self.fetchUsage = { _ in try await fetchUsage() }
+        if let fetchResult {
+            self.fetchUsage = fetchResult
+        } else if let fetchUsage {
+            self.fetchUsage = { _ in .fetched(try await fetchUsage()) }
         } else {
             self.fetchUsage = { try await provider.fetchUsage(allowCredentialPrompt: $0) }
         }
@@ -124,12 +129,14 @@ final class UsageMonitor: ObservableObject {
 
         await prepareHistory()
 
-        Timer.publish(every: 600, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                Task { @MainActor in await self?.refresh() }
-            }
-            .store(in: &cancellables)
+        if provider == .codex {
+            Timer.publish(every: provider.refreshInterval, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    Task { @MainActor in await self?.refresh() }
+                }
+                .store(in: &cancellables)
+        }
 
         NSWorkspace.shared.notificationCenter
             .publisher(for: NSWorkspace.didWakeNotification)
@@ -141,16 +148,22 @@ final class UsageMonitor: ObservableObject {
         await refresh()
     }
 
-    func refresh(allowCredentialPrompt: Bool = false) async {
+    @discardableResult
+    func refresh(allowCredentialPrompt: Bool = false) async -> Bool {
         recoveryTask?.cancel()
         recoveryTask = nil
-        await refresh(recoveryAttempt: 0, allowCredentialPrompt: allowCredentialPrompt)
+        return await refresh(recoveryAttempt: 0, allowCredentialPrompt: allowCredentialPrompt)
     }
 
-    private func refresh(recoveryAttempt: Int, allowCredentialPrompt: Bool = false) async {
-        guard !isRefreshing else { return }
+    @discardableResult
+    private func refresh(recoveryAttempt: Int, allowCredentialPrompt: Bool = false) async -> Bool {
+        guard !isRefreshing else { return false }
         isRefreshing = true
-        defer { isRefreshing = false }
+        var nextAutomaticRefresh: Date?
+        defer {
+            isRefreshing = false
+            scheduleAutomaticRefresh(at: nextAutomaticRefresh)
+        }
 
         await prepareHistory()
         if !historyUsesFiles {
@@ -168,37 +181,74 @@ final class UsageMonitor: ObservableObject {
         persist()
 
         do {
-            let newSnapshot = try await fetchTask.value
+            switch try await fetchTask.value {
+            case let .fetched(newSnapshot, nextRefreshAt):
+                nextAutomaticRefresh = nextRefreshAt
+                await accept(newSnapshot, exchangeErrorMessage: exchangeErrorMessage)
+                errorMessage = nil
+                refreshMessage = nil
+                requiresLogin = false
+                return true
+            case let .cached(cached, nextRefreshAt):
+                nextAutomaticRefresh = nextRefreshAt
+                await accept(cached, exchangeErrorMessage: exchangeErrorMessage)
+                refreshMessage = "Using saved \(provider.displayName) usage. Next check available \(nextRefreshAt.formatted(date: .abbreviated, time: .shortened))."
+                errorMessage = nil
+                requiresLogin = false
+            case let .deferred(error, cached, nextRefreshAt):
+                nextAutomaticRefresh = nextRefreshAt
+                if let cached { await accept(cached, exchangeErrorMessage: exchangeErrorMessage) }
+                applyFetchError(error, recoveryAttempt: recoveryAttempt)
+            }
+        } catch let error as any UsageFetchError {
+            applyFetchError(error, recoveryAttempt: recoveryAttempt)
+        } catch {
+            errorMessage = "Couldn’t load \(provider.displayName) usage. Refresh to try again."
+            refreshMessage = nil
+            requiresLogin = false
+            scheduleRecovery(afterFailedAttempt: recoveryAttempt)
+        }
+        return false
+    }
+
+    private func accept(_ newSnapshot: UsageSnapshot, exchangeErrorMessage: String?) async {
+        guard snapshot == nil || newSnapshot.fetchedAt >= snapshot!.fetchedAt else { return }
+        if newSnapshot != snapshot {
             let window = newSnapshot.mainLimit.window
-            let sample = UsageSample(
-                observedAt: newSnapshot.fetchedAt,
-                remainingPercent: window.remainingPercent,
-                resetsAt: window.resetsAt,
-                durationMinutes: window.durationMinutes
-            )
+            let sample = UsageSample(observedAt: newSnapshot.fetchedAt,
+                                     remainingPercent: window.remainingPercent,
+                                     resetsAt: window.resetsAt,
+                                     durationMinutes: window.durationMinutes)
             let recordedState = await history.record(sample)
             apply(recordedState, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
-            if recordedState.errorMessage == nil {
-                syncErrorMessage = exchangeErrorMessage
-            }
+            if recordedState.errorMessage == nil { syncErrorMessage = exchangeErrorMessage }
             snapshot = newSnapshot
             WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore,
                                           safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3,
                                           provider: provider)
-            errorMessage = nil
-            requiresLogin = false
-            recalculate()
-            persist()
-        } catch let error as any UsageFetchError {
-            errorMessage = error.localizedDescription
-            requiresLogin = error.requiresLogin
-            if error.shouldRetryAutomatically {
-                scheduleRecovery(afterFailedAttempt: recoveryAttempt)
-            }
-        } catch {
-            errorMessage = "Couldn’t load \(provider.displayName) usage. Refresh to try again."
-            requiresLogin = false
-            scheduleRecovery(afterFailedAttempt: recoveryAttempt)
+        }
+        recalculate()
+        persist()
+    }
+
+    private func applyFetchError(_ error: any UsageFetchError, recoveryAttempt: Int) {
+        errorMessage = error.localizedDescription
+        refreshMessage = nil
+        requiresLogin = error.requiresLogin
+        if error.shouldRetryAutomatically { scheduleRecovery(afterFailedAttempt: recoveryAttempt) }
+    }
+
+    private func scheduleAutomaticRefresh(at date: Date?) {
+        guard started, provider == .claude else { return }
+        automaticRefreshTask?.cancel()
+        // Long server deadlines remain in the shared gate; wake at least daily
+        // to re-read them without converting an unbounded header into Duration.
+        let delay = min(max(date?.timeIntervalSinceNow ?? provider.refreshInterval, 1), 86_400)
+        automaticRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self else { return }
+            automaticRefreshTask = nil
+            await refresh()
         }
     }
 

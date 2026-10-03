@@ -96,7 +96,7 @@ final class ClaudeClientTests: XCTestCase {
 
     func testRequestUsesOAuthUsageEndpointAndDoesNotSendRefreshToken() async throws {
         let credentials = ClaudeCredentials(accessToken: "fixture-access-token", expiresAt: nil)
-        let result = try await ClaudeClient.fetch(credentials: credentials, fetchedAt: Self.fetchedAt) { request in
+        let result = try await ClaudeClient.fetch(credentials: credentials, now: { Self.fetchedAt }) { request in
             XCTAssertEqual(request.url?.absoluteString, "https://api.anthropic.com/api/oauth/usage")
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fixture-access-token")
@@ -112,7 +112,7 @@ final class ClaudeClientTests: XCTestCase {
         let cases: [(Int, ClaudeClientError, Bool, Bool)] = [
             (401, .unauthorized, true, false),
             (403, .forbidden, false, false),
-            (429, .rateLimited, false, false),
+            (429, .rateLimited(retryAfter: nil), false, false),
             (503, .serverError(503), false, true),
             (400, .serverError(400), false, false)
         ]
@@ -131,6 +131,112 @@ final class ClaudeClientTests: XCTestCase {
                 XCTFail("Unexpected error type")
             }
         }
+    }
+
+    func testRetryAfterAcceptsSecondsAndCaseInsensitiveHeaderNames() async throws {
+        let cases = [
+            ("Retry-After", "120", 120.0),
+            ("retry-after", "0", 0.0),
+            ("RETRY-AFTER", "00120", 120.0),
+            ("rEtRy-AfTeR", " 120\t", 120.0)
+        ]
+        for (header, value, delay) in cases {
+            let error = try await Self.rateLimitError(headers: [header: value])
+
+            XCTAssertEqual(error, .rateLimited(retryAfter: Self.fetchedAt.addingTimeInterval(delay)))
+            XCTAssertFalse(error.shouldRetryAutomatically)
+            XCTAssertFalse(error.requiresLogin)
+        }
+    }
+
+    func testRetryAfterAcceptsHTTPDateFormatsAndPreservesPastDates() async throws {
+        let expected = Date(timeIntervalSince1970: 784_111_777)
+        for value in [
+            "Sun, 06 Nov 1994 08:49:37 GMT",
+            "Sunday, 06-Nov-94 08:49:37 GMT",
+            "Sun Nov  6 08:49:37 1994"
+        ] {
+            let error = try await Self.rateLimitError(headers: ["Retry-After": value])
+
+            XCTAssertEqual(error, .rateLimited(retryAfter: expected))
+        }
+    }
+
+    func testRetryAfterPreservesFutureHTTPDateDeadline() async throws {
+        let error = try await Self.rateLimitError(headers: ["Retry-After": "Fri, 15 Jan 2027 09:00:00 GMT"])
+
+        XCTAssertEqual(error, .rateLimited(retryAfter: Self.fetchedAt.addingTimeInterval(3_600)))
+    }
+
+    func testRetryAfterRejectsMalformedNegativeFractionalAndNonfiniteValues() async throws {
+        for value in [
+            "", " ", "-1", "+120", "1.5", "1e3", "NaN", "Infinity", "inf", "１２０",
+            String(repeating: "9", count: 400), "120, 240", "not a date",
+            "Sun, 31 Feb 2027 08:49:37 GMT", "Sun, 06 Nov 1994 08:49:37 GMT trailing"
+        ] {
+            let error = try await Self.rateLimitError(headers: ["Retry-After": value])
+
+            XCTAssertEqual(error, .rateLimited(retryAfter: nil), "Unexpected parsed value: \(value)")
+        }
+    }
+
+    func testRetryAfterSecondsStartWhenResponseArrivesAndDoNotRetry() async {
+        var currentDate = Self.fetchedAt
+        var requestCount = 0
+        var clockReadCount = 0
+        do {
+            _ = try await ClaudeClient.fetch(
+                credentials: .init(accessToken: "fixture", expiresAt: nil),
+                now: {
+                    clockReadCount += 1
+                    return currentDate
+                }
+            ) { _ in
+                requestCount += 1
+                currentDate = Self.fetchedAt.addingTimeInterval(20)
+                return (Data("server echoed secret".utf8), Self.response(status: 429, headers: ["Retry-After": "120"]))
+            }
+            XCTFail("Expected rate limit")
+        } catch let error as ClaudeClientError {
+            XCTAssertEqual(error, .rateLimited(retryAfter: Self.fetchedAt.addingTimeInterval(140)))
+            XCTAssertFalse(error.localizedDescription.contains("secret"))
+        } catch {
+            XCTFail("Unexpected error type")
+        }
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(clockReadCount, 1)
+    }
+
+    func testSuccessfulSnapshotIsTimestampedWhenResponseArrives() async throws {
+        var currentDate = Self.fetchedAt
+        let snapshot = try await ClaudeClient.fetch(
+            credentials: .init(accessToken: "fixture", expiresAt: nil),
+            now: { currentDate }
+        ) { _ in
+            currentDate = Self.fetchedAt.addingTimeInterval(20)
+            return (Self.payload, Self.response(status: 200))
+        }
+
+        XCTAssertEqual(snapshot.fetchedAt, Self.fetchedAt.addingTimeInterval(20))
+    }
+
+    func testSuccessfulSnapshotUsesAccountEmailAfterResponseArrives() async throws {
+        var responseArrived = false
+        let account = ClaudeAccountReader.Account(accountID: "fixture-account", email: "fixture@example.com")
+        let snapshot = try await ClaudeClient.fetch(
+            credentials: .init(accessToken: "fixture", expiresAt: nil),
+            account: account,
+            readAccount: {
+                XCTAssertTrue(responseArrived)
+                return account
+            }
+        ) { _ in
+            responseArrived = true
+            return (Self.payload, Self.response(status: 200))
+        }
+
+        XCTAssertEqual(snapshot.accountEmail, "fixture@example.com")
+        XCTAssertNil(try ClaudeClient.decode(Self.payload, fetchedAt: Self.fetchedAt).accountEmail)
     }
 
     func testCancellationIsPreserved() async {
@@ -161,7 +267,21 @@ final class ClaudeClientTests: XCTestCase {
         }
     }
 
-    private static func response(status: Int) -> HTTPURLResponse {
-        HTTPURLResponse(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!, statusCode: status, httpVersion: nil, headerFields: nil)!
+    private static func response(status: Int, headers: [String: String]? = nil) -> HTTPURLResponse {
+        HTTPURLResponse(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!, statusCode: status, httpVersion: nil, headerFields: headers)!
+    }
+
+    private static func rateLimitError(headers: [String: String]) async throws -> ClaudeClientError {
+        do {
+            _ = try await ClaudeClient.fetch(
+                credentials: .init(accessToken: "fixture", expiresAt: nil),
+                now: { Self.fetchedAt }
+            ) { _ in
+                (Data("server echoed secret".utf8), Self.response(status: 429, headers: headers))
+            }
+            return try XCTUnwrap(nil as ClaudeClientError?, "Expected rate limit")
+        } catch let error as ClaudeClientError {
+            return error
+        }
     }
 }

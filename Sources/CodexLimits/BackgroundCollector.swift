@@ -32,11 +32,32 @@ enum BackgroundCollector {
                 defaults: .standard,
                 historyDirectory: UsageMonitor.historyDirectory(provider: provider),
                 provider: provider,
-                fetchUsage: { try await provider.fetchUsage() }
+                fetchUsage: {
+                    switch try await scheduledFetch(provider: provider, fetch: { try await provider.fetchUsage() }) {
+                    case let .fetched(snapshot, _), let .cached(snapshot, _): snapshot
+                    case let .deferred(error, _, _): throw error
+                    }
+                }
             )
             collectedAny = collectedAny || collected
         }
         return collectedAny
+    }
+
+    static func scheduledFetch(
+        provider: UsageProvider,
+        now: @Sendable () -> Date = { Date() },
+        sleep: @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+        fetch: @Sendable () async throws -> UsageFetchResult
+    ) async throws -> UsageFetchResult {
+        let result = try await fetch()
+        guard provider == .claude, let next = result.nextRefreshAt else { return result }
+        let delay = next.timeIntervalSince(now())
+        // launchd's fixed cadence can arrive just before the prior check's deadline.
+        // Wait outside the lock, then recheck once so the collector doesn't skip a whole period.
+        guard delay > 0, delay <= 60 else { return result }
+        try await sleep(delay)
+        return try await fetch()
     }
 
     static func collectOnce(

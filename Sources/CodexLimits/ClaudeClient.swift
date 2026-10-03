@@ -1,22 +1,23 @@
 import Foundation
 
 enum ClaudeClient {
-    static func fetch(allowCredentialPrompt: Bool = false) async throws -> UsageSnapshot {
+    static func fetch(credentials: ClaudeCredentials, account: ClaudeAccountReader.Account?) async throws -> UsageSnapshot {
         try Task.checkCancellation()
-        let credentials = try ClaudeCredentialReader.read(allowPrompt: allowCredentialPrompt)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-        return try await fetch(credentials: credentials) { request in
+        return try await fetch(credentials: credentials, account: account, readAccount: { ClaudeAccountReader.read() }) { request in
             try await session.data(for: request)
         }
     }
 
     static func fetch(
         credentials: ClaudeCredentials,
-        fetchedAt: Date = Date(),
+        now: () -> Date = Date.init,
+        account: ClaudeAccountReader.Account? = nil,
+        readAccount: () -> ClaudeAccountReader.Account? = { nil },
         transport: (URLRequest) async throws -> (Data, URLResponse)
     ) async throws -> UsageSnapshot {
         try Task.checkCancellation()
@@ -32,19 +33,21 @@ enum ClaudeClient {
 
         do {
             let (data, response) = try await transport(request)
+            let receivedAt = now()
             try Task.checkCancellation()
             guard let response = response as? HTTPURLResponse else {
                 throw ClaudeClientError.invalidResponse
             }
             switch response.statusCode {
             case 200:
-                return try decode(data, fetchedAt: fetchedAt)
+                let email = account.flatMap { $0 == readAccount() ? $0.email : nil }
+                return try decode(data, fetchedAt: receivedAt, accountEmail: email)
             case 401:
                 throw ClaudeClientError.unauthorized
             case 403:
                 throw ClaudeClientError.forbidden
             case 429:
-                throw ClaudeClientError.rateLimited
+                throw ClaudeClientError.rateLimited(retryAfter: retryAfter(response, receivedAt: receivedAt))
             default:
                 throw ClaudeClientError.serverError(response.statusCode)
             }
@@ -61,7 +64,34 @@ enum ClaudeClient {
         }
     }
 
-    static func decode(_ data: Data, fetchedAt: Date) throws -> UsageSnapshot {
+    private static func retryAfter(_ response: HTTPURLResponse, receivedAt: Date) -> Date? {
+        guard let value = response.value(forHTTPHeaderField: "Retry-After")?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        if value.utf8.allSatisfy({ (48...57).contains($0) }) {
+            guard let seconds = TimeInterval(value), seconds.isFinite else { return nil }
+            let deadline = receivedAt.addingTimeInterval(seconds)
+            return deadline.timeIntervalSinceReferenceDate.isFinite ? deadline : nil
+        }
+        return httpDate(value, receivedAt: receivedAt)
+    }
+
+    private static func httpDate(_ value: String, receivedAt: Date) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.isLenient = false
+        formatter.twoDigitStartDate = formatter.calendar.date(byAdding: .year, value: -50, to: receivedAt)
+        for format in ["EEE, dd MMM yyyy HH:mm:ss 'GMT'", "EEEE, dd-MMM-yy HH:mm:ss 'GMT'", "EEE MMM d HH:mm:ss yyyy"] {
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    static func decode(_ data: Data, fetchedAt: Date, accountEmail: String? = nil) throws -> UsageSnapshot {
         guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
             throw ClaudeClientError.invalidResponse
         }
@@ -104,7 +134,8 @@ enum ClaudeClient {
             otherLimits: others,
             tokenHistory: [],
             resetCredits: [],
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            accountEmail: accountEmail
         )
     }
 

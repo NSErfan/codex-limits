@@ -123,6 +123,7 @@ struct MenuContentView: View {
                     }
                 }
                 .buttonStyle(.borderless)
+                .disabled(monitor.isRefreshing)
                 .help("Refresh usage")
                 .accessibilityLabel("Refresh usage")
             }
@@ -270,6 +271,12 @@ struct MenuContentView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            if monitor.errorMessage == nil, let message = monitor.refreshMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if showsFooterActions {
                 footerActions
             }
@@ -388,7 +395,7 @@ struct MenuContentView: View {
             } else {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.title2)
-                Text(monitor.errorMessage ?? "Usage is unavailable. Try refreshing.")
+                Text(monitor.errorMessage ?? monitor.refreshMessage ?? "Usage is unavailable. Try refreshing.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                 Button("Try again") {

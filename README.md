@@ -46,6 +46,21 @@ Codex Limits does not rotate or rewrite the CLI's tokens. Claude usage requires 
 claude.ai subscription login with usage access; API-key-only and inference-only tokens
 are not supported.
 
+**Settings → Accounts** shows the email associated with each provider's last usage
+reading and when that reading was fetched. Cached readings retain their original
+account email. Older readings or logins without account metadata show **Email unavailable**
+until a new reading includes it. Email addresses stay in local app state; they are not
+included in shared history or widget data.
+
+Claude requests are spaced at least **15 minutes apart**, shared by the menu app and
+background collector for the same CLI profile on this Mac. Opening the menu, waking
+the Mac, and pressing Refresh reuse the saved reading during that interval. After a
+rate-limit response, the app respects `Retry-After`; when no valid deadline is supplied,
+it waits 30 minutes, then 60 minutes, then up to two hours after consecutive failures.
+The saved cooldown survives relaunches, and the menu and Accounts show when another
+check is available. Manual Refresh cannot bypass it. These are conservative local
+defaults, not a published Anthropic polling allowance.
+
 Claude shows account-wide five-hour and seven-day quotas, plus model-specific limits
 when Anthropic reports them. Weekly widgets use only the account-wide seven-day quota.
 Missing quotas remain unavailable. Claude forecasts start with observed quota readings;
@@ -133,8 +148,8 @@ widget pacing.
 - Estimates the percentage left at reset from current and past use.
 - Keeps up to 90 days of main-limit history in versioned daily JSON files, with 7-day and 30-day chart views.
 - Can copy history to a private folder that you choose.
-- Refreshes on launch, after wake, when you open the menu, every ten minutes, or on request.
-- Retries transient read failures automatically and preserves the last successful reading and cached history.
+- Checks on launch, after wake, when you open the menu, and on request; Codex refreshes every ten minutes, while Claude uses a shared 15-minute minimum interval and rate-limit cooldowns.
+- Preserves the last successful reading and cached history, including the account email and original reading time.
 - Can collect usage on a 15-minute schedule while the menu-bar app is closed.
 - Runs as a native SwiftUI menu-bar app with no third-party runtime dependencies.
 - Includes four native desktop widgets: weekly percentage and usage graph widgets for each provider.
@@ -143,7 +158,7 @@ widget pacing.
 
 In Settings, **Collect usage while the app is closed** controls a bundled background helper. On first app launch, Codex Limits attempts to register it automatically; macOS may require approval in **System Settings → Login Items**. Settings reports when approval is needed or registration fails.
 
-The helper runs a single collection on a 15-minute schedule, writing main-limit history and weekly widget data. The menu-bar app continues to refresh on its own ten-minute schedule. It checks both providers independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
+The helper runs a single collection on a 15-minute schedule, writing main-limit history and weekly widget data. Codex keeps its ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and rate-limit cooldowns, so simultaneous checks send only one request. Each provider is checked independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
 
 Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 

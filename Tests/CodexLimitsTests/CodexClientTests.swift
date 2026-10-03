@@ -111,6 +111,7 @@ final class CodexClientTests: XCTestCase {
             printf '%s\\n' '{"id":1,"result":{}}'
             printf '%s\\n' '\(Self.rateLimitsResponse)'
             printf '%s\\n' '{"id":3,"result":{}}'
+            printf '%s\\n' '{"id":4,"result":{"account":{"type":"chatgpt","email":"fixture@example.test"}}}'
             exec sleep 5
             """,
             in: directory
@@ -278,6 +279,7 @@ final class CodexClientTests: XCTestCase {
 
         XCTAssertEqual(result.mainLimit.window.remainingPercent, 80)
         XCTAssertEqual(server.connectionCount, 1)
+        XCTAssertEqual(result.accountEmail, "fixture@example.test")
         XCTAssertEqual(server.startCount, 1)
         XCTAssertEqual(server.stopCount, 1)
         XCTAssertEqual(
@@ -286,7 +288,8 @@ final class CodexClientTests: XCTestCase {
                 "initialize",
                 "initialized",
                 "account/rateLimits/read",
-                "account/usage/read"
+                "account/usage/read",
+                "account/read"
             ]
         )
     }
@@ -1087,6 +1090,8 @@ private final class AppServerFixture: @unchecked Sendable {
                 return #"{"id":3,"error":{"code":-32603,"message":"Usage failed"}}"#
             }
             return Self.usageResponse
+        case "account/read":
+            return #"{"id":4,"result":{"account":{"type":"chatgpt","email":"fixture@example.test"}}}"#
         default:
             return nil
         }

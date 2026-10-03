@@ -8,7 +8,7 @@ enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
     case missingProfileScope
     case unauthorized
     case forbidden
-    case rateLimited
+    case rateLimited(retryAfter: Date?)
     case serverError(Int)
     case invalidResponse
     case mainLimitMissing
@@ -32,7 +32,7 @@ enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
         case .forbidden:
             "Claude didn’t allow access to subscription usage. Check that Claude Code is signed in with a supported Claude subscription."
         case .rateLimited:
-            "Claude is limiting usage checks. Wait a few minutes, then refresh."
+            "Claude is limiting usage checks. Usage checks will resume after the cooldown."
         case let .serverError(status):
             "Claude couldn’t load usage (HTTP \(status)). Try refreshing later."
         case .invalidResponse:

@@ -45,8 +45,8 @@ final class UsageProviders: ObservableObject {
     }
 
     func refreshAll() async {
-        async let codexRefresh: Void = codex.refresh()
-        async let claudeRefresh: Void = claude.refresh()
+        async let codexRefresh: Bool = codex.refresh()
+        async let claudeRefresh: Bool = claude.refresh()
         _ = await (codexRefresh, claudeRefresh)
     }
 
