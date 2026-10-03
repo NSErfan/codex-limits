@@ -5,7 +5,7 @@ struct ProviderMenuLabel: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: "gauge.with.dots.needle.50percent")
+            ProviderIcon(provider: monitor.provider)
             Text("\(monitor.provider.displayName) \(monitor.menuBarText)")
                 .monospacedDigit()
         }

@@ -78,8 +78,7 @@ struct MenuContentView: View {
         let otherLimits = UsageDashboardPreferences.otherLimits(in: snapshot, provider: monitor.provider)
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 7) {
-                Image(systemName: "terminal.fill")
-                    .font(.system(size: 12, weight: .semibold))
+                ProviderIcon(provider: monitor.provider, size: 14)
                 Text(monitor.provider.displayName.uppercased())
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .tracking(2)

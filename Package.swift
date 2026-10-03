@@ -11,7 +11,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "CodexWidgetKit", swiftSettings: [.unsafeFlags(["-application-extension"])]),
-        .executableTarget(name: "CodexLimits", dependencies: ["CodexWidgetKit"]),
+        .executableTarget(name: "CodexLimits", dependencies: ["CodexWidgetKit"], resources: [.process("Resources")]),
         .testTarget(name: "CodexLimitsTests", dependencies: ["CodexLimits"]),
         .testTarget(name: "CodexWidgetKitTests", dependencies: ["CodexWidgetKit"])
     ]

@@ -315,6 +315,19 @@ enum MenuPreviewRenderer {
                                                                          provider: provider),
                                            fetchUsage: { snapshot }, startsAutomatically: false)
                 await monitor.refresh()
+                if scenario == "both" {
+                    let labels = HStack(spacing: 24) {
+                        ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                            ProviderMenuLabel(monitor: monitor)
+                                .font(.system(size: 13))
+                                .padding(.horizontal, 16)
+                                .frame(height: 24)
+                                .background(scheme == .dark ? Color(white: 0.15) : Color(white: 0.95))
+                                .environment(\.colorScheme, scheme)
+                        }
+                    }.padding(24).background(Color.gray.opacity(0.15))
+                    try render(labels, to: output.appendingPathComponent("menu-bar-\(provider.rawValue).png"))
+                }
                 for period in UsagePeriod.allCases where !missingFiveHour || period == .weekly {
                     defaults.set(period.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: provider))
                     let comparison = HStack(alignment: .top, spacing: 24) {
