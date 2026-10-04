@@ -5,6 +5,46 @@ import XCTest
 final class WeeklyWidgetStoreTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func testProvidersKeepSeparateBalancesAndHistoryWithSharedAppearance() throws {
+        let codex = temporaryStore()
+        let claude = WeeklyWidgetStore(directory: codex.directory, provider: .claude)
+        defer { try? FileManager.default.removeItem(at: codex.directory) }
+
+        try codex.write(snapshot(offset: -600, remaining: 90), writer: .app)
+        try claude.write(snapshot(offset: -300, remaining: 50), writer: .app)
+        try codex.write(snapshot(offset: 0, remaining: 85), writer: .collector)
+        try claude.write(snapshot(offset: 0, remaining: 40), writer: .collector)
+        try codex.writeAccent(.orange)
+
+        XCTAssertEqual(codex.provider, .codex)
+        XCTAssertEqual(claude.provider, .claude)
+        XCTAssertEqual(codex.read()?.samples.map(\.remainingPercent), [90, 85])
+        XCTAssertEqual(claude.read()?.samples.map(\.remainingPercent), [50, 40])
+        XCTAssertEqual(codex.read()?.window?.remainingPercent, 85)
+        XCTAssertEqual(claude.read()?.window?.remainingPercent, 40)
+        XCTAssertEqual(claude.readAccent(), .orange)
+
+        try claude.write(.init(fetchedAt: now.addingTimeInterval(60), window: nil), writer: .app)
+        XCTAssertNil(claude.read()?.window)
+        XCTAssertEqual(codex.read()?.window?.remainingPercent, 85)
+    }
+
+    func testExistingCodexFilesAreNotReadAsClaudeUsage() throws {
+        let codex = temporaryStore()
+        let claude = WeeklyWidgetStore(directory: codex.directory, provider: .claude)
+        defer { try? FileManager.default.removeItem(at: codex.directory) }
+        try FileManager.default.createDirectory(at: codex.directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(snapshot(offset: 0, remaining: 68))
+            .write(to: codex.directory.appendingPathComponent("app.json"))
+
+        XCTAssertEqual(codex.read()?.window?.remainingPercent, 68)
+        XCTAssertNil(claude.read())
+        XCTAssertEqual(codex.percentageKind, "CodexWeeklyPercentage")
+        XCTAssertEqual(codex.graphKind, "CodexWeeklyGraph")
+        XCTAssertNotEqual(codex.percentageKind, claude.percentageKind)
+        XCTAssertNotEqual(codex.graphKind, claude.graphKind)
+    }
+
     func testPaceSurvivesStorageAndIsHiddenWhenStaleOrExpired() throws {
         let store = temporaryStore()
         defer { try? FileManager.default.removeItem(at: store.directory) }

@@ -3,18 +3,20 @@ import SwiftUI
 public struct WeeklyGraphView: View {
     public let snapshot: WeeklyWidgetSnapshot?
     public let date: Date
+    public let provider: UsageProvider
     @Environment(\.colorScheme) private var scheme
     @Environment(\.usageAccent) private var usageAccent
 
-    public init(snapshot: WeeklyWidgetSnapshot?, date: Date) {
+    public init(snapshot: WeeklyWidgetSnapshot?, date: Date, provider: UsageProvider = .codex) {
         self.snapshot = snapshot
         self.date = date
+        self.provider = provider
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date))
+                WeeklyWidgetHeader(stale: status == .stale, pace: snapshot?.pace(at: date), provider: provider)
                 Text("WEEKLY LIMIT")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(1.4)
@@ -51,6 +53,8 @@ public struct WeeklyGraphView: View {
             }
         }
         .padding(16)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Weekly \(provider.displayName) usage chart")
     }
 
     @ViewBuilder private var chart: some View {
@@ -84,7 +88,7 @@ public struct WeeklyGraphView: View {
                     .foregroundStyle(accent)
                 Text(status == .expired ? "New reading needed" : "Weekly usage unavailable")
                     .font(.system(size: 11, weight: .medium))
-                Text("Open Codex Limits to refresh your weekly allowance.")
+                Text(emptyStateHint)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -98,6 +102,12 @@ public struct WeeklyGraphView: View {
         status == .current || status == .stale ? snapshot?.window?.remainingPercent : nil
     }
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
+    private var emptyStateHint: String {
+        if provider == .claude, snapshot == nil {
+            return "Open Codex Limits to connect Claude Code and refresh usage."
+        }
+        return "Open Codex Limits to refresh your \(provider.displayName) weekly allowance."
+    }
     private var resetText: String {
         guard remaining != nil, let reset = snapshot?.window?.resetsAt else {
             return status == .expired ? "Reset time passed" : "Weekly limit"

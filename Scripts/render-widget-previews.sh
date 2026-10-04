@@ -9,4 +9,4 @@ bin_dir=$(xcrun swift build --show-bin-path --disable-sandbox)
 xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -I "$bin_dir/Modules" -L "$bin_dir" -lCodexWidgetKit \
     Scripts/WidgetPreviewRenderer.swift -o "$bin_dir/WidgetPreviewRenderer"
-"$bin_dir/WidgetPreviewRenderer" "${1:-$project_dir/.build/widget-previews}"
+"$bin_dir/WidgetPreviewRenderer" "${1:-$project_dir/.build/widget-previews}" "${2:-codex}"

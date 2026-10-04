@@ -4,8 +4,9 @@ import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject var monitor: UsageMonitor
+    @ObservedObject var providers: UsageProviders
     @ObservedObject var appearance: AppearanceSettings
+    @ObservedObject var login: ProviderLoginSession
     @Environment(\.colorScheme) private var scheme
     @AppStorage(UsageMonitor.safetyBufferKey) private var safetyBuffer = 3.0
     @AppStorage(LoginItem.preferenceKey) private var launchAtLogin = true
@@ -15,7 +16,27 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Accounts") {
+                ProviderAccountSettings(monitor: providers.codex, login: login)
+                ProviderAccountSettings(monitor: providers.claude, login: login)
+                Text("Uses your existing CLI sign-ins. Sign in opens the official CLI in Terminal.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Appearance") {
+                Picker("Menu bar", selection: Binding(
+                    get: { appearance.menuBarDisplayMode },
+                    set: appearance.setMenuBarDisplayMode
+                )) {
+                    ForEach(MenuBarDisplayMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                Text("The usage percentage is always shown.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 AccentColorPicker(appearance: appearance)
             }
 
@@ -24,7 +45,7 @@ struct SettingsView: View {
                     Text("Reserve: \(Int(safetyBuffer))%")
                 }
                 .onChange(of: safetyBuffer) { _, value in
-                    monitor.updateSafetyBuffer(value)
+                    providers.updateSafetyBuffer(value)
                 }
 
                 Text("Amount of this period’s allowance you want left at your pacing target.")
@@ -70,37 +91,15 @@ struct SettingsView: View {
             }
 
             Section("History sync") {
-                Text("Choose a shared folder to combine usage history from your Macs.")
-                    .foregroundStyle(.secondary)
-
-                if let folderName = monitor.syncFolderName {
-                    LabeledContent("Folder", value: folderName)
-                    Button("Stop syncing") {
-                        Task { await monitor.stopHistorySync() }
-                    }
-                } else {
-                    Button("Choose folder…", action: chooseHistoryFolder)
-                }
-
-                Text("Use the same Codex account on every Mac connected to this folder.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Choose a private folder that only you can access.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let syncErrorMessage = monitor.syncErrorMessage {
-                    Label(syncErrorMessage, systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                ProviderPicker(selection: $providers.selectedProvider)
+                ProviderHistorySettings(monitor: providers.selectedMonitor)
             }
         }
         .formStyle(.grouped)
         .tint(appearance.accent.readableColor(scheme: scheme))
         .padding()
-        .frame(width: 380)
-        .frame(minHeight: 560, idealHeight: 720)
+        .frame(width: 440)
+        .frame(minHeight: 620, idealHeight: 800)
     }
 
     private func updateLaunchAtLogin(_ enabled: Bool) {
@@ -133,16 +132,6 @@ struct SettingsView: View {
         }
     }
 
-    private func chooseHistoryFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Use this folder"
-        guard panel.runModal() == .OK, let directory = panel.url else { return }
-        Task { await monitor.connectHistoryFolder(directory) }
-    }
 }
 
 enum BackgroundCollection {

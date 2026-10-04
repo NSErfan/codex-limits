@@ -9,11 +9,12 @@ enum WeeklyWidgetPublisher {
     static func snapshot(
         from usage: UsageSnapshot,
         previous: WeeklyWidgetSnapshot? = nil,
-        safetyBuffer: Double = 3
+        safetyBuffer: Double = 3,
+        provider: UsageProvider = .codex
     ) -> WeeklyWidgetSnapshot {
         // mainLimit is the most constrained window, not necessarily the week.
         let weekly = ([usage.mainLimit] + usage.otherLimits).first {
-            $0.limitId == "codex" && $0.window.durationMinutes == 10_080
+            $0.limitId == provider.rawValue && $0.window.durationMinutes == 10_080
         }?.window
         let window = weekly.map {
             WeeklyWidgetSnapshot.Window(
@@ -57,14 +58,18 @@ enum WeeklyWidgetPublisher {
         _ usage: UsageSnapshot,
         writer: WeeklyWidgetStore.Writer,
         store: WeeklyWidgetStore?,
-        safetyBuffer: Double = 3
+        safetyBuffer: Double = 3,
+        provider: UsageProvider = .codex
     ) {
-        guard let store else { return }
+        guard let store, store.provider == provider else { return }
         do {
-            try store.write(snapshot(from: usage, previous: store.read(), safetyBuffer: safetyBuffer), writer: writer)
+            try store.write(
+                snapshot(from: usage, previous: store.read(), safetyBuffer: safetyBuffer, provider: provider),
+                writer: writer
+            )
             if Bundle.main.object(forInfoDictionaryKey: "CodexWidgetAppGroup") != nil {
-                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.percentageKind)
-                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.graphKind)
+                WidgetCenter.shared.reloadTimelines(ofKind: store.percentageKind)
+                WidgetCenter.shared.reloadTimelines(ofKind: store.graphKind)
             }
         } catch {
             logger.error("Could not update weekly widgets: \(error.localizedDescription, privacy: .public)")

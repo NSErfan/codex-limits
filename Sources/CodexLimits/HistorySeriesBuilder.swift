@@ -126,14 +126,18 @@ enum HistorySeriesBuilder {
 
 extension HistorySeriesBuilder.Series {
     func accessibilitySummary(days: Int) -> String {
+        accessibilitySummary(period: "the last \(days) days")
+    }
+
+    func accessibilitySummary(period: String) -> String {
         guard let latest = latestPoint else {
-            return "No usage readings recorded in the last \(days) days."
+            return "No usage readings recorded in \(period)."
         }
         let gaps = switch connectors.count {
         case 0: ""
         case 1: " 1 gap between readings is estimated."
         default: " \(connectors.count) gaps between readings are estimated."
         }
-        return "Remaining allowance over the last \(days) days. Latest reading: \(Int(latest.remainingPercent.rounded())) percent.\(gaps)"
+        return "Remaining allowance over \(period). Latest reading: \(Int(latest.remainingPercent.rounded())) percent.\(gaps)"
     }
 }

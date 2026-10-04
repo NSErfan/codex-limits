@@ -13,6 +13,7 @@ struct WeeklyGraphWidget: Widget {
                         .environment(\.usageAccent, entry.accent)
                 }
                 .environment(\.usageAccent, entry.accent)
+                .widgetURL(URL(string: "codexlimits://usage/codex"))
         }
         .configurationDisplayName("Weekly usage chart")
         .description("Track your remaining weekly allowance against an even pace to the scheduled reset.")

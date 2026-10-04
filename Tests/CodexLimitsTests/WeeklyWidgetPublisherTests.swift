@@ -22,6 +22,53 @@ final class WeeklyWidgetPublisherTests: XCTestCase {
         XCTAssertEqual(value.status(at: now), .unavailable)
     }
 
+    func testClaudeWeeklySelectionExcludesCodexAndModelAllowances() {
+        let weekly = UsageWindow(remainingPercent: 42, resetsAt: now.addingTimeInterval(86_400), durationMinutes: 10_080)
+        let model = UsageWindow(remainingPercent: 5, resetsAt: weekly.resetsAt, durationMinutes: 10_080)
+        let short = UsageWindow(remainingPercent: 1, resetsAt: weekly.resetsAt, durationMinutes: 300)
+        let usage = UsageSnapshot(
+            mainLimit: .init(limitId: "claude", name: "Session", window: short),
+            otherLimits: [
+                .init(limitId: "claude-sonnet", name: "Sonnet", window: model),
+                .init(limitId: "codex", name: "Codex", window: model),
+                .init(limitId: "claude", name: "All models", window: weekly)
+            ],
+            tokenHistory: [], resetCredits: [], fetchedAt: now
+        )
+
+        let value = WeeklyWidgetPublisher.snapshot(from: usage, provider: .claude)
+        XCTAssertEqual(value.window?.remainingPercent, 42)
+        XCTAssertEqual(value.samples.map(\.remainingPercent), [42])
+
+        let modelOnly = UsageSnapshot(
+            mainLimit: .init(limitId: "claude-sonnet", name: "Sonnet", window: model),
+            otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now
+        )
+        XCTAssertNil(WeeklyWidgetPublisher.snapshot(from: modelOnly, provider: .claude).window)
+    }
+
+    func testPublishingClaudeCannotOverwriteCodexStore() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let codex = WeeklyWidgetStore(directory: folder)
+        let claude = WeeklyWidgetStore(directory: folder, provider: .claude)
+        WeeklyWidgetPublisher.publish(snapshot(), writer: .app, store: codex)
+        let previous = try XCTUnwrap(codex.read())
+        let usage = UsageSnapshot(
+            mainLimit: .init(limitId: "claude", name: "All models", window: .init(
+                remainingPercent: 42, resetsAt: now.addingTimeInterval(86_400), durationMinutes: 10_080
+            )),
+            otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now.addingTimeInterval(60)
+        )
+
+        WeeklyWidgetPublisher.publish(usage, writer: .collector, store: codex, provider: .claude)
+        XCTAssertEqual(codex.read(), previous)
+        XCTAssertNil(claude.read())
+        WeeklyWidgetPublisher.publish(usage, writer: .collector, store: claude, provider: .claude)
+        XCTAssertEqual(claude.read()?.window?.remainingPercent, 42)
+        XCTAssertEqual(codex.read(), previous)
+    }
+
     func testWeeklyPaceUsesForecastRulesAndSafetyBuffer() {
         for (remaining, expected) in [(20.0, WeeklyPace.slowDown), (59, .onTrack), (80, .roomToUseMore)] {
             let weekly = UsageWindow(remainingPercent: remaining, resetsAt: now.addingTimeInterval(4 * 86_400), durationMinutes: 10_080)

@@ -2,6 +2,8 @@ import CodexWidgetKit
 import WidgetKit
 
 struct WeeklyWidgetProvider: TimelineProvider {
+    var provider: UsageProvider = .codex
+
     struct Entry: TimelineEntry {
         let date: Date
         let snapshot: WeeklyWidgetSnapshot?
@@ -9,18 +11,18 @@ struct WeeklyWidgetProvider: TimelineProvider {
     }
 
     func placeholder(in context: Context) -> Entry {
-        Entry(date: .now, snapshot: .preview(), accent: WeeklyWidgetStore.shared()?.readAccent() ?? .automatic)
+        Entry(date: .now, snapshot: .preview(), accent: WeeklyWidgetStore.shared(provider: provider)?.readAccent() ?? .automatic)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
-        let store = WeeklyWidgetStore.shared()
+        let store = WeeklyWidgetStore.shared(provider: provider)
         let snapshot = context.isPreview ? WeeklyWidgetSnapshot.preview() : store?.read()
         completion(Entry(date: .now, snapshot: snapshot, accent: store?.readAccent() ?? .automatic))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         let now = Date()
-        let store = WeeklyWidgetStore.shared()
+        let store = WeeklyWidgetStore.shared(provider: provider)
         let snapshot = store?.read()
         let accent = store?.readAccent() ?? .automatic
         var dates = [now]

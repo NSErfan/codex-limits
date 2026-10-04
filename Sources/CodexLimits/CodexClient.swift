@@ -4,14 +4,9 @@ import Foundation
 enum CodexClient {
     private static let retryDelayNanoseconds: UInt64 = 250_000_000
     private static let timeoutNanoseconds: UInt64 = 15_000_000_000
-    private static let executablePaths = [
-        "/opt/homebrew/bin/codex",
-        "/usr/local/bin/codex"
-    ]
-
     static func fetch() async throws -> UsageSnapshot {
         try await fetch(
-            executablePaths: executablePaths,
+            executablePaths: [ProviderExecutable.path(for: .codex)].compactMap { $0 },
             isExecutable: FileManager.default.isExecutableFile(atPath:),
             retryDelayNanoseconds: retryDelayNanoseconds,
             timeoutNanoseconds: timeoutNanoseconds,
@@ -158,7 +153,8 @@ enum CodexClient {
     static func decode(
         rateLimitsResponse: Data,
         usageResponse: Data?,
-        fetchedAt: Date
+        fetchedAt: Date,
+        accountResponse: Data? = nil
     ) throws -> UsageSnapshot {
         let decoder = JSONDecoder()
         guard let rateResult = try decoder.decode(
@@ -224,8 +220,19 @@ enum CodexClient {
             otherLimits: others,
             tokenHistory: tokenHistory,
             resetCredits: resetCredits(from: rateResult.rateLimitResetCredits, fetchedAt: fetchedAt),
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            accountEmail: accountEmail(from: accountResponse)
         )
+    }
+
+    private static func accountEmail(from response: Data?) -> String? {
+        guard let response,
+              let result = try? JSONDecoder().decode(RPCResponse<AccountResult>.self, from: response).result,
+              let account = result.account,
+              account.type == "chatgpt",
+              let email = account.email?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !email.isEmpty else { return nil }
+        return email
     }
 
     private static func resetCredits(
@@ -310,6 +317,8 @@ enum CodexClient {
         var rateLimitsResponse: Data?
         var usageResponse: Data?
         var usageRequestFinished = false
+        var accountResponse: Data?
+        var accountRequestFinished = true
 
         while let data = try await connection.readLine() {
             try Task.checkCancellation()
@@ -318,21 +327,28 @@ enum CodexClient {
                   let id = RequestID(rawValue: rawID) else { continue }
 
             if object.keys.contains("error") {
-                guard let envelope = try? JSONDecoder().decode(
-                    RPCErrorEnvelope.self,
-                    from: data
-                ) else {
-                    throw CodexClientError.invalidResponse
-                }
-                switch id {
-                case .initialize, .rateLimits:
-                    throw CodexClientError.appServerError(envelope.error.message)
-                case .usage:
-                    usageRequestFinished = true
+                if id == .account {
+                    accountRequestFinished = true
+                } else {
+                    guard let envelope = try? JSONDecoder().decode(
+                        RPCErrorEnvelope.self,
+                        from: data
+                    ) else {
+                        throw CodexClientError.invalidResponse
+                    }
+                    switch id {
+                    case .initialize, .rateLimits:
+                        throw CodexClientError.appServerError(envelope.error.message)
+                    case .usage:
+                        usageRequestFinished = true
+                    case .account:
+                        break
+                    }
                 }
             } else {
                 switch id {
                 case .initialize:
+                    accountRequestFinished = false
                     try write(
                         #"{"method":"initialized"}"#,
                         to: connection.input
@@ -345,19 +361,27 @@ enum CodexClient {
                         #"{"id":\#(RequestID.usage.rawValue),"method":"account/usage/read"}"#,
                         to: connection.input
                     )
+                    try write(
+                        #"{"id":\#(RequestID.account.rawValue),"method":"account/read","params":{"refreshToken":false}}"#,
+                        to: connection.input
+                    )
                 case .rateLimits:
                     rateLimitsResponse = data
                 case .usage:
                     usageResponse = data
                     usageRequestFinished = true
+                case .account:
+                    accountResponse = data
+                    accountRequestFinished = true
                 }
             }
 
-            if let rateLimitsResponse, usageRequestFinished {
+            if let rateLimitsResponse, usageRequestFinished, accountRequestFinished {
                 return try decode(
                     rateLimitsResponse: rateLimitsResponse,
                     usageResponse: usageResponse,
-                    fetchedAt: fetchedAt
+                    fetchedAt: fetchedAt,
+                    accountResponse: accountResponse
                 )
             }
         }
@@ -516,6 +540,7 @@ private enum RequestID: Int {
     case initialize = 1
     case rateLimits = 2
     case usage = 3
+    case account = 4
 }
 
 private struct RPCErrorEnvelope: Decodable {
@@ -529,6 +554,15 @@ private struct RPCError: Decodable {
 
 private struct RPCResponse<Result: Decodable>: Decodable {
     let result: Result?
+}
+
+private struct AccountResult: Decodable {
+    let account: Account?
+
+    struct Account: Decodable {
+        let type: String
+        let email: String?
+    }
 }
 
 private struct RateLimitsResult: Decodable {

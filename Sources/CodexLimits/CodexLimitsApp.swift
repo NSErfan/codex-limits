@@ -1,18 +1,10 @@
 import CodexWidgetKit
 import SwiftUI
 
-@main
-enum CodexLimitsMain {
-    @MainActor static func main() {
-        if BackgroundCollector.shouldRun(arguments: CommandLine.arguments) {
-            exit(BackgroundCollector.runBlocking())
-        }
-        CodexLimitsApp.main()
-    }
-}
-
 struct CodexLimitsApp: App {
-    @StateObject private var monitor: UsageMonitor
+    @NSApplicationDelegateAdaptor(UsageURLHandler.self) private var urlHandler
+    @StateObject private var providers: UsageProviders
+    @StateObject private var login: ProviderLoginSession
     @StateObject private var appearance: AppearanceSettings
 
     init() {
@@ -20,33 +12,59 @@ struct CodexLimitsApp: App {
         LegacyBundleMigration.run()
         LoginItem.enableByDefault()
         BackgroundCollection.enableByDefault()
-        _monitor = StateObject(wrappedValue: UsageMonitor())
-        _appearance = StateObject(wrappedValue: AppearanceSettings())
+        let providers = UsageProviders()
+        let login = ProviderLoginSession(providers: providers)
+        let appearance = AppearanceSettings()
+        _providers = StateObject(wrappedValue: providers)
+        _login = StateObject(wrappedValue: login)
+        _appearance = StateObject(wrappedValue: appearance)
+        urlHandler.providers = providers
+        urlHandler.login = login
+        urlHandler.appearance = appearance
     }
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(monitor: monitor)
+            MenuContentView(
+                monitor: providers.selectedMonitor,
+                selectedProvider: Binding(
+                    get: { providers.selectedProvider },
+                    set: { provider in
+                        providers.selectedProvider = provider
+                        Task { await login.refresh(provider) }
+                    }
+                ),
+                onSignIn: { login.signIn(to: providers.selectedProvider) },
+                loginMessage: login.message(for: providers.selectedProvider),
+                isOpeningLogin: login.isOpening(providers.selectedProvider)
+            )
+                .id(providers.selectedProvider)
                 .environment(\.usageAccent, appearance.accent)
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "gauge.with.dots.needle.50percent")
-                Text(monitor.menuBarText)
-                    .monospacedDigit()
-            }
+            ProviderMenuLabel(monitor: providers.selectedMonitor, displayMode: appearance.menuBarDisplayMode)
         }
         .menuBarExtraStyle(.window)
 
         Window("Model activity", id: "model-activity") {
-            ModelActivityWindow(monitor: monitor)
+            ModelActivityWindow(monitor: providers.codex)
                 .environment(\.usageAccent, appearance.accent)
         }
         .defaultSize(width: 1_080, height: 880)
         .windowResizability(.contentMinSize)
 
         Settings {
-            SettingsView(monitor: monitor, appearance: appearance)
+            SettingsView(providers: providers, appearance: appearance, login: login)
                 .environment(\.usageAccent, appearance.accent)
         }
+    }
+}
+
+@main
+enum CodexLimitsMain {
+    @MainActor static func main() {
+        if BackgroundCollector.shouldRun(arguments: CommandLine.arguments) {
+            exit(BackgroundCollector.runBlocking())
+        }
+        CodexLimitsApp.main()
     }
 }

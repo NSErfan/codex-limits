@@ -6,7 +6,7 @@ configuration=${CONFIGURATION:-release}
 cd "$project_dir"
 export CLANG_MODULE_CACHE_PATH=/private/tmp/codex-limits-clang-cache
 export SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/codex-limits-swiftpm-cache
-xcrun swift build -c "$configuration" --product CodexWidgetKit --disable-sandbox
+xcrun swift build -c "$configuration" --disable-sandbox
 bin_dir=$(xcrun swift build -c "$configuration" --show-bin-path --disable-sandbox)
 benchmark_dir="$project_dir/.build/history-scroll-benchmark/$configuration"
 app_dir="$benchmark_dir/HistoryScrollBenchmark.app"
@@ -15,6 +15,7 @@ optimization=(-O)
 [[ "$configuration" == debug ]] && optimization=(-Onone -g)
 app_sources=(Sources/CodexLimits/*.swift)
 app_sources=(${app_sources:#Sources/CodexLimits/CodexLimitsApp.swift})
+app_sources+=("$bin_dir/CodexLimits.build/DerivedSources/resource_bundle_accessor.swift")
 xcrun swiftc "${optimization[@]}" -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -I "$bin_dir/Modules" -L "$bin_dir" -lCodexWidgetKit \
     "${app_sources[@]}" Scripts/HistoryScrollBenchmark.swift \

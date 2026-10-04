@@ -8,40 +8,47 @@ final class UsageMonitor: ObservableObject {
     nonisolated static let safetyBufferKey = "safetyBuffer"
     nonisolated static let paceTargetCreditIDKey = "paceTargetCreditID"
 
+    let provider: UsageProvider
+    @Published private(set) var requiresLogin = false
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var forecast: Forecast?
     @Published private(set) var samples: [UsageSample] = []
+    @Published private var periodSamples: [UsagePeriod: [UsageSample]] = [:]
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var refreshMessage: String?
     @Published private(set) var syncFolderName: String?
     @Published private(set) var syncErrorMessage: String?
 
-    private static let stateKey = "usageState"
+    private var stateKey: String { provider.preferenceKey("usageState") }
     private static let historyInstallationIDKey = "historyInstallationID"
-    private static let historySyncBookmarkKey = "historySyncBookmark"
+    private var historySyncBookmarkKey: String { provider.preferenceKey("historySyncBookmark") }
     private let defaults: UserDefaults
-    private let fetchUsage: @Sendable () async throws -> UsageSnapshot
+    private let fetchUsage: @Sendable (Bool) async throws -> UsageFetchResult
     private let recoveryDelaysNanoseconds: [UInt64]
     private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
     private let history: UsageHistory
+    private let periodHistory: UsagePeriodHistory
     private let widgetStore: WeeklyWidgetStore?
     private var previousStatus: PaceStatus?
     private var cancellables: Set<AnyCancellable> = []
     private var recoveryTask: Task<Void, Never>?
+    private var automaticRefreshTask: Task<Void, Never>?
     private var started = false
     private var historyPrepared = false
     private var historyUsesFiles = false
+    private var periodHistoryUsesFiles = false
     private var configuredSyncDirectory: URL?
     private var historyConnectionActive = false
 
     init(
+        provider: UsageProvider = .codex,
         defaults: UserDefaults = .standard,
         historyDirectory: URL? = nil,
         historyNow: @escaping @Sendable () -> Date = { Date() },
-        widgetStore: WeeklyWidgetStore? = .shared(),
-        fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot = {
-            try await CodexClient.fetch()
-        },
+        widgetStore: WeeklyWidgetStore? = nil,
+        fetchUsage: (@Sendable () async throws -> UsageSnapshot)? = nil,
+        fetchResult: (@Sendable (Bool) async throws -> UsageFetchResult)? = nil,
         recoveryDelaysNanoseconds: [UInt64] = [
             2_000_000_000,
             10_000_000_000,
@@ -52,18 +59,27 @@ final class UsageMonitor: ObservableObject {
         },
         startsAutomatically: Bool = true
     ) {
+        self.provider = provider
         self.defaults = defaults
-        self.widgetStore = widgetStore ?? WeeklyWidgetStore(
-            directory: (historyDirectory ?? Self.historyDirectory())
-                .appendingPathComponent("WeeklyWidget", isDirectory: true)
+        self.widgetStore = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
+            directory: (historyDirectory ?? Self.historyDirectory(provider: provider))
+                .appendingPathComponent("WeeklyWidget", isDirectory: true),
+            provider: provider
         )
-        self.fetchUsage = fetchUsage
+        if let fetchResult {
+            self.fetchUsage = fetchResult
+        } else if let fetchUsage {
+            self.fetchUsage = { _ in .fetched(try await fetchUsage()) }
+        } else {
+            self.fetchUsage = { try await provider.fetchUsage(allowCredentialPrompt: $0) }
+        }
         self.recoveryDelaysNanoseconds = recoveryDelaysNanoseconds
         self.sleepBeforeRecovery = sleepBeforeRecovery
-        if let data = defaults.data(forKey: Self.stateKey),
+        if let data = defaults.data(forKey: provider.preferenceKey("usageState")),
            let state = try? JSONDecoder().decode(StoredState.self, from: data) {
             snapshot = state.snapshot
             samples = state.samples
+            periodSamples = state.periodSamples ?? [:]
             previousStatus = state.previousStatus
         }
 
@@ -76,9 +92,19 @@ final class UsageMonitor: ObservableObject {
             defaults.set(installationID, forKey: Self.historyInstallationIDKey)
         }
         history = UsageHistory(
-            localDirectory: historyDirectory ?? Self.historyDirectory(),
+            localDirectory: historyDirectory ?? Self.historyDirectory(provider: provider),
             installationID: installationID,
             now: historyNow
+        )
+        periodHistory = UsagePeriodHistory(
+            localDirectory: historyDirectory ?? Self.historyDirectory(provider: provider),
+            installationID: installationID,
+            provider: provider,
+            now: historyNow
+        )
+        periodSamples[.weekly] = Self.mergedSamples(
+            periodSamples[.weekly] ?? [],
+            Self.weeklySamples(from: self.widgetStore, provider: provider)
         )
         recalculate()
 
@@ -99,6 +125,13 @@ final class UsageMonitor: ObservableObject {
         Self.windowSamples(samples, reset: snapshot?.mainLimit.window.resetsAt)
     }
 
+    func samples(for period: UsagePeriod) -> [UsageSample] {
+        let saved = samples + (periodSamples[period] ?? [])
+        let matching = saved.filter { $0.durationMinutes == period.durationMinutes }
+        let observation = snapshot?.sample(for: period, provider: provider)
+        return Self.mergedSamples(matching, observation.map { [$0] } ?? [])
+    }
+
     nonisolated static func menuBarText(remainingPercent: Double?) -> String {
         guard let remainingPercent else { return "—" }
         return "\(Int(remainingPercent.rounded()))%"
@@ -111,18 +144,42 @@ final class UsageMonitor: ObservableObject {
             .sorted { $0.observedAt < $1.observedAt }
     }
 
+    private nonisolated static func weeklySamples(
+        from store: WeeklyWidgetStore?,
+        provider: UsageProvider
+    ) -> [UsageSample] {
+        guard let store, store.provider == provider, let snapshot = store.read(),
+              snapshot.status(at: snapshot.fetchedAt) != .unavailable,
+              let window = snapshot.window,
+              window.resetsAt.timeIntervalSince(window.startsAt) == Double(UsagePeriod.weekly.durationMinutes) * 60
+        else { return [] }
+        return snapshot.samples.filter {
+            $0.date >= window.startsAt && $0.date <= snapshot.fetchedAt
+                && $0.remainingPercent.isFinite && (0 ... 100).contains($0.remainingPercent)
+        }.map {
+            UsageSample(
+                observedAt: $0.date,
+                remainingPercent: $0.remainingPercent,
+                resetsAt: window.resetsAt,
+                durationMinutes: UsagePeriod.weekly.durationMinutes
+            )
+        }
+    }
+
     func start() async {
         guard !started else { return }
         started = true
 
         await prepareHistory()
 
-        Timer.publish(every: 600, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                Task { @MainActor in await self?.refresh() }
-            }
-            .store(in: &cancellables)
+        if provider == .codex {
+            Timer.publish(every: provider.refreshInterval, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    Task { @MainActor in await self?.refresh() }
+                }
+                .store(in: &cancellables)
+        }
 
         NSWorkspace.shared.notificationCenter
             .publisher(for: NSWorkspace.didWakeNotification)
@@ -134,60 +191,108 @@ final class UsageMonitor: ObservableObject {
         await refresh()
     }
 
-    func refresh() async {
+    @discardableResult
+    func refresh(allowCredentialPrompt: Bool = false) async -> Bool {
         recoveryTask?.cancel()
         recoveryTask = nil
-        await refresh(recoveryAttempt: 0)
+        return await refresh(recoveryAttempt: 0, allowCredentialPrompt: allowCredentialPrompt)
     }
 
-    private func refresh(recoveryAttempt: Int) async {
-        guard !isRefreshing else { return }
+    @discardableResult
+    private func refresh(recoveryAttempt: Int, allowCredentialPrompt: Bool = false) async -> Bool {
+        guard !isRefreshing else { return false }
         isRefreshing = true
-        defer { isRefreshing = false }
+        var nextAutomaticRefresh: Date?
+        defer {
+            isRefreshing = false
+            scheduleAutomaticRefresh(at: nextAutomaticRefresh)
+        }
 
         await prepareHistory()
-        if !historyUsesFiles {
-            let historyState = await history.load(legacySamples: samples)
-            apply(historyState)
-            historyUsesFiles = historyState.errorMessage == nil
+        if !historyUsesFiles || !periodHistoryUsesFiles {
+            await loadHistory()
         }
 
         let fetchUsage = self.fetchUsage
-        let fetchTask = Task { try await fetchUsage() }
+        let fetchTask = Task { try await fetchUsage(allowCredentialPrompt) }
         let historyState = await exchangeHistory()
-        apply(historyState, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
-        let exchangeErrorMessage = historyState.errorMessage
+        apply(historyState.legacy, periodState: historyState.periods,
+              configuredFolderName: configuredSyncDirectory?.lastPathComponent)
+        let exchangeErrorMessage = historyState.legacy.errorMessage ?? historyState.periods.errorMessage
         recalculate()
         persist()
 
         do {
-            let newSnapshot = try await fetchTask.value
-            let window = newSnapshot.mainLimit.window
-            let sample = UsageSample(
-                observedAt: newSnapshot.fetchedAt,
-                remainingPercent: window.remainingPercent,
-                resetsAt: window.resetsAt,
-                durationMinutes: window.durationMinutes
-            )
-            let recordedState = await history.record(sample)
-            apply(recordedState, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
-            if recordedState.errorMessage == nil {
-                syncErrorMessage = exchangeErrorMessage
+            switch try await fetchTask.value {
+            case let .fetched(newSnapshot, nextRefreshAt):
+                nextAutomaticRefresh = nextRefreshAt
+                await accept(newSnapshot, exchangeErrorMessage: exchangeErrorMessage)
+                errorMessage = nil
+                refreshMessage = nil
+                requiresLogin = false
+                return true
+            case let .cached(cached, nextRefreshAt):
+                nextAutomaticRefresh = nextRefreshAt
+                await accept(cached, exchangeErrorMessage: exchangeErrorMessage)
+                refreshMessage = "Using saved \(provider.displayName) usage. Next check available \(nextRefreshAt.formatted(date: .abbreviated, time: .shortened))."
+                errorMessage = nil
+                requiresLogin = false
+            case let .deferred(error, cached, nextRefreshAt):
+                nextAutomaticRefresh = nextRefreshAt
+                if let cached { await accept(cached, exchangeErrorMessage: exchangeErrorMessage) }
+                applyFetchError(error, recoveryAttempt: recoveryAttempt)
             }
+        } catch let error as any UsageFetchError {
+            applyFetchError(error, recoveryAttempt: recoveryAttempt)
+        } catch {
+            errorMessage = "Couldn’t load \(provider.displayName) usage. Refresh to try again."
+            refreshMessage = nil
+            requiresLogin = false
+            scheduleRecovery(afterFailedAttempt: recoveryAttempt)
+        }
+        return false
+    }
+
+    private func accept(_ newSnapshot: UsageSnapshot, exchangeErrorMessage: String?) async {
+        guard snapshot == nil || newSnapshot.fetchedAt >= snapshot!.fetchedAt else { return }
+        if newSnapshot != snapshot {
+            let window = newSnapshot.mainLimit.window
+            let sample = UsageSample(observedAt: newSnapshot.fetchedAt,
+                                     remainingPercent: window.remainingPercent,
+                                     resetsAt: window.resetsAt,
+                                     durationMinutes: window.durationMinutes)
+            let recordedState = await history.record(sample)
+            let periodState = await periodHistory.record(newSnapshot)
+            apply(recordedState, periodState: periodState,
+                  configuredFolderName: configuredSyncDirectory?.lastPathComponent)
+            if syncErrorMessage == nil { syncErrorMessage = exchangeErrorMessage }
             snapshot = newSnapshot
             WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore,
-                                          safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3)
-            errorMessage = nil
-            recalculate()
-            persist()
-        } catch let error as CodexClientError {
-            errorMessage = error.localizedDescription
-            if error.shouldRetryAutomatically {
-                scheduleRecovery(afterFailedAttempt: recoveryAttempt)
-            }
-        } catch {
-            errorMessage = "Couldn’t load Codex usage. Refresh to try again."
-            scheduleRecovery(afterFailedAttempt: recoveryAttempt)
+                                          safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3,
+                                          provider: provider)
+        }
+        recalculate()
+        persist()
+    }
+
+    private func applyFetchError(_ error: any UsageFetchError, recoveryAttempt: Int) {
+        errorMessage = error.localizedDescription
+        refreshMessage = nil
+        requiresLogin = error.requiresLogin
+        if error.shouldRetryAutomatically { scheduleRecovery(afterFailedAttempt: recoveryAttempt) }
+    }
+
+    private func scheduleAutomaticRefresh(at date: Date?) {
+        guard started, provider == .claude else { return }
+        automaticRefreshTask?.cancel()
+        // Long server deadlines remain in the shared gate; wake at least daily
+        // to re-read them without converting an unbounded header into Duration.
+        let delay = min(max(date?.timeIntervalSinceNow ?? provider.refreshInterval, 1), 86_400)
+        automaticRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self else { return }
+            automaticRefreshTask = nil
+            await refresh()
         }
     }
 
@@ -211,24 +316,27 @@ final class UsageMonitor: ObservableObject {
 
     func updateSafetyBuffer(_ value: Double) {
         if let snapshot {
-            WeeklyWidgetPublisher.publish(snapshot, writer: .app, store: widgetStore, safetyBuffer: value)
+            WeeklyWidgetPublisher.publish(snapshot, writer: .app, store: widgetStore, safetyBuffer: value, provider: provider)
         }
         recalculate(safetyBuffer: value)
         persist()
     }
 
     func updatePaceTarget(_ selectedCreditID: String) {
-        defaults.set(selectedCreditID, forKey: Self.paceTargetCreditIDKey)
+        defaults.set(selectedCreditID, forKey: provider.preferenceKey(Self.paceTargetCreditIDKey))
         recalculate(selectedCreditID: selectedCreditID)
         persist()
     }
 
     func connectHistoryFolder(_ directory: URL) async {
         await prepareHistory()
-        let state = await history.connect(to: directory)
+        await stopHistorySync()
+        let state = await history.connect(to: directory, subdirectory: provider.historySubdirectory)
         apply(state)
         historyConnectionActive = state.folderName != nil
         guard historyConnectionActive else { return }
+        apply(state, periodState: await periodHistory.connect(to: directory),
+              configuredFolderName: directory.lastPathComponent)
 
         do {
             let bookmark = try directory.bookmarkData(
@@ -236,11 +344,12 @@ final class UsageMonitor: ObservableObject {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            defaults.set(bookmark, forKey: Self.historySyncBookmarkKey)
+            defaults.set(bookmark, forKey: historySyncBookmarkKey)
             configuredSyncDirectory = directory
             syncFolderName = directory.lastPathComponent
         } catch {
             _ = await history.disconnect()
+            _ = await periodHistory.disconnect()
             configuredSyncDirectory = nil
             historyConnectionActive = false
             syncFolderName = nil
@@ -249,10 +358,11 @@ final class UsageMonitor: ObservableObject {
     }
 
     func stopHistorySync() async {
-        defaults.removeObject(forKey: Self.historySyncBookmarkKey)
+        defaults.removeObject(forKey: historySyncBookmarkKey)
         configuredSyncDirectory = nil
         historyConnectionActive = false
-        apply(await history.disconnect())
+        let state = await history.disconnect()
+        apply(state, periodState: await periodHistory.disconnect())
     }
 
     private func recalculate(
@@ -274,7 +384,7 @@ final class UsageMonitor: ObservableObject {
                 resetCredits: snapshot.resetCredits,
                 now: snapshot.fetchedAt,
                 selectedCreditID: selectedCreditID
-                    ?? defaults.string(forKey: Self.paceTargetCreditIDKey)
+                    ?? defaults.string(forKey: provider.preferenceKey(Self.paceTargetCreditIDKey))
             )
         )
         forecast = result
@@ -288,10 +398,11 @@ final class UsageMonitor: ObservableObject {
         let state = StoredState(
             snapshot: snapshot,
             samples: Self.samplesForPersistence(samples),
-            previousStatus: previousStatus
+            previousStatus: previousStatus,
+            periodSamples: periodSamples.mapValues(Self.samplesForPersistence)
         )
         if let data = try? JSONEncoder().encode(state) {
-            defaults.set(data, forKey: Self.stateKey)
+            defaults.set(data, forKey: stateKey)
         }
     }
 
@@ -299,14 +410,9 @@ final class UsageMonitor: ObservableObject {
         guard !historyPrepared else { return }
         historyPrepared = true
 
-        let state = await history.load(legacySamples: samples)
-        apply(state)
-        historyUsesFiles = state.errorMessage == nil
-        if historyUsesFiles {
-            persist()
-        }
+        await loadHistory()
 
-        guard let bookmark = defaults.data(forKey: Self.historySyncBookmarkKey) else {
+        guard let bookmark = defaults.data(forKey: historySyncBookmarkKey) else {
             return
         }
         let directory: URL
@@ -319,15 +425,16 @@ final class UsageMonitor: ObservableObject {
                 bookmarkDataIsStale: &isStale
             )
         } catch {
-            defaults.removeObject(forKey: Self.historySyncBookmarkKey)
+            defaults.removeObject(forKey: historySyncBookmarkKey)
             syncErrorMessage = "Couldn’t access the history folder. Choose it again."
             return
         }
 
         configuredSyncDirectory = directory
-        let connectedState = await history.connect(to: directory)
+        let connectedState = await history.connect(to: directory, subdirectory: provider.historySubdirectory)
         historyConnectionActive = connectedState.folderName != nil
-        apply(connectedState, configuredFolderName: directory.lastPathComponent)
+        let periodState = historyConnectionActive ? await periodHistory.connect(to: directory) : nil
+        apply(connectedState, periodState: periodState, configuredFolderName: directory.lastPathComponent)
         if isStale, historyConnectionActive {
             do {
                 let refreshed = try directory.bookmarkData(
@@ -335,31 +442,55 @@ final class UsageMonitor: ObservableObject {
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
-                defaults.set(refreshed, forKey: Self.historySyncBookmarkKey)
+                defaults.set(refreshed, forKey: historySyncBookmarkKey)
             } catch {
                 syncErrorMessage = "Couldn’t renew access to the history folder. Choose it again."
             }
         }
     }
 
-    private func exchangeHistory() async -> UsageHistory.State {
+    private func loadHistory() async {
+        let state = await history.load(legacySamples: samples)
+        let periodState = await periodHistory.load(
+            legacySamples: Self.mergedSamples(samples, state.samples),
+            savedSamples: periodSamples,
+            snapshot: snapshot
+        )
+        apply(state, periodState: periodState)
+        historyUsesFiles = state.errorMessage == nil
+        periodHistoryUsesFiles = periodState.errorMessage == nil
+        if historyUsesFiles && periodHistoryUsesFiles { persist() }
+    }
+
+    private func exchangeHistory() async -> (legacy: UsageHistory.State, periods: UsagePeriodHistory.State) {
         if let configuredSyncDirectory, !historyConnectionActive {
-            let state = await history.connect(to: configuredSyncDirectory)
+            let state = await history.connect(to: configuredSyncDirectory, subdirectory: provider.historySubdirectory)
             historyConnectionActive = state.folderName != nil
-            return state
+            let periods = historyConnectionActive
+                ? await periodHistory.connect(to: configuredSyncDirectory)
+                : await periodHistory.synchronize()
+            return (state, periods)
         }
-        return await history.synchronize()
+        let state = await history.synchronize()
+        return (state, await periodHistory.synchronize())
     }
 
     private func apply(
         _ state: UsageHistory.State,
+        periodState: UsagePeriodHistory.State? = nil,
         configuredFolderName: String? = nil
     ) {
         // Merge instead of replace: a partial or failed history read must
         // never shrink what the charts already know within this session.
         samples = Self.mergedSamples(samples, state.samples)
-        syncFolderName = state.folderName ?? configuredFolderName
-        syncErrorMessage = state.errorMessage
+        for (period, incoming) in periodState?.samples ?? [:] {
+            periodSamples[period] = Self.mergedSamples(
+                periodSamples[period] ?? [],
+                incoming.filter { $0.durationMinutes == period.durationMinutes }
+            )
+        }
+        syncFolderName = configuredFolderName ?? state.folderName
+        syncErrorMessage = state.errorMessage ?? periodState?.errorMessage
     }
 
     /// Union of both sample sets, deduplicated, restricted to the retention
@@ -397,7 +528,7 @@ final class UsageMonitor: ObservableObject {
         return lhs.resetsAt < rhs.resetsAt
     }
 
-    nonisolated static func historyDirectory() -> URL {
+    nonisolated static func historyDirectory(provider: UsageProvider = .codex) -> URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -407,7 +538,7 @@ final class UsageMonitor: ObservableObject {
                 Bundle.main.bundleIdentifier ?? LegacyBundleMigration.legacyIdentifier,
                 isDirectory: true
             )
-            .appendingPathComponent("History", isDirectory: true)
+            .appendingPathComponent(provider == .codex ? "History" : "ClaudeHistory", isDirectory: true)
     }
 }
 
@@ -415,4 +546,5 @@ private struct StoredState: Codable {
     let snapshot: UsageSnapshot?
     let samples: [UsageSample]
     let previousStatus: PaceStatus?
+    let periodSamples: [UsagePeriod: [UsageSample]]?
 }

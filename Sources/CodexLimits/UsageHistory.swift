@@ -80,12 +80,26 @@ actor UsageHistory {
         return state()
     }
 
-    func connect(to directory: URL) -> State {
+    func connect(to directory: URL, subdirectory: String? = nil) -> State {
+        syncDirectory = nil
         do {
             try prepareRoot(directory, createIfMissing: false, coordinated: true)
+            let destination: URL
+            if let subdirectory {
+                // Keep the chosen root usable by legacy installations. Prepare
+                // nested roots in order so iCloud coordination has an existing parent.
+                var nested = directory
+                for component in subdirectory.split(separator: "/") {
+                    nested.appendPathComponent(String(component), isDirectory: true)
+                    try prepareRoot(nested, createIfMissing: true, coordinated: true)
+                }
+                destination = nested
+            } else {
+                destination = directory
+            }
             let existing = readAll(from: localDirectory).samples
             try add(existing, to: localDirectory, installationID: installationID, coordinated: false)
-            syncDirectory = directory
+            syncDirectory = destination
             errorMessage = nil
             return synchronize()
         } catch {
