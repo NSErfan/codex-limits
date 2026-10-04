@@ -26,9 +26,9 @@ to show its icon and name.
 
 Light and dark synthetic previews of all three modes at menu-bar size:
 
-![Codex menu-bar label](images/menu-bar-codex.png)
+<a href="images/menu-bar-codex.png"><img src="images/menu-bar-codex.png" width="446" alt="Codex menu-bar label"></a>
 
-![Claude Code menu-bar label](images/menu-bar-claude.png)
+<a href="images/menu-bar-claude.png"><img src="images/menu-bar-claude.png" width="524" alt="Claude Code menu-bar label"></a>
 
 The icon library's [MIT license](https://github.com/lobehub/lobe-icons/blob/82e641b4fece9d1028a127149af9ded00df5ac0c/LICENSE)
 is included in the source and installed resource bundle as `LobeIcons-LICENSE.txt`.

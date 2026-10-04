@@ -5,6 +5,8 @@ import SwiftUI
 /// Visual QA uses synthetic state unless a real activity history directory is explicitly supplied.
 @main
 enum MenuPreviewRenderer {
+    private static let renderScale: CGFloat = 8
+
     @MainActor static func main() async throws {
         _ = NSApplication.shared
         let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
@@ -484,26 +486,35 @@ enum MenuPreviewRenderer {
     }
 
     @MainActor private static func render<Content: View>(_ view: Content, to url: URL) throws {
-        // ImageRenderer substitutes warning symbols for AppKit-backed menus and
-        // buttons. Host the real view offscreen so those controls render too.
-        let hosting = NSHostingView(rootView: view)
-        let size = hosting.fittingSize
-        hosting.frame = NSRect(origin: .zero, size: size)
-        let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
-        window.contentView = hosting
-        window.orderFront(nil)
-        hosting.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-        guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            throw NSError(domain: "MenuPreviewRenderer", code: 1)
+        if let selected = ProcessInfo.processInfo.environment["PREVIEW_IMAGE"], selected != url.lastPathComponent { return }
+        try autoreleasepool {
+            // Hosting preserves native menus and buttons that ImageRenderer replaces with placeholders.
+            let hosting = NSHostingView(rootView: view.environment(\.displayScale, renderScale))
+            let size = hosting.fittingSize
+            hosting.frame = NSRect(origin: .zero, size: size)
+            let window = RenderingWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
+            window.contentView = hosting
+            window.orderFront(nil)
+            defer { window.orderOut(nil) }
+            hosting.viewDidChangeBackingProperties()
+            hosting.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+                throw NSError(domain: "MenuPreviewRenderer", code: 1)
+            }
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            guard let data = bitmap.representation(using: .png, properties: [:]) else {
+                throw NSError(domain: "MenuPreviewRenderer", code: 2)
+            }
+            try data.write(to: url)
+            print("\(url.path) · \(bitmap.pixelsWide) × \(bitmap.pixelsHigh)")
         }
-        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-        window.orderOut(nil)
-        guard let data = bitmap.representation(using: .png, properties: [:]) else {
-            throw NSError(domain: "MenuPreviewRenderer", code: 2)
-        }
-        try data.write(to: url)
-        print(url.path)
+    }
+
+    // A larger bitmap alone stretches SwiftUI's cached drawing. The host must
+    // use the export scale so text and chart paths are rasterized at that density.
+    private final class RenderingWindow: NSWindow {
+        override var backingScaleFactor: CGFloat { MenuPreviewRenderer.renderScale }
     }
 
     private struct State: Encodable {

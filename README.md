@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/menu-and-widgets.png" width="908" alt="Codex dashboard with five-hour and weekly balance selectors, the weekly forecast, and weekly graph and percentage widgets in dark appearance">
+  <a href="docs/images/menu-and-widgets.png"><img src="docs/images/menu-and-widgets.png" width="908" alt="Codex dashboard with five-hour and weekly balance selectors, the weekly forecast, and weekly graph and percentage widgets in dark appearance"></a>
   <br>
   <sub>A busier week: uneven work sessions leave 38% remaining, but the forecast warns it may not last until reset. Dashboard and widgets use the same synthetic readings.</sub>
 </p>
@@ -41,9 +41,9 @@ Codex history stays in place.
 <details>
 <summary>Menu-bar appearance options</summary>
 <p align="center">
-  <img src="docs/images/menu-bar-codex.png" width="446" alt="Codex menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance">
+  <a href="docs/images/menu-bar-codex.png"><img src="docs/images/menu-bar-codex.png" width="446" alt="Codex menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance"></a>
   <br>
-  <img src="docs/images/menu-bar-claude.png" width="524" alt="Claude Code menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance">
+  <a href="docs/images/menu-bar-claude.png"><img src="docs/images/menu-bar-claude.png" width="524" alt="Claude Code menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance"></a>
   <br>
   <sub>SwiftUI label previews with synthetic percentages. Choose a style in Settings → Appearance → Menu bar.</sub>
 </p>
@@ -98,7 +98,7 @@ The Claude OAuth approach was informed by
 This implementation does not import CodexBar or read browser cookies.
 
 <p align="center">
-  <img src="docs/images/claude-menu.png" width="992" alt="Claude Code five-hour chart selected, with both remaining balances, hourly usage budget, and model limit in dark and light appearance">
+  <a href="docs/images/claude-menu.png"><img src="docs/images/claude-menu.png" width="992" alt="Claude Code five-hour chart selected, with both remaining balances, hourly usage budget, and model limit in dark and light appearance"></a>
   <br>
   <sub>Claude Code with the 5-hour chart selected. Both balances stay visible; all readings are synthetic example data.</sub>
 </p>
@@ -106,7 +106,7 @@ This implementation does not import CodexBar or read browser cookies.
 <details>
 <summary>The same account with Weekly selected</summary>
 <p align="center">
-  <img src="docs/images/claude-weekly.png" width="992" alt="The same synthetic Claude Code account with Weekly selected, showing the weekly history, forecast, and usage budget in dark and light appearance">
+  <a href="docs/images/claude-weekly.png"><img src="docs/images/claude-weekly.png" width="992" alt="The same synthetic Claude Code account with Weekly selected, showing the weekly history, forecast, and usage budget in dark and light appearance"></a>
   <br>
   <sub>Select Weekly to see its own history, forecast, and usage budget without fetching another reading.</sub>
 </p>
@@ -115,7 +115,7 @@ This implementation does not import CodexBar or read browser cookies.
 <details>
 <summary>Claude desktop widgets</summary>
 <p align="center">
-  <img src="docs/images/claude-widgets.png" width="720" alt="Claude weekly percentage and graph widgets in light and dark appearance, using synthetic example data">
+  <a href="docs/images/claude-widgets.png"><img src="docs/images/claude-widgets.png" width="720" alt="Claude weekly percentage and graph widgets in light and dark appearance, using synthetic example data"></a>
 </p>
 </details>
 
@@ -242,13 +242,13 @@ model/effort combination. Moving away restores the whole visible range, includin
 partial intervals at its edges. Choose **Total tokens** or **Output tokens**.
 
 <p align="center">
-  <img src="docs/images/model-activity.png" width="1080" alt="Model Activity in light appearance with a model filter, remaining-limit burndown, token timeline, and reasoning-effort detail rows for the visible seven-day range">
+  <a href="docs/images/model-activity.png"><img src="docs/images/model-activity.png" width="1080" alt="Model Activity in light appearance with a model filter, remaining-limit burndown, token timeline, and reasoning-effort detail rows for the visible seven-day range"></a>
   <br>
   <sub>Synthetic local activity with Astra selected, alongside example remaining-limit history. No real account or session data is shown.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/images/token-breakdown.png" width="780" alt="Token breakdown showing model shares and the selected model's low, medium, and high reasoning-effort shares in dark appearance">
+  <a href="docs/images/token-breakdown.png"><img src="docs/images/token-breakdown.png" width="780" alt="Token breakdown showing model shares and the selected model's low, medium, and high reasoning-effort shares in dark appearance"></a>
   <br>
   <sub>The Token breakdown panel with synthetic Astra, Sol, and Luna activity. Select a model to explore its reasoning-effort shares.</sub>
 </p>
@@ -267,7 +267,14 @@ refreshes once a minute while the window is open; the first scan of a large hist
 can take several seconds. The main menu and desktop widgets do not scan these logs.
 
 For an interactive synthetic-data preview, run `Scripts/run-model-activity-preview.sh`.
-The menu preview renderer also generates light/dark activity-window images using synthetic data by default. To capture your own activity, set `PREVIEW_ACTIVITY_HISTORY` to your app’s `History` directory when running `Scripts/render-menu-previews.sh`; this reads local session metadata and recorded limit samples. Review the resulting usage totals and dates before sharing.
+The menu preview renderer also generates light/dark activity-window images using synthetic data by default.
+Menu and widget previews export lossless PNGs at 8× scale; the README keeps their normal display size,
+and each image links to the full-resolution file. Set `PREVIEW_IMAGE` to a menu preview filename
+(for example, `menu-and-widgets.png`) to render just that image.
+
+To capture your own activity, set `PREVIEW_ACTIVITY_HISTORY` to your app’s `History` directory when
+running `Scripts/render-menu-previews.sh`; this reads local session metadata and recorded limit samples.
+Review the resulting usage totals and dates before sharing.
 
 ## Desktop widgets
 
@@ -286,7 +293,7 @@ the indicator after the next successful refresh.
 <details>
 <summary>Codex desktop widgets in light and dark appearance</summary>
 <p align="center">
-  <img src="docs/images/codex-widgets.png" width="720" alt="Codex weekly percentage and graph widgets with the Codex product icon in light and dark appearance, using synthetic example data">
+  <a href="docs/images/codex-widgets.png"><img src="docs/images/codex-widgets.png" width="720" alt="Codex weekly percentage and graph widgets with the Codex product icon in light and dark appearance, using synthetic example data"></a>
 </p>
 </details>
 

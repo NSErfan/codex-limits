@@ -83,13 +83,16 @@ enum WidgetPreviewRenderer {
     }
 
     @MainActor private static func render<Content: View>(_ content: Content, to url: URL) throws {
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = 2
-        guard let image = renderer.cgImage,
-              let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
-            throw NSError(domain: "WidgetPreviewRenderer", code: 1)
+        try autoreleasepool {
+            let scale: CGFloat = 8
+            let renderer = ImageRenderer(content: content.environment(\.displayScale, scale))
+            renderer.scale = scale
+            guard let image = renderer.cgImage,
+                  let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+                throw NSError(domain: "WidgetPreviewRenderer", code: 1)
+            }
+            try png.write(to: url)
+            print("\(url.path) · \(image.width) × \(image.height)")
         }
-        try png.write(to: url)
-        print(url.path)
     }
 }
