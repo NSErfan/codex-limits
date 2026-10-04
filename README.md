@@ -18,7 +18,7 @@
 <p align="center">
   <img src="docs/images/menu-and-widgets.png" width="908" alt="Codex dashboard with five-hour and weekly balance selectors, the weekly forecast, and weekly graph and percentage widgets in dark appearance">
   <br>
-  <sub>The Codex weekly dashboard and both desktop widgets, rendered from the current app views with synthetic example data.</sub>
+  <sub>A busier week: uneven work sessions leave 38% remaining, but the forecast warns it may not last until reset. Dashboard and widgets use the same synthetic readings.</sub>
 </p>
 
 > [!NOTE]
@@ -132,6 +132,19 @@ Open the menu to see:
 - Other reported limits and available banked resets.
 
 Desktop widgets always show the weekly limit, so their percentage can differ from the menu bar.
+
+## Example: when 38% remaining is not enough
+
+The opening picture shows a synthetic week with breaks between work sessions and
+heavier usage toward the end. There are **three days until reset**, but the most
+recent day used **34 percentage points** of the allowance.
+
+Past usage alone would leave about **14% at reset**. The expected forecast accounts
+for the recent acceleration and reaches zero in about **1.6 days**; the conservative
+forecast reaches zero in about **1.1 days**. The suggested budget is **11.7 percentage
+points per day**, leaving the configured 3% reserve. The separated forecast lines
+show why slowing down now matters even though the remaining balance looks comfortable.
+These numbers come from the app's forecast engine applied to synthetic readings.
 
 ## How to read the charts
 

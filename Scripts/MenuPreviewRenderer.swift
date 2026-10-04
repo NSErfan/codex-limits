@@ -21,8 +21,24 @@ enum MenuPreviewRenderer {
             defaults.removePersistentDomain(forName: suite)
             try? FileManager.default.removeItem(at: temporary)
         }
-        let weekly = WeeklyWidgetSnapshot.preview(at: now)
-        let window = UsageWindow(remainingPercent: 68, resetsAt: weekly.window!.resetsAt, durationMinutes: 10_080)
+        let window = UsageWindow(remainingPercent: 38, resetsAt: now.addingTimeInterval(3 * 86_400), durationMinutes: 10_080)
+        let samples = weeklySamples(window: window, now: now)
+        let forecast = ForecastEngine.evaluate(window: window, samples: samples, tokenHistory: [],
+                                               safetyBuffer: 3, now: now, previousStatus: nil)
+        precondition(forecast.status == .slowDown && forecast.expectedRemainingAtReset == 0
+                     && forecast.historicalRemainingAtReset > 3)
+        let expectedDays = window.remainingPercent / forecast.currentPercentPerDay
+        let conservativeDays = window.remainingPercent / forecast.safetyPercentPerDay
+        print("README forecast: expected exhaustion in \(expectedDays) days; conservative in \(conservativeDays) days; "
+              + "reset in 3 days; historical balance \(forecast.historicalRemainingAtReset)%")
+        let weekly = WeeklyWidgetSnapshot(
+            fetchedAt: now,
+            window: .init(remainingPercent: window.remainingPercent, startsAt: window.startsAt, resetsAt: window.resetsAt),
+            samples: samples.filter { $0.resetsAt == window.resetsAt }.map {
+                .init(date: $0.observedAt, remainingPercent: $0.remainingPercent)
+            },
+            pace: .slowDown
+        )
         let snapshot = UsageSnapshot(
             mainLimit: .init(limitId: "codex", name: "Codex", window: window),
             otherLimits: [.init(limitId: "codex", name: "5-hour limit", window: .init(remainingPercent: 92, resetsAt: now.addingTimeInterval(9_000), durationMinutes: 300))],
@@ -34,25 +50,6 @@ enum MenuPreviewRenderer {
             ],
             fetchedAt: now
         )
-        let samples = (0 ... 1_440).map { index in
-            let date = now.addingTimeInterval(Double(index - 1_440) * 1_800)
-            let elapsed = date.timeIntervalSince(window.startsAt)
-            let cycle = floor(elapsed / (7 * 86_400))
-            let cycleStart = window.startsAt.addingTimeInterval(cycle * 7 * 86_400)
-            let days = date.timeIntervalSince(cycleStart) / 86_400
-            let remaining = max(0, 100 - days * (cycle == 0 ? 32.0 / 3 : 13))
-            return UsageSample(observedAt: date, remainingPercent: remaining,
-                               resetsAt: cycleStart.addingTimeInterval(7 * 86_400), durationMinutes: 10_080)
-        }.filter { sample in
-            // Collection gaps check continuous connections and the muted fill.
-            let age = now.timeIntervalSince(sample.observedAt)
-            let hours = age / 3_600
-            let longGap = (240.0 ... 248.0).contains(hours)
-            let recentGap = (48.0 ... 60.0).contains(hours)
-            let isolatedReadings = (96.0 ... 120.0).contains(hours)
-                && Int(age / 1_800) % 4 != 0
-            return !longGap && !recentGap && !isolatedReadings
-        }
         defaults.set(try JSONEncoder().encode(State(snapshot: snapshot, samples: samples, previousStatus: nil)), forKey: "usageState")
         let monitor = UsageMonitor(
             defaults: defaults, historyDirectory: temporary,
@@ -112,7 +109,7 @@ enum MenuPreviewRenderer {
         defaults.set("", forKey: creditPreference)
 
         let comparison = VStack(alignment: .leading, spacing: 24) {
-            Text("CODEX LIMITS · ONE VISUAL LANGUAGE")
+            Text("CODEX LIMITS · SEE THE WEEK AHEAD")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .tracking(2).foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 28) {
@@ -120,11 +117,11 @@ enum MenuPreviewRenderer {
                 VStack(alignment: .leading, spacing: 24) {
                     WeeklyGraphView(snapshot: weekly, date: now)
                         .frame(width: 364, height: 170)
-                        .background { UsageSurfaceBackground(remaining: 68) }
+                        .background { UsageSurfaceBackground(remaining: window.remainingPercent) }
                         .clipShape(RoundedRectangle(cornerRadius: 23))
                     WeeklyPercentageView(snapshot: weekly, date: now)
                         .frame(width: 170, height: 170)
-                        .background { UsageSurfaceBackground(remaining: 68) }
+                        .background { UsageSurfaceBackground(remaining: window.remainingPercent) }
                         .clipShape(RoundedRectangle(cornerRadius: 23))
                     Text("SYNTHETIC PREVIEW DATA")
                         .font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
@@ -226,7 +223,7 @@ enum MenuPreviewRenderer {
                     ChartHoverReadout(title: "Banked reset", detail: "Expires Sep 21 at 8:14 AM", symbol: "arrow.counterclockwise", hint: "Click to use this expiry as your pacing target.")
                 }
                 .padding(20).frame(width: 460)
-                .background { UsageSurfaceBackground(remaining: 68) }
+                .background { UsageSurfaceBackground(remaining: window.remainingPercent) }
                 .environment(\.colorScheme, scheme)
                 .clipShape(RoundedRectangle(cornerRadius: 23))
             }
@@ -234,14 +231,22 @@ enum MenuPreviewRenderer {
         .padding(24).background(Color.gray.opacity(0.15))
         try render(detailStyles, to: output.appendingPathComponent("menu-detail-styles.png"))
 
+        let historySamples = samples.filter { sample in
+            let hours = now.timeIntervalSince(sample.observedAt) / 3_600
+            let longGap = (240.0 ... 248.0).contains(hours)
+            let recentGap = (48.0 ... 60.0).contains(hours)
+            let isolatedReadings = (96.0 ... 120.0).contains(hours)
+                && Int(hours * 2) % 4 != 0
+            return !longGap && !recentGap && !isolatedReadings
+        }
         let history = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
                 VStack(alignment: .leading, spacing: 16) {
                     Text("30-DAY HISTORY").font(.system(size: 11, weight: .medium, design: .monospaced))
-                    HistoryChart(samples: samples, range: now.addingTimeInterval(-30 * 86_400) ... now, bucketDuration: 1_800, visibleDuration: nil, remainingPercent: 68)
+                    HistoryChart(samples: historySamples, range: now.addingTimeInterval(-30 * 86_400) ... now, bucketDuration: 1_800, visibleDuration: nil, remainingPercent: window.remainingPercent)
                 }
                 .padding(20).frame(width: 460)
-                .background { UsageSurfaceBackground(remaining: 68) }
+                .background { UsageSurfaceBackground(remaining: window.remainingPercent) }
                 .clipShape(RoundedRectangle(cornerRadius: 23))
                 .environment(\.colorScheme, scheme)
             }
@@ -253,10 +258,10 @@ enum MenuPreviewRenderer {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
                 VStack(alignment: .leading, spacing: 16) {
                     Text("7-DAY HISTORY · SAMPLING GAPS").font(.system(size: 11, weight: .medium, design: .monospaced))
-                    HistoryChart(samples: samples, range: now.addingTimeInterval(-7 * 86_400) ... now, bucketDuration: 1_800, visibleDuration: 7 * 86_400, remainingPercent: 68)
+                    HistoryChart(samples: historySamples, range: now.addingTimeInterval(-7 * 86_400) ... now, bucketDuration: 1_800, visibleDuration: 7 * 86_400, remainingPercent: window.remainingPercent)
                 }
                 .padding(20).frame(width: 460)
-                .background { UsageSurfaceBackground(remaining: 68) }
+                .background { UsageSurfaceBackground(remaining: window.remainingPercent) }
                 .clipShape(RoundedRectangle(cornerRadius: 23))
                 .environment(\.colorScheme, scheme)
             }
@@ -268,6 +273,47 @@ enum MenuPreviewRenderer {
 
     private struct ActivityHistoryDay: Decodable {
         let samples: [UsageSample]
+    }
+
+    private static func weeklySamples(window: UsageWindow, now: Date) -> [UsageSample] {
+        let day: TimeInterval = 86_400
+        let currentDailyUse = [4.0, 10, 14, 34, 8, 8, 8]
+        let historicalDailyUse = [7.0, 9, 6, 10, 8, 5, 11]
+        let elapsedDays = now.timeIntervalSince(window.startsAt) / day
+        let currentUse = cumulativeUse(at: elapsedDays, dailyUse: currentDailyUse)
+        return (0 ... 1_440).map { index in
+            let date = now.addingTimeInterval(Double(index - 1_440) * 1_800)
+            let elapsed = date.timeIntervalSince(window.startsAt)
+            let cycle = floor(elapsed / (7 * day))
+            let cycleStart = window.startsAt.addingTimeInterval(cycle * 7 * day)
+            let days = date.timeIntervalSince(cycleStart) / day
+            let used = cycle == 0
+                ? cumulativeUse(at: days, dailyUse: currentDailyUse) / currentUse * (100 - window.remainingPercent)
+                : cumulativeUse(at: days, dailyUse: historicalDailyUse)
+            return UsageSample(observedAt: date, remainingPercent: max(0, 100 - used),
+                               resetsAt: cycleStart.addingTimeInterval(7 * day), durationMinutes: 10_080)
+        }
+    }
+
+    private static func cumulativeUse(at days: Double, dailyUse: [Double]) -> Double {
+        let completed = min(max(Int(days), 0), dailyUse.count)
+        let consumed = dailyUse.prefix(completed).reduce(0, +)
+        guard completed < dailyUse.count else { return consumed }
+        return consumed + dailyUse[completed] * sessionProgress(days - Double(completed))
+    }
+
+    private static func sessionProgress(_ progress: Double) -> Double {
+        // Flat stretches represent breaks; uneven drops represent focused work sessions.
+        let knots: [(time: Double, used: Double)] = [
+            (0, 0), (0.30, 0), (0.34, 0.08), (0.36, 0.10),
+            (0.42, 0.40), (0.55, 0.40), (0.58, 0.55), (0.67, 0.58),
+            (0.72, 0.82), (0.83, 0.82), (0.90, 1), (1, 1)
+        ]
+        for (start, end) in zip(knots, knots.dropFirst()) where progress <= end.time {
+            let fraction = max(0, (progress - start.time) / (end.time - start.time))
+            return start.used + fraction * (end.used - start.used)
+        }
+        return 1
     }
 
     @MainActor private static func renderPeriods(at now: Date, to output: URL) async throws {
@@ -290,7 +336,7 @@ enum MenuPreviewRenderer {
                     remainingPercent: 42, resetsAt: expiredFiveHour ? now.addingTimeInterval(-300) : reset,
                     durationMinutes: 300))
                 let weekly = LimitReading(limitId: provider.rawValue, name: "Weekly", window: UsageWindow(
-                    remainingPercent: 71, resetsAt: expiredWeekly ? now.addingTimeInterval(-300) : reset,
+                    remainingPercent: 38, resetsAt: expiredWeekly ? now.addingTimeInterval(-300) : now.addingTimeInterval(3 * 86_400),
                     durationMinutes: 10_080))
                 let model = LimitReading(limitId: "\(provider.rawValue)-model", name: "Model weekly", window: UsageWindow(
                     remainingPercent: 84, resetsAt: reset, durationMinutes: 10_080))
@@ -300,11 +346,14 @@ enum MenuPreviewRenderer {
                 let samples = [fiveHour, weekly].filter { reading in
                     snapshot.limit(for: reading.window.durationMinutes == 300 ? .fiveHour : .weekly, provider: provider) != nil
                 }.flatMap { reading in
-                    (0 ... 30).map { index in
-                        let progress = Double(index) / 30
+                    if reading.window.durationMinutes == 10_080 {
+                        return weeklySamples(window: reading.window, now: fetchedAt)
+                    }
+                    return (0 ... 60).map { index in
+                        let progress = Double(index) / 60
                         let elapsed = fetchedAt.timeIntervalSince(reading.window.startsAt) * progress
                         return UsageSample(observedAt: reading.window.startsAt.addingTimeInterval(elapsed),
-                                           remainingPercent: 100 - (100 - reading.window.remainingPercent) * progress,
+                                           remainingPercent: 100 - (100 - reading.window.remainingPercent) * sessionProgress(progress),
                                            resetsAt: reading.window.resetsAt, durationMinutes: reading.window.durationMinutes)
                     }
                 }
