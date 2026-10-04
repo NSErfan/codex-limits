@@ -16,9 +16,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/menu-and-widgets.png" width="908" alt="Codex Limits menu showing remaining balance, usage forecast, reset time, and suggested pace beside the weekly graph and percentage widgets">
+  <img src="docs/images/menu-and-widgets.png" width="908" alt="Codex dashboard with five-hour and weekly balance selectors, the weekly forecast, and weekly graph and percentage widgets in dark appearance">
   <br>
-  <sub>The current native menu and both desktop widgets. The menu and widgets use synthetic example data.</sub>
+  <sub>The Codex weekly dashboard and both desktop widgets, rendered from the current app views with synthetic example data.</sub>
 </p>
 
 > [!NOTE]
@@ -37,6 +37,17 @@ providers and is saved across launches. [Icon sources and attribution](docs/prov
 Both providers refresh independently,
 with separate saved readings, history, chart preferences, and weekly widgets. Your existing
 Codex history stays in place.
+
+<details>
+<summary>Menu-bar appearance options</summary>
+<p align="center">
+  <img src="docs/images/menu-bar-codex.png" width="446" alt="Codex menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance">
+  <br>
+  <img src="docs/images/menu-bar-claude.png" width="524" alt="Claude Code menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance">
+  <br>
+  <sub>SwiftUI label previews with synthetic percentages. Choose a style in Settings → Appearance → Menu bar.</sub>
+</p>
+</details>
 
 The provider, usage-window, and chart-range selectors share a subtle segmented style.
 The **5-hour** and **Weekly** segments show both remaining balances together. Select
@@ -87,10 +98,19 @@ The Claude OAuth approach was informed by
 This implementation does not import CodexBar or read browser cookies.
 
 <p align="center">
-  <img src="docs/images/claude-menu.png" width="820" alt="Claude Code selected in the menu, with remaining allowance, forecast, and five-hour limit in dark and light appearance">
+  <img src="docs/images/claude-menu.png" width="992" alt="Claude Code five-hour chart selected, with both remaining balances, hourly usage budget, and model limit in dark and light appearance">
   <br>
-  <sub>Claude Code dashboard with synthetic example data.</sub>
+  <sub>Claude Code with the 5-hour chart selected. Both balances stay visible; all readings are synthetic example data.</sub>
 </p>
+
+<details>
+<summary>The same account with Weekly selected</summary>
+<p align="center">
+  <img src="docs/images/claude-weekly.png" width="992" alt="The same synthetic Claude Code account with Weekly selected, showing the weekly history, forecast, and usage budget in dark and light appearance">
+  <br>
+  <sub>Select Weekly to see its own history, forecast, and usage budget without fetching another reading.</sub>
+</p>
+</details>
 
 <details>
 <summary>Claude desktop widgets</summary>
@@ -211,7 +231,7 @@ partial intervals at its edges. Choose **Total tokens** or **Output tokens**.
 <p align="center">
   <img src="docs/images/model-activity.png" width="1080" alt="Model Activity in light appearance with a model filter, remaining-limit burndown, token timeline, and reasoning-effort detail rows for the visible seven-day range">
   <br>
-  <sub>Real local activity with Astra selected, alongside the account's recorded remaining-limit history.</sub>
+  <sub>Synthetic local activity with Astra selected, alongside example remaining-limit history. No real account or session data is shown.</sub>
 </p>
 
 <p align="center">
