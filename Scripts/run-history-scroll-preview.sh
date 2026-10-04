@@ -10,7 +10,6 @@ app_dir="$project_dir/.build/history-scroll-preview/History Scroll Preview.app"
 mkdir -p "$app_dir/Contents/MacOS"
 app_sources=(Sources/CodexLimits/*.swift)
 app_sources=(${app_sources:#Sources/CodexLimits/CodexLimitsApp.swift})
-app_sources+=("$bin_dir/CodexLimits.build/DerivedSources/resource_bundle_accessor.swift")
 xcrun swiftc -O -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -I "$bin_dir/Modules" -L "$bin_dir" -lCodexWidgetKit \
     "${app_sources[@]}" Scripts/HistoryScrollPreview.swift \

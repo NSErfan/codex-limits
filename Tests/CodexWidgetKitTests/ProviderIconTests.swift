@@ -1,7 +1,6 @@
 import AppKit
-import CodexWidgetKit
 import XCTest
-@testable import CodexLimits
+@testable import CodexWidgetKit
 
 @MainActor
 final class ProviderIconTests: XCTestCase {

@@ -1,15 +1,19 @@
 import AppKit
-import CodexWidgetKit
 import SwiftUI
 
 @MainActor
-struct ProviderIcon: View {
+public struct ProviderIcon: View {
     let provider: UsageProvider
-    var size: CGFloat = 18
+    let size: CGFloat
+
+    public init(provider: UsageProvider, size: CGFloat = 18) {
+        self.provider = provider
+        self.size = size
+    }
 
     private static let resourceBundle: Bundle = {
-        // Prefer the installed app's Resources bundle over SwiftPM's build-directory fallback.
-        if let url = Bundle.main.url(forResource: "CodexLimits_CodexLimits", withExtension: "bundle"),
+        // Load from the app or extension's own Resources before SwiftPM's build-directory fallback.
+        if let url = Bundle.main.url(forResource: "CodexLimits_CodexWidgetKit", withExtension: "bundle"),
            let bundle = Bundle(url: url) {
             return bundle
         }
@@ -26,7 +30,7 @@ struct ProviderIcon: View {
         }
     )
 
-    var body: some View {
+    public var body: some View {
         Group {
             if let image = Self.image(for: provider) {
                 Image(nsImage: image)
@@ -43,7 +47,7 @@ struct ProviderIcon: View {
         .accessibilityHidden(true)
     }
 
-    static func image(for provider: UsageProvider) -> NSImage? {
+    public static func image(for provider: UsageProvider) -> NSImage? {
         images[provider]
     }
 }

@@ -21,12 +21,11 @@ cat > "$probe_bundle/Contents/Info.plist" <<'PLIST'
 PLIST
 app_sources=(Sources/CodexLimits/*.swift)
 app_sources=(${app_sources:#Sources/CodexLimits/CodexLimitsApp.swift})
-app_sources+=("$bin_dir/CodexLimits.build/DerivedSources/resource_bundle_accessor.swift")
 xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -I "$bin_dir/Modules" -L "$bin_dir" -lCodexWidgetKit \
     "${app_sources[@]}" Scripts/MenuBarLabelProbe.swift \
     -o "$probe_bundle/Contents/MacOS/MenuBarLabelProbe"
-ditto "$bin_dir/CodexLimits_CodexLimits.bundle" "$probe_bundle/Contents/Resources/CodexLimits_CodexLimits.bundle"
+ditto "$bin_dir/CodexLimits_CodexWidgetKit.bundle" "$probe_bundle/Contents/Resources/CodexLimits_CodexWidgetKit.bundle"
 codesign --force --sign - "$probe_bundle"
 for provider in codex claude; do
     for mode in iconOnly textOnly iconAndText; do

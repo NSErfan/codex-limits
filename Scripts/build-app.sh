@@ -35,7 +35,7 @@ mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$bin_dir/CodexLimits" "$app_dir/Contents/MacOS/CodexLimits"
 cp Resources/Info.plist "$app_dir/Contents/Info.plist"
 cp Resources/AppIcon.icns "$app_dir/Contents/Resources/AppIcon.icns"
-ditto "$bin_dir/CodexLimits_CodexLimits.bundle" "$app_dir/Contents/Resources/CodexLimits_CodexLimits.bundle"
+ditto "$bin_dir/CodexLimits_CodexWidgetKit.bundle" "$app_dir/Contents/Resources/CodexLimits_CodexWidgetKit.bundle"
 mkdir -p "$app_dir/Contents/Library/LaunchAgents"
 cp Resources/com.github.nserfan.CodexLimits.collector.plist \
     "$app_dir/Contents/Library/LaunchAgents/"
@@ -53,6 +53,7 @@ xcodebuild -project Widgets/CodexLimitsWidgets.xcodeproj \
     CODE_SIGNING_ALLOWED=NO build
 mkdir -p "$app_dir/Contents/PlugIns"
 ditto "$widget_products/CodexLimitsWidgets.appex" "$widget_dir"
+ditto "$bin_dir/CodexLimits_CodexWidgetKit.bundle" "$widget_dir/Contents/Resources/CodexLimits_CodexWidgetKit.bundle"
 
 app_entitlements="$project_dir/.build/$configuration/App.entitlements"
 widget_entitlements="$project_dir/.build/$configuration/Widget.entitlements"

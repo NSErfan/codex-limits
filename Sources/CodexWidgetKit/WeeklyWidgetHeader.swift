@@ -7,9 +7,7 @@ struct WeeklyWidgetHeader: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: provider == .claude ? "sparkle" : "terminal.fill")
-                .font(.system(size: 11, weight: .semibold))
-                .accessibilityHidden(true)
+            ProviderIcon(provider: provider, size: 12)
             Text(provider == .claude ? "CLAUDE" : "CODEX")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .tracking(2)

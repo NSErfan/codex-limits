@@ -10,8 +10,8 @@ let package = Package(
         .library(name: "CodexWidgetKit", type: .static, targets: ["CodexWidgetKit"])
     ],
     targets: [
-        .target(name: "CodexWidgetKit", swiftSettings: [.unsafeFlags(["-application-extension"])]),
-        .executableTarget(name: "CodexLimits", dependencies: ["CodexWidgetKit"], resources: [.process("Resources")]),
+        .target(name: "CodexWidgetKit", resources: [.process("Resources")], swiftSettings: [.unsafeFlags(["-application-extension"])]),
+        .executableTarget(name: "CodexLimits", dependencies: ["CodexWidgetKit"]),
         .testTarget(name: "CodexLimitsTests", dependencies: ["CodexLimits"]),
         .testTarget(name: "CodexWidgetKitTests", dependencies: ["CodexWidgetKit"])
     ]
