@@ -34,13 +34,18 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
     public let window: Window?
     public let samples: [Sample]
     public let pace: WeeklyPace?
+    public let reservePercent: Double?
 
-    public init(fetchedAt: Date, window: Window?, samples: [Sample] = [], pace: WeeklyPace? = nil) {
+    public init(
+        fetchedAt: Date, window: Window?, samples: [Sample] = [],
+        pace: WeeklyPace? = nil, reservePercent: Double? = nil
+    ) {
         version = 1
         self.fetchedAt = fetchedAt
         self.window = window
         self.samples = samples
         self.pace = pace
+        self.reservePercent = reservePercent
     }
 
     public func status(at date: Date) -> Status {
@@ -56,6 +61,14 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
 
     public func pace(at date: Date) -> WeeklyPace? {
         status(at: date) == .current ? pace : nil
+    }
+
+    public func suggestedDailyPercent(at date: Date) -> Double? {
+        guard status(at: date) == .current, let window, let reservePercent else { return nil }
+        return AllowancePace.dailyPercent(
+            remainingPercent: window.remainingPercent, reservePercent: reservePercent,
+            resetsAt: window.resetsAt, date: date
+        )
     }
 
     /// Merge only readings from the same weekly cycle. Keep the newest observation
@@ -87,7 +100,7 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
         } else {
             bounded = ordered
         }
-        return Self(fetchedAt: fetchedAt, window: window, samples: bounded, pace: pace)
+        return Self(fetchedAt: fetchedAt, window: window, samples: bounded, pace: pace, reservePercent: reservePercent)
     }
 
     /// Synthetic readings, used only by WidgetKit's gallery and explicit previews.
@@ -104,6 +117,6 @@ public struct WeeklyWidgetSnapshot: Codable, Equatable, Sendable {
                 date: start.addingTimeInterval(Double($0.offset) / Double(levels.count - 1) * 3 * 86_400),
                 remainingPercent: remaining + ($0.element - 68) / 32 * (100 - remaining)
             )
-        }, pace: pace)
+        }, pace: pace, reservePercent: 3)
     }
 }

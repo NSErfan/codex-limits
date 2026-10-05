@@ -25,6 +25,7 @@ final class AppearanceSettings: ObservableObject {
                 WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.percentageKind(for: provider))
                 WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.graphKind(for: provider))
             }
+            WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.combinedKind)
         }
     ) {
         self.defaults = defaults

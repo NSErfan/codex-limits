@@ -81,6 +81,21 @@ final class WeeklyWidgetPublisherTests: XCTestCase {
         }
     }
 
+    func testSuggestedDailyPaceMatchesDashboardForBothProvidersAndCustomReserve() throws {
+        for provider in UsageProvider.allCases {
+            let weekly = UsageWindow(remainingPercent: 68, resetsAt: now.addingTimeInterval(4 * 86_400), durationMinutes: 10_080)
+            let usage = UsageSnapshot(mainLimit: .init(limitId: provider.rawValue, name: "Weekly", window: weekly),
+                                      otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now)
+            for reserve in [3.0, 8, 70] {
+                let value = WeeklyWidgetPublisher.snapshot(from: usage, safetyBuffer: reserve, provider: provider)
+                let forecast = ForecastEngine.evaluate(window: weekly, samples: [], tokenHistory: [],
+                                                       safetyBuffer: reserve, now: now, previousStatus: nil)
+                XCTAssertEqual(value.reservePercent, reserve)
+                XCTAssertEqual(try XCTUnwrap(value.suggestedDailyPercent(at: now)), forecast.recommendedPercentPerDay, accuracy: 0.0001)
+            }
+        }
+    }
+
     @MainActor
     func testMonitorPublishesWeeklyReadingAfterSuccessfulRefreshAndPreservesItOnFailure() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

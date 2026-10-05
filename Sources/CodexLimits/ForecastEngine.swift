@@ -1,3 +1,4 @@
+import CodexWidgetKit
 import Foundation
 
 enum ForecastEngine {
@@ -74,9 +75,10 @@ enum ForecastEngine {
         let expected = max(window.remainingPercent - expectedRate * daysLeft, 0)
         let safety = max(window.remainingPercent - safetyRate * daysLeft, 0)
         let historical = max(window.remainingPercent - historicalRate * daysLeft, 0)
-        let recommended = daysLeft > 0
-            ? max(window.remainingPercent - safetyBuffer, 0) / daysLeft
-            : 0
+        let recommended = AllowancePace.dailyPercent(
+            remainingPercent: window.remainingPercent, reservePercent: safetyBuffer,
+            resetsAt: target, date: now
+        ) ?? 0
         // Being at or above the target line means the pace so far is fine,
         // whatever past windows looked like; a projection built from history
         // must not raise the alarm on its own.

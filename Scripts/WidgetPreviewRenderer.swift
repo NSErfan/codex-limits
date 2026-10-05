@@ -1,6 +1,7 @@
 import AppKit
 import CodexWidgetKit
 import SwiftUI
+import WidgetKit
 
 /// Renders the production SwiftUI views with synthetic data for visual QA.
 @main
@@ -13,6 +14,7 @@ enum WidgetPreviewRenderer {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let snapshot = WeeklyWidgetSnapshot.preview(at: now)
+        try renderCombinedPreviews(to: directory, date: now)
         let sheet = VStack(alignment: .leading, spacing: 28) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(provider.displayName.uppercased()) / WIDGETS")
@@ -64,6 +66,48 @@ enum WidgetPreviewRenderer {
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.colorScheme, .dark)
         try render(states, to: directory.appendingPathComponent("\(prefix)weekly-widget-states.png"))
+    }
+
+    @MainActor private static func renderCombinedPreviews(to directory: URL, date: Date) throws {
+        let codex = WeeklyWidgetSnapshot.preview(at: date)
+        let claude = WeeklyWidgetSnapshot.preview(at: date, remaining: 42, pace: .slowDown)
+        for scheme in [ColorScheme.dark, .light] {
+            let sheet = VStack(alignment: .leading, spacing: 20) {
+                Text("CLAUDE + CODEX / WEEKLY ALLOWANCE")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .tracking(1.5).foregroundStyle(.secondary)
+                HStack(alignment: .center, spacing: 24) {
+                    combined(codex: codex, claude: claude, date: date, family: .systemSmall)
+                    combined(codex: codex, claude: claude, date: date, family: .systemLarge)
+                }
+                Text("SYNTHETIC PREVIEW DATA · PACE INCLUDES A 3% SAFETY BUFFER")
+                    .font(.system(size: 8, design: .monospaced)).foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .environment(\.colorScheme, scheme)
+            let name = scheme == .dark ? "dark" : "light"
+            try render(sheet, to: directory.appendingPathComponent("combined-weekly-\(name).png"))
+        }
+        let states = HStack(spacing: 20) {
+            combined(codex: codex, claude: nil, date: date, family: .systemSmall)
+            combined(codex: codex, claude: claude, date: date.addingTimeInterval(2_000), family: .systemSmall)
+            combined(codex: codex, claude: claude, date: date.addingTimeInterval(5 * 86_400), family: .systemSmall)
+            combined(codex: nil, claude: nil, date: date, family: .systemSmall)
+        }
+        .padding(24)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.colorScheme, .dark)
+        try render(states, to: directory.appendingPathComponent("combined-weekly-states.png"))
+    }
+
+    @MainActor private static func combined(
+        codex: WeeklyWidgetSnapshot?, claude: WeeklyWidgetSnapshot?, date: Date, family: WidgetFamily
+    ) -> some View {
+        CombinedWeeklyAllowanceView(codex: codex, claude: claude, date: date, expanded: family == .systemLarge)
+            .frame(width: family == .systemSmall ? 170 : 364, height: family == .systemSmall ? 170 : 382)
+            .background { UsageSurfaceBackground(remaining: nil) }
+            .clipShape(RoundedRectangle(cornerRadius: 23))
     }
 
     @MainActor private static func row(

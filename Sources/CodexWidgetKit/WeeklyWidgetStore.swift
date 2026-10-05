@@ -5,6 +5,7 @@ public struct WeeklyWidgetStore: Sendable {
 
     public static let percentageKind = "CodexWeeklyPercentage"
     public static let graphKind = "CodexWeeklyGraph"
+    public static let combinedKind = "CombinedWeeklyAllowance"
     public let directory: URL
     public let provider: UsageProvider
 

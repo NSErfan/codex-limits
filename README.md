@@ -210,7 +210,7 @@ when their saved window can be identified unambiguously.
 - Preserves the last successful reading and cached history, including the account email and original reading time.
 - Can collect usage on a 15-minute schedule while the menu-bar app is closed.
 - Runs as a native SwiftUI menu-bar app with no third-party runtime dependencies.
-- Includes four native desktop widgets: weekly percentage and usage graph widgets for each provider.
+- Includes weekly percentage and usage graph widgets for each provider, plus a combined Claude + Codex allowance widget in small and large sizes.
 
 ## Background collection
 
@@ -282,6 +282,15 @@ Review the resulting usage totals and dates before sharing.
 
 ## Desktop widgets
 
+**Claude + Codex allowance** shows both providers' account-wide weekly balances together.
+The small square keeps each balance and a tiny **Aim ≤ …%/day until reset** caption in view.
+The large size adds each provider's recorded usage curve, pace status, and scheduled reset time.
+Daily pace spreads the allowance left after your safety buffer over the actual time until that
+provider's reset; it is expressed as percentage points of the full weekly allowance per day.
+Each provider's pace is hidden once its reading is stale, and its balance is hidden after its reset.
+Older saved readings show their balance and ask you to refresh for pace advice.
+Clicking the small widget opens Codex's weekly chart; each provider section in the large widget opens its own chart.
+
 **Weekly Percentage** and **Claude Weekly Percentage** show the percentage of the selected provider’s weekly limit remaining,
 with a segmented balance indicator. **Weekly Graph** and **Claude Weekly Graph** add the current week's
 recorded usage curve, an even-pace guide, and time until reset. Both adapt to light
@@ -312,8 +321,8 @@ reliably because it mixes five-hour and weekly readings without identifying them
 Until there are two weekly readings, the graph says **Collecting history**.
 
 To add a widget, Control-click your desktop, choose **Edit Widgets**, and search
-for **Codex Limits**. macOS provides the previews and handles adding both sizes.
-Choose the Codex or Claude widget by its gallery title. Both can be placed on the desktop at once. Clicking a widget opens its provider in the app.
+for **Codex Limits**. Choose **Claude + Codex allowance** and select the small or large size,
+or choose one of the individual provider widgets by its gallery title.
 Use the installed build in `/Applications`; if the macOS widget gallery was already
 open during an update, close and reopen it.
 

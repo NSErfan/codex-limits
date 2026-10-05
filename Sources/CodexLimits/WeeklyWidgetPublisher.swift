@@ -51,7 +51,10 @@ enum WeeklyWidgetPublisher {
         case .onTrack: .onTrack
         case .roomToUseMore: .roomToUseMore
         }
-        return WeeklyWidgetSnapshot(fetchedAt: snapshot.fetchedAt, window: window, samples: snapshot.samples, pace: pace)
+        return WeeklyWidgetSnapshot(
+            fetchedAt: snapshot.fetchedAt, window: window, samples: snapshot.samples,
+            pace: pace, reservePercent: safetyBuffer
+        )
     }
 
     static func publish(
@@ -70,6 +73,7 @@ enum WeeklyWidgetPublisher {
             if Bundle.main.object(forInfoDictionaryKey: "CodexWidgetAppGroup") != nil {
                 WidgetCenter.shared.reloadTimelines(ofKind: store.percentageKind)
                 WidgetCenter.shared.reloadTimelines(ofKind: store.graphKind)
+                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.combinedKind)
             }
         } catch {
             logger.error("Could not update weekly widgets: \(error.localizedDescription, privacy: .public)")

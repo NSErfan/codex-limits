@@ -61,10 +61,27 @@ final class WeeklyWidgetStoreTests: XCTestCase {
         let data = try JSONEncoder().encode(snapshot)
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         json.removeValue(forKey: "pace")
+        json.removeValue(forKey: "reservePercent")
         let legacy = try JSONDecoder().decode(WeeklyWidgetSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
         XCTAssertEqual(legacy.window, snapshot.window)
         XCTAssertEqual(legacy.status(at: now), .current)
         XCTAssertNil(legacy.pace(at: now))
+        XCTAssertNil(legacy.suggestedDailyPercent(at: now))
+    }
+
+    func testSuggestedPacePreservesReserveAcrossStorageAndHistoryMerging() throws {
+        let store = temporaryStore()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let preview = WeeklyWidgetSnapshot.preview(at: now)
+        let snapshot = WeeklyWidgetSnapshot(fetchedAt: now, window: preview.window, samples: preview.samples,
+                                            pace: .onTrack, reservePercent: 8)
+        try store.write(snapshot, writer: .app)
+        let restored = try XCTUnwrap(store.read())
+        XCTAssertEqual(restored.reservePercent, 8)
+        XCTAssertEqual(try XCTUnwrap(restored.suggestedDailyPercent(at: now)), 15, accuracy: 0.0001)
+        XCTAssertGreaterThan(try XCTUnwrap(restored.suggestedDailyPercent(at: now.addingTimeInterval(300))), 15)
+        XCTAssertNil(restored.suggestedDailyPercent(at: now.addingTimeInterval(WeeklyWidgetSnapshot.staleInterval)))
+        XCTAssertNil(restored.suggestedDailyPercent(at: restored.window!.resetsAt))
     }
 
     func testConcurrentWritersKeepNewestReadingAndCombineHistory() throws {
