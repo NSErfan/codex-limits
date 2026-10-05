@@ -5,6 +5,74 @@ import XCTest
 
 @MainActor
 final class ProviderLoginSessionTests: XCTestCase {
+    func testRefreshDoesNotPermitCredentialPromptByDefault() async throws {
+        let source = ResultSource([.fetched(Self.snapshot(at: Self.startedAt))])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in })
+
+        await login.refresh(.claude)
+
+        let promptPermissions = await source.promptPermissions
+        XCTAssertEqual(promptPermissions, [false])
+    }
+
+    func testExplicitRefreshCanPermitCredentialPrompt() async throws {
+        let source = ResultSource([.fetched(Self.snapshot(at: Self.startedAt))])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in })
+
+        await login.refresh(.claude, allowCredentialPrompt: true)
+
+        let promptPermissions = await source.promptPermissions
+        XCTAssertEqual(promptPermissions, [true])
+    }
+
+    func testPendingLoginRetriesDoNotPermitCredentialPromptsAfterAccessDenied() async throws {
+        let source = ResultSource([.deferred(ClaudeClientError.keychainAccessDenied, snapshot: nil)])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in }, now: { Self.startedAt })
+        await openLogin(login)
+
+        await login.refreshPendingLogins()
+        await login.refreshPendingLogins()
+
+        let promptPermissions = await source.promptPermissions
+        XCTAssertEqual(promptPermissions, [false, false])
+        XCTAssertNotNil(login.message(for: .claude))
+        XCTAssertEqual(context.providers.claude.errorMessage, ClaudeClientError.keychainAccessDenied.localizedDescription)
+        XCTAssertFalse(context.providers.claude.requiresLogin)
+    }
+
+    func testDeniedPassiveRefreshPreservesUsageUntilExplicitRecovery() async throws {
+        let savedSnapshot = Self.snapshot(at: Self.startedAt.addingTimeInterval(-60))
+        let recoveredSnapshot = Self.snapshot(at: Self.startedAt.addingTimeInterval(60))
+        let source = ResultSource([
+            .fetched(savedSnapshot),
+            .deferred(ClaudeClientError.keychainAccessDenied, snapshot: nil),
+            .fetched(recoveredSnapshot)
+        ])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in })
+        await login.refresh(.claude)
+
+        await login.refresh(.claude)
+
+        XCTAssertEqual(context.providers.claude.snapshot, savedSnapshot)
+        XCTAssertEqual(context.providers.claude.errorMessage, ClaudeClientError.keychainAccessDenied.localizedDescription)
+        XCTAssertFalse(context.providers.claude.requiresLogin)
+
+        await login.refresh(.claude, allowCredentialPrompt: true)
+
+        let promptPermissions = await source.promptPermissions
+        XCTAssertEqual(promptPermissions, [false, false, true])
+        XCTAssertEqual(context.providers.claude.snapshot, recoveredSnapshot)
+        XCTAssertNil(context.providers.claude.errorMessage)
+    }
+
     func testCachedReadingBeforeLoginKeepsSignInPending() async throws {
         let snapshot = Self.snapshot(at: Self.startedAt.addingTimeInterval(-60))
         let source = ResultSource([.cached(snapshot, nextRefreshAt: Self.startedAt.addingTimeInterval(900))])
@@ -117,7 +185,7 @@ final class ProviderLoginSessionTests: XCTestCase {
             provider: .claude, defaults: defaults,
             historyDirectory: directory.appendingPathComponent("claude"),
             widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("claude-widget"), provider: .claude),
-            fetchResult: { _ in await source.fetch() },
+            fetchResult: { await source.fetch(allowCredentialPrompt: $0) },
             recoveryDelaysNanoseconds: [], startsAutomatically: false
         )
         return Context(
@@ -151,12 +219,14 @@ final class ProviderLoginSessionTests: XCTestCase {
 
     private actor ResultSource {
         let results: [UsageFetchResult]
-        private(set) var fetchCount = 0
+        private(set) var promptPermissions: [Bool] = []
+
+        var fetchCount: Int { promptPermissions.count }
 
         init(_ results: [UsageFetchResult]) { self.results = results }
 
-        func fetch() -> UsageFetchResult {
-            defer { fetchCount += 1 }
+        func fetch(allowCredentialPrompt: Bool) -> UsageFetchResult {
+            defer { promptPermissions.append(allowCredentialPrompt) }
             return results[min(fetchCount, results.count - 1)]
         }
     }

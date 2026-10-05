@@ -63,8 +63,12 @@ new reading; its recorded history remains available.
 
 Claude Code uses your existing CLI sign-in. On macOS the app reads its OAuth credentials
 from Keychain, with the CLI credentials file as a fallback. Choose **Refresh** if macOS
-needs your permission to read the login. Automatic and background refreshes never open
-Keychain permission dialogs. The app respects `CLAUDE_CONFIG_DIR` when present in its environment.
+needs your permission to read the login. Switching providers, opening a widget’s usage
+window, returning from sign-in, and automatic or background refreshes never open Keychain
+permission dialogs. If access needs approval, the app keeps the last reading and asks
+you to click **Refresh**. macOS’s **Always Allow** applies to the current Keychain item
+and app identity; replacing the credential item or changing the app’s signing identity
+can require approval again. The app respects `CLAUDE_CONFIG_DIR` when present in its environment.
 
 If sign-in is needed, use **Sign in** in the menu or **Settings → Accounts**. The app opens
 Terminal with the provider's official CLI login command. Complete that flow, then return
