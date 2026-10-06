@@ -160,7 +160,7 @@ struct MenuContentView: View {
 
     private var refreshButton: some View {
         Button {
-            Task { await monitor.refresh(allowCredentialPrompt: true) }
+            Task { await monitor.refresh() }
         } label: {
             if monitor.isRefreshing {
                 ProgressView().controlSize(.small)
@@ -251,7 +251,7 @@ struct MenuContentView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                 Button("Try again") {
-                    Task { await monitor.refresh(allowCredentialPrompt: true) }
+                    Task { await monitor.refresh() }
                 }
                 if monitor.requiresLogin {
                     signInControls

@@ -24,7 +24,7 @@ final class UsageMonitor: ObservableObject {
     private static let historyInstallationIDKey = "historyInstallationID"
     private var historySyncBookmarkKey: String { provider.preferenceKey("historySyncBookmark") }
     private let defaults: UserDefaults
-    private let fetchUsage: @Sendable (Bool) async throws -> UsageFetchResult
+    private let fetchUsage: @Sendable () async throws -> UsageFetchResult
     private let recoveryDelaysNanoseconds: [UInt64]
     private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
     private let history: UsageHistory
@@ -48,7 +48,7 @@ final class UsageMonitor: ObservableObject {
         historyNow: @escaping @Sendable () -> Date = { Date() },
         widgetStore: WeeklyWidgetStore? = nil,
         fetchUsage: (@Sendable () async throws -> UsageSnapshot)? = nil,
-        fetchResult: (@Sendable (Bool) async throws -> UsageFetchResult)? = nil,
+        fetchResult: (@Sendable () async throws -> UsageFetchResult)? = nil,
         recoveryDelaysNanoseconds: [UInt64] = [
             2_000_000_000,
             10_000_000_000,
@@ -69,9 +69,9 @@ final class UsageMonitor: ObservableObject {
         if let fetchResult {
             self.fetchUsage = fetchResult
         } else if let fetchUsage {
-            self.fetchUsage = { _ in .fetched(try await fetchUsage()) }
+            self.fetchUsage = { .fetched(try await fetchUsage()) }
         } else {
-            self.fetchUsage = { try await provider.fetchUsage(allowCredentialPrompt: $0) }
+            self.fetchUsage = { try await provider.fetchUsage() }
         }
         self.recoveryDelaysNanoseconds = recoveryDelaysNanoseconds
         self.sleepBeforeRecovery = sleepBeforeRecovery
@@ -192,14 +192,14 @@ final class UsageMonitor: ObservableObject {
     }
 
     @discardableResult
-    func refresh(allowCredentialPrompt: Bool = false) async -> Bool {
+    func refresh() async -> Bool {
         recoveryTask?.cancel()
         recoveryTask = nil
-        return await refresh(recoveryAttempt: 0, allowCredentialPrompt: allowCredentialPrompt)
+        return await refresh(recoveryAttempt: 0)
     }
 
     @discardableResult
-    private func refresh(recoveryAttempt: Int, allowCredentialPrompt: Bool = false) async -> Bool {
+    private func refresh(recoveryAttempt: Int) async -> Bool {
         guard !isRefreshing else { return false }
         isRefreshing = true
         var nextAutomaticRefresh: Date?
@@ -214,7 +214,7 @@ final class UsageMonitor: ObservableObject {
         }
 
         let fetchUsage = self.fetchUsage
-        let fetchTask = Task { try await fetchUsage(allowCredentialPrompt) }
+        let fetchTask = Task { try await fetchUsage() }
         let historyState = await exchangeHistory()
         apply(historyState.legacy, periodState: historyState.periods,
               configuredFolderName: configuredSyncDirectory?.lastPathComponent)

@@ -19,7 +19,7 @@ struct ProviderAccountSettings: View {
                 }
                 Spacer()
                 Button("Refresh") {
-                    Task { await login.refresh(monitor.provider, allowCredentialPrompt: true) }
+                    Task { await login.refresh(monitor.provider) }
                 }
                 .disabled(monitor.isRefreshing)
                 Button("Sign in…") { login.signIn(to: monitor.provider) }

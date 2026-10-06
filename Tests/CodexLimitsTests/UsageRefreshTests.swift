@@ -13,7 +13,7 @@ final class UsageRefreshTests: XCTestCase {
             .cached(saved, nextRefreshAt: saved.fetchedAt.addingTimeInterval(900))
         }
 
-        let didFetch = await monitor.refresh(allowCredentialPrompt: true)
+        let didFetch = await monitor.refresh()
 
         XCTAssertFalse(didFetch)
         XCTAssertEqual(monitor.snapshot?.fetchedAt, saved.fetchedAt)
@@ -33,7 +33,7 @@ final class UsageRefreshTests: XCTestCase {
             .deferred(ClaudeRefreshError.rateLimited(until: deadline), snapshot: saved)
         }
 
-        let didFetch = await monitor.refresh(allowCredentialPrompt: true)
+        let didFetch = await monitor.refresh()
 
         XCTAssertFalse(didFetch)
         XCTAssertEqual(monitor.snapshot, saved)
@@ -115,7 +115,7 @@ final class UsageRefreshTests: XCTestCase {
         @MainActor func monitor(_ fetch: @escaping @Sendable () async -> UsageFetchResult) -> UsageMonitor {
             UsageMonitor(provider: .claude, defaults: defaults, historyDirectory: directory,
                          widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"), provider: .claude),
-                         fetchResult: { _ in await fetch() }, recoveryDelaysNanoseconds: [], startsAutomatically: false)
+                         fetchResult: { await fetch() }, recoveryDelaysNanoseconds: [], startsAutomatically: false)
         }
 
         func cleanUp() {

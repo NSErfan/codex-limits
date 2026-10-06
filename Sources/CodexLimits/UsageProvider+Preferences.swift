@@ -12,10 +12,10 @@ extension UsageProvider {
         self == .claude ? ClaudeUsageCoordinator.minimumInterval : 600
     }
 
-    func fetchUsage(allowCredentialPrompt: Bool = false) async throws -> UsageFetchResult {
+    func fetchUsage() async throws -> UsageFetchResult {
         switch self {
         case .codex: .fetched(try await CodexClient.fetch())
-        case .claude: try await ClaudeUsageCoordinator.shared().fetch(allowCredentialPrompt: allowCredentialPrompt)
+        case .claude: try await ClaudeUsageCoordinator.shared().fetch()
         }
     }
 }

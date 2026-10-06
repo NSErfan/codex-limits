@@ -2,10 +2,10 @@ import Foundation
 
 enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
     case credentialsMissing
-    case credentialsInvalid
-    case credentialsExpired
-    case keychainAccessDenied
-    case missingProfileScope
+    case cliNotFound
+    case cliUpdateRequired
+    case commandFailed
+    case usageUnavailable
     case unauthorized
     case forbidden
     case rateLimited(retryAfter: Date?)
@@ -19,14 +19,14 @@ enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
         switch self {
         case .credentialsMissing:
             "Claude Code isn’t signed in. Sign in with your Claude subscription, then refresh."
-        case .credentialsInvalid:
-            "Couldn’t read Claude Code’s login. Sign in again with your Claude subscription, then refresh."
-        case .credentialsExpired:
-            "Claude Code’s login has expired. Open Claude Code to renew it, or sign in again, then refresh."
-        case .keychainAccessDenied:
-            "Claude Code’s login is in your Keychain. Click Refresh and allow access when macOS asks."
-        case .missingProfileScope:
-            "This Claude token can’t read account usage. Sign in with your Claude subscription using Claude Code, then refresh."
+        case .cliNotFound:
+            "Couldn’t launch Claude Code. Install or update the Claude Code CLI, then refresh."
+        case .cliUpdateRequired:
+            "Claude Code didn’t provide structured subscription usage. Update Claude Code and check /usage in Terminal, then refresh."
+        case .commandFailed:
+            "Claude Code couldn’t run its usage command. Update Claude Code and try /usage in Terminal, then refresh."
+        case .usageUnavailable:
+            "Claude Code couldn’t retrieve subscription usage. Check your login and connection with /usage in Claude Code, then refresh."
         case .unauthorized:
             "Claude rejected the saved login. Open Claude Code or sign in again, then refresh."
         case .forbidden:
@@ -46,9 +46,14 @@ enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
         }
     }
 
+    var isRateLimited: Bool {
+        if case .rateLimited = self { return true }
+        return false
+    }
+
     var shouldRetryAutomatically: Bool {
         switch self {
-        case .networkUnavailable, .timedOut, .invalidResponse:
+        case .networkUnavailable, .timedOut, .invalidResponse, .usageUnavailable:
             true
         case let .serverError(status):
             status >= 500
@@ -59,8 +64,7 @@ enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
 
     var requiresLogin: Bool {
         switch self {
-        case .credentialsMissing, .credentialsInvalid, .credentialsExpired,
-             .missingProfileScope, .unauthorized:
+        case .credentialsMissing, .unauthorized:
             true
         default:
             false

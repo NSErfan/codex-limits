@@ -1,198 +1,135 @@
 import Foundation
 
 enum ClaudeClient {
-    static func fetch(credentials: ClaudeCredentials, account: ClaudeAccountReader.Account?) async throws -> UsageSnapshot {
-        try Task.checkCancellation()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieStorage = nil
-        configuration.urlCache = nil
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-        return try await fetch(credentials: credentials, account: account, readAccount: { ClaudeAccountReader.read() }) { request in
-            try await session.data(for: request)
-        }
-    }
-
     static func fetch(
-        credentials: ClaudeCredentials,
         now: () -> Date = Date.init,
-        account: ClaudeAccountReader.Account? = nil,
-        readAccount: () -> ClaudeAccountReader.Account? = { nil },
-        transport: (URLRequest) async throws -> (Data, URLResponse)
+        readAccount: () -> ClaudeAccountReader.Account? = { ClaudeAccountReader.read() },
+        runCommand: () async throws -> Data
     ) async throws -> UsageSnapshot {
         try Task.checkCancellation()
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("CodexLimits", forHTTPHeaderField: "User-Agent")
-
-        do {
-            let (data, response) = try await transport(request)
-            let receivedAt = now()
-            try Task.checkCancellation()
-            guard let response = response as? HTTPURLResponse else {
-                throw ClaudeClientError.invalidResponse
-            }
-            switch response.statusCode {
-            case 200:
-                let email = account.flatMap { $0 == readAccount() ? $0.email : nil }
-                return try decode(data, fetchedAt: receivedAt, accountEmail: email)
-            case 401:
-                throw ClaudeClientError.unauthorized
-            case 403:
-                throw ClaudeClientError.forbidden
-            case 429:
-                throw ClaudeClientError.rateLimited(retryAfter: retryAfter(response, receivedAt: receivedAt))
-            default:
-                throw ClaudeClientError.serverError(response.statusCode)
-            }
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as ClaudeClientError {
-            throw error
-        } catch let error as URLError where error.code == .cancelled {
-            throw CancellationError()
-        } catch let error as URLError where error.code == .timedOut {
-            throw ClaudeClientError.timedOut
-        } catch {
-            throw ClaudeClientError.networkUnavailable
-        }
-    }
-
-    private static func retryAfter(_ response: HTTPURLResponse, receivedAt: Date) -> Date? {
-        guard let value = response.value(forHTTPHeaderField: "Retry-After")?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
-        if value.utf8.allSatisfy({ (48...57).contains($0) }) {
-            guard let seconds = TimeInterval(value), seconds.isFinite else { return nil }
-            let deadline = receivedAt.addingTimeInterval(seconds)
-            return deadline.timeIntervalSinceReferenceDate.isFinite ? deadline : nil
-        }
-        return httpDate(value, receivedAt: receivedAt)
-    }
-
-    private static func httpDate(_ value: String, receivedAt: Date) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.isLenient = false
-        formatter.twoDigitStartDate = formatter.calendar.date(byAdding: .year, value: -50, to: receivedAt)
-        for format in ["EEE, dd MMM yyyy HH:mm:ss 'GMT'", "EEEE, dd-MMM-yy HH:mm:ss 'GMT'", "EEE MMM d HH:mm:ss yyyy"] {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: value) {
-                return date
-            }
-        }
-        return nil
+        let account = readAccount()
+        let data = try await runCommand()
+        try Task.checkCancellation()
+        let email = account.flatMap { $0 == readAccount() ? $0.email : nil }
+        return try decode(data, fetchedAt: now(), accountEmail: email)
     }
 
     static func decode(_ data: Data, fetchedAt: Date, accountEmail: String? = nil) throws -> UsageSnapshot {
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
-            throw ClaudeClientError.invalidResponse
+        let report = try usageReport(from: data)
+        guard let limits = report.rateLimits?.limits else { throw ClaudeClientError.usageUnavailable }
+        let accountLimits = limits.compactMap { entry -> LimitReading? in
+            switch (entry.kind, entry.group) {
+            case ("session", "session"):
+                reading(entry, id: "claude", name: "5-hour window", minutes: 300)
+            case ("weekly_all", "weekly"):
+                reading(entry, id: "claude", name: "Weekly window", minutes: 10_080)
+            default:
+                nil
+            }
         }
-        let accountLimits = [
-            reading(payload.fiveHour, id: "claude", name: "5-hour window", minutes: 300),
-            reading(payload.sevenDay, id: "claude", name: "Weekly window", minutes: 10_080)
-        ].compactMap { $0 }
         guard let primary = accountLimits.min(by: {
             $0.window.remainingPercent < $1.window.remainingPercent
-        }) else {
-            throw ClaudeClientError.mainLimitMissing
-        }
+        }) else { throw ClaudeClientError.mainLimitMissing }
         var others = accountLimits.filter { $0.id != primary.id }
-        var modelLimits = [
-            reading(payload.sevenDaySonnet, id: "claude-sonnet", name: "Sonnet weekly", minutes: 10_080),
-            reading(payload.sevenDayOpus, id: "claude-opus", name: "Opus weekly", minutes: 10_080),
-            reading(payload.sevenDayOAuthApps, id: "claude-oauth-apps", name: "OAuth apps weekly", minutes: 10_080)
-        ].compactMap { $0 }
-        for entry in payload.limits ?? [] {
+        others.append(contentsOf: modelLimits(limits))
+        others.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return UsageSnapshot(
+            mainLimit: LimitReading(limitId: "claude", name: "Claude Code", window: primary.window),
+            otherLimits: others,
+            tokenHistory: [], resetCredits: [], fetchedAt: fetchedAt, accountEmail: accountEmail
+        )
+    }
+
+    private static func usageReport(from data: Data) throws -> Report {
+        let decoder = JSONDecoder()
+        let events: [Event]
+        do {
+            events = try data.split(separator: 0x0A).map { try decoder.decode(Event.self, from: Data($0)) }
+        } catch { throw ClaudeClientError.invalidResponse }
+        guard let result = events.last, result.type == "result" else { throw ClaudeClientError.invalidResponse }
+        guard result.isError != true else { throw ClaudeClientError.commandFailed }
+        // Only accept the built-in local command's structured output, never generated text or rounded display percentages.
+        guard result.subtype == "success", result.localCommand == "usage",
+              result.numTurns == 0, result.totalCostUSD == 0 else { throw ClaudeClientError.cliUpdateRequired }
+        guard let event = events.last(where: {
+            $0.type == "assistant" && $0.localCommandRun?.command == "usage" && $0.localCommandRun?.args == ""
+        }) else { throw ClaudeClientError.cliUpdateRequired }
+        guard let report = event.usageReport else { throw ClaudeClientError.usageUnavailable }
+        return report
+    }
+
+    private static func modelLimits(_ limits: [Limit]) -> [LimitReading] {
+        var readings: [LimitReading] = []
+        for entry in limits {
             guard entry.group == "weekly", entry.kind == "weekly_scoped",
                   entry.isActive != false,
                   let model = entry.scope?.model,
                   let name = nonempty(model.displayName),
                   let identifier = nonempty(model.id) ?? nonempty(model.displayName) else { continue }
             let slug = identifier.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: "-")
-            guard !slug.isEmpty, !slug.hasSuffix("all-models"), name.lowercased() != "all models" else { continue }
-            guard let limit = reading(
-                Window(utilization: entry.percent, resetsAt: entry.resetsAt),
-                id: "claude-\(slug)",
-                name: "\(name) weekly",
-                minutes: 10_080
-            ) else { continue }
-            modelLimits.removeAll { $0.limitId == limit.limitId }
-            modelLimits.append(limit)
+            guard !slug.isEmpty, !slug.hasSuffix("all-models"), name.lowercased() != "all models",
+                  let limit = reading(entry, id: "claude-\(slug)", name: "\(name) weekly", minutes: 10_080) else { continue }
+            readings.removeAll { $0.limitId == limit.limitId }
+            readings.append(limit)
         }
-        others.append(contentsOf: modelLimits)
-        others.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        return UsageSnapshot(
-            mainLimit: LimitReading(limitId: "claude", name: "Claude Code", window: primary.window),
-            otherLimits: others,
-            tokenHistory: [],
-            resetCredits: [],
-            fetchedAt: fetchedAt,
-            accountEmail: accountEmail
-        )
+        return readings
     }
 
-    private static func reading(_ payload: Window?, id: String, name: String, minutes: Int) -> LimitReading? {
-        guard let payload, let used = payload.utilization, used.isFinite,
-              let rawReset = payload.resetsAt else { return nil }
+    private static func reading(_ payload: Limit, id: String, name: String, minutes: Int) -> LimitReading? {
+        guard let used = payload.percent, used.isFinite, let rawReset = payload.resetsAt else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let resetWithFraction = formatter.date(from: rawReset)
         formatter.formatOptions = [.withInternetDateTime]
         guard let reset = resetWithFraction ?? formatter.date(from: rawReset) else { return nil }
         return LimitReading(
-            limitId: id,
-            name: name,
-            window: UsageWindow(
-                remainingPercent: min(max(100 - used, 0), 100),
-                resetsAt: reset,
-                durationMinutes: minutes
-            )
+            limitId: id, name: name,
+            window: UsageWindow(remainingPercent: min(max(100 - used, 0), 100),
+                                resetsAt: reset, durationMinutes: minutes)
         )
     }
 
     private static func nonempty(_ value: String?) -> String? {
-        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty else { return nil }
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
         return trimmed
     }
 
-    private struct Payload: Decodable {
-        let fiveHour: Window?
-        let sevenDay: Window?
-        let sevenDaySonnet: Window?
-        let sevenDayOpus: Window?
-        let sevenDayOAuthApps: Window?
-        let limits: [ScopedLimit]?
+    private struct Event: Decodable {
+        let type: String
+        let subtype: String?
+        let localCommand: String?
+        let localCommandRun: Command?
+        let usageReport: Report?
+        let numTurns: Int?
+        let totalCostUSD: Double?
+        let isError: Bool?
 
         private enum CodingKeys: String, CodingKey {
-            case fiveHour = "five_hour"
-            case sevenDay = "seven_day"
-            case sevenDaySonnet = "seven_day_sonnet"
-            case sevenDayOpus = "seven_day_opus"
-            case sevenDayOAuthApps = "seven_day_oauth_apps"
-            case limits
+            case type, subtype
+            case localCommand = "local_command"
+            case localCommandRun = "local_command_run"
+            case usageReport = "usage_report"
+            case numTurns = "num_turns"
+            case totalCostUSD = "total_cost_usd"
+            case isError = "is_error"
         }
     }
 
-    private struct Window: Decodable {
-        let utilization: Double?
-        let resetsAt: String?
-
-        private enum CodingKeys: String, CodingKey {
-            case utilization
-            case resetsAt = "resets_at"
-        }
+    private struct Command: Decodable {
+        let command: String
+        let args: String
     }
 
-    private struct ScopedLimit: Decodable {
+    private struct Report: Decodable {
+        let rateLimits: RateLimits?
+        private enum CodingKeys: String, CodingKey { case rateLimits = "rate_limits" }
+    }
+
+    private struct RateLimits: Decodable {
+        let limits: [Limit]?
+    }
+
+    private struct Limit: Decodable {
         let kind: String?
         let group: String?
         let percent: Double?
@@ -207,14 +144,11 @@ enum ClaudeClient {
         }
     }
 
-    private struct Scope: Decodable {
-        let model: Model?
-    }
+    private struct Scope: Decodable { let model: Model? }
 
     private struct Model: Decodable {
         let id: String?
         let displayName: String?
-
         private enum CodingKeys: String, CodingKey {
             case id
             case displayName = "display_name"

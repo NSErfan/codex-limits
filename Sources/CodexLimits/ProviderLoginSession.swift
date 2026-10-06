@@ -56,11 +56,11 @@ final class ProviderLoginSession: ObservableObject {
         }
     }
 
-    func refresh(_ provider: UsageProvider, allowCredentialPrompt: Bool = false) async {
+    func refresh(_ provider: UsageProvider) async {
         guard refreshingProviders.insert(provider).inserted else { return }
         defer { refreshingProviders.remove(provider) }
         let monitor = providers.monitor(for: provider)
-        let didFetch = await monitor.refresh(allowCredentialPrompt: allowCredentialPrompt)
+        let didFetch = await monitor.refresh()
         let hasReadingAfterLogin = pendingLogins[provider].map { startedAt in
             !monitor.requiresLogin && monitor.snapshot.map { $0.fetchedAt >= startedAt } == true
         } ?? false

@@ -12,11 +12,11 @@ struct ClaudeUsageCoordinator: Sendable {
     var lockTimeout: Duration = .seconds(30)
 
     static func shared() -> Self {
-        let service = ClaudeCredentialReader.location(
+        let service = ClaudeProfile.location(
             environment: ProcessInfo.processInfo.environment,
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
             workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        ).service
+        ).identifier
         let profile = SHA256.hash(data: Data(service.utf8)).map { String(format: "%02x", $0) }.joined()
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return Self(directory: base
@@ -24,25 +24,10 @@ struct ClaudeUsageCoordinator: Sendable {
             .appendingPathComponent(profile, isDirectory: true))
     }
 
-    func fetch(
-        allowCredentialPrompt: Bool,
-        readAccount: @escaping @Sendable () -> ClaudeAccountReader.Account? = { ClaudeAccountReader.read() },
-        readCredentials: @escaping @Sendable (Bool) throws -> ClaudeCredentials = {
-            try ClaudeCredentialReader.read(allowPrompt: $0)
-        },
-        request: @escaping @Sendable (ClaudeCredentials, ClaudeAccountReader.Account?) async throws -> UsageSnapshot = {
-            try await ClaudeClient.fetch(credentials: $0, account: $1)
+    func fetch() async throws -> UsageFetchResult {
+        try await fetch(prepare: { try ClaudeUsageCommand.executable() }) { executable in
+            try await ClaudeClient.fetch { try await ClaudeUsageCommand.run(executable: executable) }
         }
-    ) async throws -> UsageFetchResult {
-        try await fetch(
-            prepare: {
-                // Keep the same CLI account on both sides of the single credential read.
-                let account = readAccount()
-                let credentials = try readCredentials(allowCredentialPrompt)
-                return Authentication(credentials: credentials, account: account == readAccount() ? account : nil)
-            },
-            request: { try await request($0.credentials, $0.account) }
-        )
     }
 
     func fetch<Prepared: Sendable>(
@@ -59,19 +44,19 @@ struct ClaudeUsageCoordinator: Sendable {
         var state = try readState()
         if let existing = cachedResult(state, at: now()) { return existing }
 
-        // A Keychain prompt can outlast the spacing interval. Reserve only after
-        // credentials are ready, immediately before the HTTP operation starts.
-        let credentials = try await prepare()
+        // Missing CLI installations must not consume a refresh reservation.
+        let prepared = try await prepare()
         try Task.checkCancellation()
         state.lastAttemptAt = now()
         try writeState(state)
         do {
-            let snapshot = try await request(credentials)
+            let snapshot = try await request(prepared)
             let completedAt = now()
             state.lastAttemptAt = completedAt
             state.snapshot = snapshot
             state.cooldownUntil = nil
-            state.rateLimitCount = 0
+            state.cooldownFailure = nil
+            state.cooldownCount = 0
             state.authenticationFailure = nil
             try writeState(state)
             return .fetched(snapshot, nextRefreshAt: completedAt.addingTimeInterval(Self.minimumInterval))
@@ -79,17 +64,18 @@ struct ClaudeUsageCoordinator: Sendable {
             let completedAt = now()
             let nextRefreshAt = completedAt.addingTimeInterval(Self.minimumInterval)
             state.lastAttemptAt = completedAt
-            if case let .rateLimited(retryAfter) = error {
-                state.rateLimitCount = min(state.rateLimitCount + 1, 3)
-                let fallback = min(Self.fallbackCooldown * pow(2, Double(state.rateLimitCount - 1)),
+            if error == .usageUnavailable || error.isRateLimited {
+                state.cooldownCount = min(state.cooldownCount + 1, 3)
+                let fallback = min(Self.fallbackCooldown * pow(2, Double(state.cooldownCount - 1)),
                                    Self.maximumFallbackCooldown)
-                let cooldown = max(
-                    nextRefreshAt,
-                    retryAfter ?? completedAt.addingTimeInterval(fallback)
-                )
+                let retryAfter: Date?
+                if case let .rateLimited(date) = error { retryAfter = date } else { retryAfter = nil }
+                let cooldown = max(nextRefreshAt, retryAfter ?? completedAt.addingTimeInterval(fallback))
                 state.cooldownUntil = cooldown
+                let failure: CooldownFailure = error == .usageUnavailable ? .usageUnavailable : .rateLimited
+                state.cooldownFailure = failure
                 try writeState(state)
-                return .deferred(ClaudeRefreshError.rateLimited(until: cooldown),
+                return .deferred(failure.error(until: cooldown),
                                  snapshot: state.snapshot, nextRefreshAt: cooldown)
             }
             state.authenticationFailure = error == .unauthorized ? .unauthorized
@@ -104,14 +90,10 @@ struct ClaudeUsageCoordinator: Sendable {
         }
     }
 
-    private struct Authentication: Sendable {
-        let credentials: ClaudeCredentials
-        let account: ClaudeAccountReader.Account?
-    }
-
     private func cachedResult(_ state: State, at date: Date) -> UsageFetchResult? {
         if let cooldown = state.cooldownUntil, date < cooldown {
-            return .deferred(ClaudeRefreshError.rateLimited(until: cooldown), snapshot: state.snapshot, nextRefreshAt: cooldown)
+            return .deferred((state.cooldownFailure ?? .rateLimited).error(until: cooldown),
+                             snapshot: state.snapshot, nextRefreshAt: cooldown)
         }
         guard let attempt = state.lastAttemptAt else { return nil }
         let next = attempt.addingTimeInterval(Self.minimumInterval)
@@ -153,7 +135,7 @@ struct ClaudeUsageCoordinator: Sendable {
             let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
             guard size <= 1_000_000 else { throw ClaudeRefreshError.storageUnavailable }
             let state = try JSONDecoder().decode(State.self, from: Data(contentsOf: url))
-            guard state.version == 1, (0 ... 3).contains(state.rateLimitCount) else {
+            guard state.version == 1, (0 ... 3).contains(state.cooldownCount) else {
                 throw ClaudeRefreshError.storageUnavailable
             }
             return state
@@ -173,8 +155,22 @@ struct ClaudeUsageCoordinator: Sendable {
         var lastAttemptAt: Date?
         var snapshot: UsageSnapshot?
         var cooldownUntil: Date?
-        var rateLimitCount = 0
+        var cooldownFailure: CooldownFailure?
+        var cooldownCount = 0
         var authenticationFailure: AuthenticationFailure?
+
+        private enum CodingKeys: String, CodingKey {
+            case version, lastAttemptAt, snapshot, cooldownUntil, cooldownFailure, authenticationFailure
+            case cooldownCount = "rateLimitCount"
+        }
+    }
+
+    private enum CooldownFailure: String, Codable {
+        case rateLimited, usageUnavailable
+
+        func error(until date: Date) -> ClaudeRefreshError {
+            self == .rateLimited ? .rateLimited(until: date) : .failed(.usageUnavailable, until: date)
+        }
     }
 
     private enum AuthenticationFailure: String, Codable {

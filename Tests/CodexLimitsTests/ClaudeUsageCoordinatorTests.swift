@@ -4,7 +4,7 @@ import XCTest
 @testable import CodexLimits
 
 final class ClaudeUsageCoordinatorTests: XCTestCase {
-    func testFreshReadingIsSharedWithoutReadingCredentialsOrChangingTimestamp() async throws {
+    func testFreshReadingIsSharedWithoutLaunchingCommandOrChangingTimestamp() async throws {
         let context = try Context()
         defer { context.cleanUp() }
         let source = RequestRecorder()
@@ -33,12 +33,12 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         let context = try Context()
         defer { context.cleanUp() }
         let source = RequestRecorder()
-        _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             await source.fetch(Self.snapshot(at: context.clock.now))
         }
         context.clock.advance(by: 900)
 
-        let result = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             await source.fetch(Self.snapshot(at: context.clock.now))
         }
 
@@ -47,21 +47,21 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(counts.request, 2)
     }
 
-    func testLongCredentialPromptDoesNotConsumeRequestSpacing() async throws {
+    func testSlowPreparationDoesNotConsumeRequestSpacing() async throws {
         let context = try Context()
         defer { context.cleanUp() }
         let source = RequestRecorder()
         let result = try await context.coordinator().fetch(
             prepare: {
                 context.clock.advance(by: 1_800)
-                return Self.credentials()
+                return Self.command()
             },
             request: { _ in await source.fetch(Self.snapshot(at: context.clock.now)) }
         )
         let original = try fetched(result)
         context.clock.advance(by: 899)
 
-        let repeated = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let repeated = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             await source.fetch(Self.snapshot(at: context.clock.now))
         }
 
@@ -73,7 +73,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
     func testSpacingAlsoSurvivesLongRequestAndCoordinatorRecreation() async throws {
         let context = try Context()
         defer { context.cleanUp() }
-        let result = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             context.clock.advance(by: 1_800)
             return Self.snapshot(at: context.clock.now)
         }
@@ -93,7 +93,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         let source = SuspendedRequest()
         let original = Self.snapshot(at: context.clock.now)
         let first = Task {
-            try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+            try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
                 await source.fetch(original)
             }
         }
@@ -126,7 +126,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         defer { context.cleanUp() }
         for expectedDelay in [1_800.0, 3_600, 7_200, 7_200] {
             let attemptedAt = context.clock.now
-            let limited = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+            let limited = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
                 throw ClaudeClientError.rateLimited(retryAfter: nil)
             }
             let deadline = try rateLimitDeadline(limited)
@@ -143,19 +143,59 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         }
     }
 
+    func testUnavailableCLIReportsBackOffWithoutClaimingARateLimit() async throws {
+        let context = try Context()
+        defer { context.cleanUp() }
+        for delay in [1_800.0, 3_600, 7_200, 7_200] {
+            let deadline = context.clock.now.addingTimeInterval(delay)
+            let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
+                throw ClaudeClientError.usageUnavailable
+            }
+            guard case let .failed(error, until) = try deferredError(result) as? ClaudeRefreshError else {
+                return XCTFail("Expected unavailable usage with a cooldown")
+            }
+            XCTAssertEqual(error, .usageUnavailable)
+            XCTAssertEqual(until, deadline)
+            context.clock.advance(by: delay - 1)
+            let repeated = try await context.coordinator().fetch(
+                prepare: { try Self.unexpectedPreparation() }, request: { _ in Self.snapshot(at: context.clock.now) }
+            )
+            guard case let .failed(savedError, savedDeadline) = try deferredError(repeated) as? ClaudeRefreshError else {
+                return XCTFail("Expected cooldown reason to survive coordinator recreation")
+            }
+            XCTAssertEqual(savedError, .usageUnavailable)
+            XCTAssertEqual(savedDeadline, deadline)
+            context.clock.advance(by: 1)
+        }
+    }
+
+    func testCooldownFromEarlierAppVersionIsPreserved() async throws {
+        let context = try Context()
+        defer { context.cleanUp() }
+        let deadline = context.clock.now.addingTimeInterval(3_600)
+        let state: [String: Any] = ["version": 1, "rateLimitCount": 2,
+                                  "lastAttemptAt": context.clock.now.timeIntervalSinceReferenceDate,
+                                  "cooldownUntil": deadline.timeIntervalSinceReferenceDate]
+        try JSONSerialization.data(withJSONObject: state).write(to: context.directory.appendingPathComponent("state.json"))
+        let result = try await context.coordinator().fetch(
+            prepare: { try Self.unexpectedPreparation() }, request: { _ in Self.snapshot(at: context.clock.now) }
+        )
+        XCTAssertEqual(try rateLimitDeadline(result), deadline)
+    }
+
     func testSuccessfulRequestResetsFallbackBackoff() async throws {
         let context = try Context()
         defer { context.cleanUp() }
-        _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             throw ClaudeClientError.rateLimited(retryAfter: nil)
         }
         context.clock.advance(by: 1_800)
-        _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             Self.snapshot(at: context.clock.now)
         }
         context.clock.advance(by: 900)
 
-        let limited = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let limited = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             throw ClaudeClientError.rateLimited(retryAfter: nil)
         }
 
@@ -168,7 +208,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             defer { context.cleanUp() }
             let attemptedAt = context.clock.now
 
-            let result = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+            let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
                 throw ClaudeClientError.rateLimited(retryAfter: attemptedAt.addingTimeInterval(serverDelay))
             }
 
@@ -183,10 +223,10 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         let context = try Context()
         defer { context.cleanUp() }
         let original = Self.snapshot(at: context.clock.now)
-        _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in original }
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in original }
         context.clock.advance(by: 900)
 
-        let limited = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let limited = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             throw ClaudeClientError.rateLimited(retryAfter: nil)
         }
         let blocked = try await context.coordinator().fetch(
@@ -207,7 +247,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         for failure in [ClaudeClientError.unauthorized, .forbidden] {
             let context = try Context()
             defer { context.cleanUp() }
-            _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+            _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
                 throw failure
             }
 
@@ -227,22 +267,22 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         }
     }
 
-    func testCredentialFailuresDoNotReserveAnHTTPAttempt() async throws {
+    func testMissingCommandDoesNotReserveAnAttempt() async throws {
         let context = try Context()
         defer { context.cleanUp() }
-        for failure in [ClaudeClientError.credentialsMissing, .credentialsExpired, .keychainAccessDenied] {
+        for failure in [ClaudeClientError.cliNotFound] {
             do {
-                _ = try await context.coordinator().fetch(prepare: { () throws -> ClaudeCredentials in throw failure }) { _ in
-                    XCTFail("Unavailable credentials must prevent the HTTP operation")
+                _ = try await context.coordinator().fetch(prepare: { () throws -> String in throw failure }) { _ in
+                    XCTFail("A missing executable must prevent command execution")
                     return Self.snapshot(at: context.clock.now)
                 }
-                XCTFail("Expected credential failure")
+                XCTFail("Expected preparation failure")
             } catch {
                 XCTAssertEqual(error as? ClaudeClientError, failure)
             }
         }
 
-        let result = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             Self.snapshot(at: context.clock.now)
         }
 
@@ -253,7 +293,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         let context = try Context()
         defer { context.cleanUp() }
         do {
-            _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+            _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
                 let data = try Data(contentsOf: context.directory.appendingPathComponent("state.json"))
                 let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
                 XCTAssertNotNil(object["lastAttemptAt"])
@@ -277,7 +317,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
     func testNetworkFailureDoesNotImmediatelyRetry() async throws {
         let context = try Context()
         defer { context.cleanUp() }
-        _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             throw ClaudeClientError.networkUnavailable
         }
 
@@ -295,7 +335,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         let context = try Context()
         defer { context.cleanUp() }
         let original = Self.snapshot(at: context.clock.now, resetAfter: 100)
-        _ = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in original }
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in original }
         context.clock.advance(by: 101)
 
         let result = try await context.coordinator().fetch(
@@ -308,7 +348,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         }
     }
 
-    func testCorruptOrUnsupportedStatePreventsCredentialAndNetworkAccess() async throws {
+    func testCorruptOrUnsupportedStatePreventsCommandExecution() async throws {
         for payload in ["not json", "{}", #"{"version":2,"rateLimitCount":0}"#, #"{"version":1,"rateLimitCount":4}"#] {
             let context = try Context()
             defer { context.cleanUp() }
@@ -351,7 +391,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         kill(child.processIdentifier, SIGKILL)
         child.waitUntilExit()
 
-        let recovered = try await context.coordinator().fetch(prepare: { Self.credentials() }) { _ in
+        let recovered = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
             Self.snapshot(at: context.clock.now)
         }
 
@@ -361,7 +401,7 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
     private func assertStorageFailure(_ context: Context) async {
         do {
             _ = try await context.coordinator().fetch(prepare: { try Self.unexpectedPreparation() }) { _ in
-                XCTFail("Unreadable state must prevent HTTP access")
+                XCTFail("Unreadable state must prevent command execution")
                 return Self.snapshot(at: context.clock.now)
             }
             XCTFail("Expected storage failure")
@@ -423,12 +463,12 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         return until
     }
 
-    private static func credentials() -> ClaudeCredentials {
-        ClaudeCredentials(accessToken: "fixture-token", expiresAt: nil)
+    private static func command() -> String {
+        "/fixture/claude"
     }
 
-    private static func unexpectedPreparation() throws -> ClaudeCredentials {
-        XCTFail("Request should be gated before credentials are read")
+    private static func unexpectedPreparation() throws -> String {
+        XCTFail("Request should be gated before launching the command")
         throw FixtureError.unexpectedPreparation
     }
 
@@ -483,9 +523,9 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
 
         var counts: (prepare: Int, request: Int) { (preparationCount, requestCount) }
 
-        func prepare() -> ClaudeCredentials {
+        func prepare() -> String {
             preparationCount += 1
-            return ClaudeUsageCoordinatorTests.credentials()
+            return ClaudeUsageCoordinatorTests.command()
         }
 
         func fetch(_ snapshot: UsageSnapshot) -> UsageSnapshot {

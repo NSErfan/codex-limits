@@ -22,11 +22,11 @@ enum ClaudeAccountReader {
                 ? URL(fileURLWithPath: configured, isDirectory: true)
                 : workingDirectory.appendingPathComponent(configured, isDirectory: true)
         }
-        let credentialsDirectory = ClaudeCredentialReader.location(
+        let credentialsDirectory = ClaudeProfile.location(
             environment: environment,
             homeDirectory: homeDirectory,
             workingDirectory: workingDirectory
-        ).file.deletingLastPathComponent()
+        ).directory
         // Separate secure-storage roots do not establish which account owns this profile's metadata.
         guard directory.standardizedFileURL.resolvingSymlinksInPath()
             == credentialsDirectory.standardizedFileURL.resolvingSymlinksInPath() else { return nil }

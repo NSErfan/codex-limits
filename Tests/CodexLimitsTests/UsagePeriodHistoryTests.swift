@@ -435,7 +435,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
             let historyNow = now
             return UsageMonitor(provider: provider, defaults: defaults,
                                 historyDirectory: historyDirectory(provider: provider), historyNow: { historyNow },
-                                widgetStore: widgetStore ?? self.widgetStore(provider: provider), fetchResult: { _ in try await fetch() },
+                                widgetStore: widgetStore ?? self.widgetStore(provider: provider), fetchResult: { try await fetch() },
                                 recoveryDelaysNanoseconds: [], startsAutomatically: false)
         }
 

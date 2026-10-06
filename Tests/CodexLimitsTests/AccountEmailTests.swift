@@ -181,110 +181,31 @@ final class AccountEmailTests: XCTestCase {
         }
     }
 
-    func testClaudeAttachesAccountThatStaysStableThroughCredentialReadAndResponse() async throws {
-        let snapshot = try await fetchClaudeSnapshot(
-            beforeCredentials: Self.firstAccount,
-            afterCredentials: Self.firstAccount,
-            afterResponse: Self.firstAccount
-        )
+    func testClaudeAttachesAccountThatStaysStableDuringCommand() async throws {
+        let snapshot = try await fetchClaudeSnapshot(before: Self.firstAccount, after: Self.firstAccount)
         XCTAssertEqual(snapshot.accountEmail, Self.firstAccount.email)
     }
 
-    func testClaudeAccountSwitchDuringCredentialReadOmitsEmail() async throws {
-        let snapshot = try await fetchClaudeSnapshot(
-            beforeCredentials: Self.firstAccount,
-            afterCredentials: Self.secondAccount,
-            afterResponse: Self.secondAccount
-        )
+    func testClaudeAccountSwitchDuringCommandOmitsEmail() async throws {
+        let snapshot = try await fetchClaudeSnapshot(before: Self.firstAccount, after: Self.secondAccount)
         XCTAssertNil(snapshot.accountEmail)
     }
 
-    func testClaudeAccountSwitchDuringRequestOmitsEmail() async throws {
-        let snapshot = try await fetchClaudeSnapshot(
-            beforeCredentials: Self.firstAccount,
-            afterCredentials: Self.firstAccount,
-            afterResponse: Self.secondAccount
-        )
-        XCTAssertNil(snapshot.accountEmail)
-    }
-
-    func testClaudeMissingCaptureCannotAcquireEmailLater() async throws {
-        let cases: [(ClaudeAccountReader.Account?, ClaudeAccountReader.Account?)] = [
-            (nil, Self.firstAccount), (Self.firstAccount, nil)
-        ]
+    func testClaudeMissingAccountCannotAcquireEmailLater() async throws {
+        let cases: [(ClaudeAccountReader.Account?, ClaudeAccountReader.Account?)] = [(nil, Self.firstAccount), (Self.firstAccount, nil)]
         for accounts in cases {
-            let snapshot = try await fetchClaudeSnapshot(
-                beforeCredentials: accounts.0,
-                afterCredentials: accounts.1,
-                afterResponse: Self.firstAccount
-            )
+            let snapshot = try await fetchClaudeSnapshot(before: accounts.0, after: accounts.1)
             XCTAssertNil(snapshot.accountEmail)
         }
     }
 
     private func fetchClaudeSnapshot(
-        beforeCredentials: ClaudeAccountReader.Account?,
-        afterCredentials: ClaudeAccountReader.Account?,
-        afterResponse: ClaudeAccountReader.Account?
+        before: ClaudeAccountReader.Account?, after: ClaudeAccountReader.Account?
     ) async throws -> UsageSnapshot {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("AccountEmailTests.\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let fixture = AccountFixture(account: beforeCredentials)
-        let result = try await ClaudeUsageCoordinator(directory: directory).fetch(
-            allowCredentialPrompt: false,
-            readAccount: { fixture.readAccount() },
-            readCredentials: { _ in fixture.readCredentials(accountAfterRead: afterCredentials) },
-            request: { credentials, account in
-                try await ClaudeClient.fetch(credentials: credentials, account: account, readAccount: {
-                    fixture.readAccount()
-                }) { _ in
-                    fixture.setAccount(afterResponse)
-                    return (
-                        Data(#"{"five_hour":{"utilization":20,"resets_at":"2030-01-01T00:00:00Z"}}"#.utf8),
-                        HTTPURLResponse(url: URL(string: "https://example.test/usage")!, statusCode: 200,
-                                        httpVersion: nil, headerFields: nil)!
-                    )
-                }
-            }
-        )
-        XCTAssertEqual(fixture.credentialsReadCount, 1)
-        guard case let .fetched(snapshot, _) = result else {
-            return try XCTUnwrap(nil, "Expected a fresh usage snapshot")
-        }
-        return snapshot
-    }
-
-    private final class AccountFixture: @unchecked Sendable {
-        private let lock = NSLock()
-        private var account: ClaudeAccountReader.Account?
-        private var storedCredentialsReadCount = 0
-
-        init(account: ClaudeAccountReader.Account?) { self.account = account }
-
-        var credentialsReadCount: Int {
-            lock.lock()
-            defer { lock.unlock() }
-            return storedCredentialsReadCount
-        }
-
-        func readAccount() -> ClaudeAccountReader.Account? {
-            lock.lock()
-            defer { lock.unlock() }
-            return account
-        }
-
-        func readCredentials(accountAfterRead: ClaudeAccountReader.Account?) -> ClaudeCredentials {
-            lock.lock()
-            defer { lock.unlock() }
-            storedCredentialsReadCount += 1
-            account = accountAfterRead
-            return ClaudeCredentials(accessToken: "fixture-access-token", expiresAt: nil)
-        }
-
-        func setAccount(_ account: ClaudeAccountReader.Account?) {
-            lock.lock()
-            defer { lock.unlock() }
-            self.account = account
+        var account = before
+        return try await ClaudeClient.fetch(readAccount: { account }) {
+            account = after
+            return try ClaudeUsageFixture.output()
         }
     }
 
