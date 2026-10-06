@@ -76,7 +76,7 @@ struct WeeklyAllowanceRow: View {
     private var paceText: String {
         if let pace = snapshot?.suggestedDailyPercent(at: date) {
             let roundedDown = floor(pace * 10) / 10
-            return "Aim ≤ \(roundedDown.formatted(.number.precision(.fractionLength(1))))%/day until reset"
+            return "\(roundedDown.formatted(.number.precision(.fractionLength(1))))%/day"
         }
         switch status {
         case .current: return "Refresh app for suggested pace"
@@ -89,6 +89,8 @@ struct WeeklyAllowanceRow: View {
         guard let remaining else { return paceText }
         let reset = snapshot?.window?.resetsAt.formatted(date: .abbreviated, time: .shortened) ?? "unknown"
         let statusText = snapshot?.pace(at: date).map { " \($0.title)." } ?? ""
-        return "\(Int(remaining.rounded())) percent remaining. \(paceText).\(statusText) Scheduled reset: \(reset)."
+        let paceDescription = snapshot?.suggestedDailyPercent(at: date) == nil
+            ? paceText : "Suggested daily pace: \(paceText) until reset"
+        return "\(Int(remaining.rounded())) percent remaining. \(paceDescription).\(statusText) Scheduled reset: \(reset)."
     }
 }
