@@ -41,7 +41,7 @@ struct MenuContentView: View {
     var body: some View {
         VStack(spacing: 16) {
             ProviderPicker(selection: $selectedProvider)
-                .frame(maxWidth: 250)
+                .frame(maxWidth: 320)
             if let snapshot = monitor.snapshot {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     dashboard(snapshot: snapshot, now: context.date)
@@ -90,8 +90,8 @@ struct MenuContentView: View {
             if snapshot.limit(for: .fiveHour, provider: monitor.provider) != nil {
                 UsagePeriodPicker(snapshot: snapshot, provider: monitor.provider, selection: period, now: now,
                                   onSelect: { savedPeriod = $0.rawValue })
-            } else if let weekly = snapshot.limit(for: .weekly, provider: monitor.provider)?.window {
-                weeklyBalance(window: weekly, now: now)
+            } else if let period, let window = snapshot.limit(for: period, provider: monitor.provider)?.window {
+                balance(period: period, window: window, now: now)
             }
 
             if let period, let limit = snapshot.limit(for: period, provider: monitor.provider) {
@@ -136,7 +136,7 @@ struct MenuContentView: View {
         }
     }
 
-    private func weeklyBalance(window: UsageWindow, now: Date) -> some View {
+    private func balance(period: UsagePeriod, window: UsageWindow, now: Date) -> some View {
         let hasExpired = window.resetsAt <= now
         let accent = UsageChartStyle.accent(for: window.remainingPercent, scheme: colorScheme, selection: usageAccent)
         return HStack(alignment: .firstTextBaseline, spacing: 3) {
@@ -147,15 +147,15 @@ struct MenuContentView: View {
             Text("%")
                 .font(.system(size: 25, design: .rounded))
                 .foregroundStyle(accent)
-            Text(hasExpired ? "last weekly reading" : "weekly allowance left")
+            Text(hasExpired ? "last \(period.title.lowercased()) reading" : "\(period.title.lowercased()) allowance left")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .padding(.leading, 5)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(hasExpired
-            ? "Weekly limit, last reading \(Int(window.remainingPercent.rounded())) percent, awaiting next reading"
-            : "Weekly limit, \(Int(window.remainingPercent.rounded())) percent remaining")
+            ? "\(period.title) limit, last reading \(Int(window.remainingPercent.rounded())) percent, awaiting next reading"
+            : "\(period.title) limit, \(Int(window.remainingPercent.rounded())) percent remaining")
     }
 
     private var refreshButton: some View {
@@ -274,7 +274,7 @@ struct MenuContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Link("Install \(monitor.provider.displayName) CLI", destination: ProviderLogin.installationURL(for: monitor.provider))
+            Link("Install \(monitor.provider.cliDisplayName)", destination: ProviderLogin.installationURL(for: monitor.provider))
                 .font(.caption)
         }
     }

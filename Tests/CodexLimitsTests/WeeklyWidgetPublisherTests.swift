@@ -96,6 +96,21 @@ final class WeeklyWidgetPublisherTests: XCTestCase {
         }
     }
 
+    func testProviderWithoutAWeeklyAllowanceDoesNotPublishWidgetData() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = WeeklyWidgetStore(directory: folder, provider: .copilot)
+        let monthly = UsageWindow(remainingPercent: 70, resetsAt: now.addingTimeInterval(10 * 86_400),
+                                  durationMinutes: 31 * 1_440)
+        let usage = UsageSnapshot(mainLimit: .init(limitId: "copilot", name: "Premium requests", window: monthly),
+                                  otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now)
+
+        WeeklyWidgetPublisher.publish(usage, writer: .app, store: store, provider: .copilot)
+
+        XCTAssertNil(store.read())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
     @MainActor
     func testMonitorPublishesWeeklyReadingAfterSuccessfulRefreshAndPreservesItOnFailure() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

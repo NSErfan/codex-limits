@@ -27,7 +27,7 @@ xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -o "$probe_bundle/Contents/MacOS/MenuBarLabelProbe"
 ditto "$bin_dir/CodexLimits_CodexWidgetKit.bundle" "$probe_bundle/Contents/Resources/CodexLimits_CodexWidgetKit.bundle"
 codesign --force --sign - "$probe_bundle"
-for provider in codex claude; do
+for provider in codex claude copilot; do
     for mode in iconOnly textOnly iconAndText; do
         scenario="$output/$provider-$mode"
         mkdir -p "$scenario"
@@ -35,7 +35,11 @@ for provider in codex claude; do
         open -n -W "$probe_bundle" --args "$provider" "$mode" "$scenario"
         title="46%"
         if [[ "$mode" != iconOnly ]]; then
-            if [[ "$provider" == codex ]]; then title="Codex 46%"; else title="Claude Code 46%"; fi
+            case "$provider" in
+                codex) title="Codex 46%" ;;
+                claude) title="Claude Code 46%" ;;
+                copilot) title="Copilot 46%" ;;
+            esac
         fi
         if [[ "$mode" == textOnly ]]; then image="nil"; else image="Optional((25.0, 18.0))"; fi
         rg --fixed-strings "button title: $title; image: $image;" "$scenario/result.txt"

@@ -19,7 +19,7 @@ actor UsagePeriodHistory {
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.provider = provider
-        histories = Dictionary(uniqueKeysWithValues: UsagePeriod.allCases.map { period in
+        histories = Dictionary(uniqueKeysWithValues: provider.periods.map { period in
             (period, UsageHistory(
                 localDirectory: localDirectory.appendingPathComponent(Self.subdirectory(for: period)),
                 installationID: installationID,
@@ -34,9 +34,9 @@ actor UsagePeriodHistory {
         snapshot: UsageSnapshot? = nil
     ) async -> State {
         var states: [UsagePeriod: UsageHistory.State] = [:]
-        for period in UsagePeriod.allCases {
+        for period in provider.periods {
             let existing = legacySamples + (savedSamples[period] ?? [])
-            let matching = existing.filter { $0.durationMinutes == period.durationMinutes }
+            let matching = existing.filter { period.includes(durationMinutes: $0.durationMinutes) }
             let observation = snapshot?.sample(for: period, provider: provider)
             states[period] = await histories[period]?.load(
                 legacySamples: matching + (observation.map { [$0] } ?? [])
@@ -47,7 +47,7 @@ actor UsagePeriodHistory {
 
     func record(_ snapshot: UsageSnapshot) async -> State {
         var states: [UsagePeriod: UsageHistory.State] = [:]
-        for period in UsagePeriod.allCases {
+        for period in provider.periods {
             guard let sample = snapshot.sample(for: period, provider: provider) else { continue }
             states[period] = await histories[period]?.record(sample)
         }
@@ -64,7 +64,7 @@ actor UsagePeriodHistory {
         syncDirectory = nil
         connectedPeriods = []
         var states: [UsagePeriod: UsageHistory.State] = [:]
-        for period in UsagePeriod.allCases {
+        for period in provider.periods {
             states[period] = await histories[period]?.disconnect()
         }
         return combined(states)
@@ -72,7 +72,7 @@ actor UsagePeriodHistory {
 
     func synchronize() async -> State {
         var states: [UsagePeriod: UsageHistory.State] = [:]
-        for period in UsagePeriod.allCases {
+        for period in provider.periods {
             if let syncDirectory, !connectedPeriods.contains(period) {
                 let path = [provider.historySubdirectory, Self.subdirectory(for: period)]
                     .compactMap { $0 }.joined(separator: "/")
@@ -89,7 +89,7 @@ actor UsagePeriodHistory {
     private func combined(_ states: [UsagePeriod: UsageHistory.State]) -> State {
         State(
             samples: states.mapValues(\.samples),
-            errorMessage: UsagePeriod.allCases.compactMap { states[$0]?.errorMessage }.first
+            errorMessage: provider.periods.compactMap { states[$0]?.errorMessage }.first
         )
     }
 

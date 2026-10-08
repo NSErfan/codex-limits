@@ -51,7 +51,7 @@ enum BackgroundCollector {
         fetch: @Sendable () async throws -> UsageFetchResult
     ) async throws -> UsageFetchResult {
         let result = try await fetch()
-        guard provider == .claude, let next = result.nextRefreshAt else { return result }
+        guard provider.refreshSchedule == .fetchDeadline, let next = result.nextRefreshAt else { return result }
         let delay = next.timeIntervalSince(now())
         // launchd's fixed cadence can arrive just before the prior check's deadline.
         // Wait outside the lock, then recheck once so the collector doesn't skip a whole period.

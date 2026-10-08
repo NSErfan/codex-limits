@@ -17,7 +17,7 @@ final class UsageRefreshTests: XCTestCase {
 
         XCTAssertFalse(didFetch)
         XCTAssertEqual(monitor.snapshot?.fetchedAt, saved.fetchedAt)
-        XCTAssertEqual(monitor.snapshot?.accountEmail, "saved-account@example.test")
+        XCTAssertEqual(monitor.snapshot?.accountName, "saved-account@example.test")
         XCTAssertEqual(monitor.samples.map(\.observedAt), [saved.fetchedAt])
         XCTAssertEqual(monitor.weeklyWidgetSnapshot?.fetchedAt, saved.fetchedAt)
         XCTAssertNotNil(monitor.refreshMessage)
@@ -56,7 +56,7 @@ final class UsageRefreshTests: XCTestCase {
 
         XCTAssertFalse(didFetch)
         XCTAssertTrue(monitor.requiresLogin)
-        XCTAssertEqual(monitor.snapshot?.accountEmail, saved.accountEmail)
+        XCTAssertEqual(monitor.snapshot?.accountName, saved.accountName)
         XCTAssertNotNil(monitor.errorMessage)
     }
 
@@ -109,7 +109,7 @@ final class UsageRefreshTests: XCTestCase {
             return UsageSnapshot(mainLimit: LimitReading(limitId: "claude", name: "Claude Code", window: UsageWindow(
                 remainingPercent: 73, resetsAt: date.addingTimeInterval(86_400), durationMinutes: 10_080)),
                 otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: date,
-                accountEmail: "saved-account@example.test")
+                accountName: "saved-account@example.test")
         }
 
         @MainActor func monitor(_ fetch: @escaping @Sendable () async -> UsageFetchResult) -> UsageMonitor {

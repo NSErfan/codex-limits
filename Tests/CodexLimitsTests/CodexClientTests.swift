@@ -279,7 +279,7 @@ final class CodexClientTests: XCTestCase {
 
         XCTAssertEqual(result.mainLimit.window.remainingPercent, 80)
         XCTAssertEqual(server.connectionCount, 1)
-        XCTAssertEqual(result.accountEmail, "fixture@example.test")
+        XCTAssertEqual(result.accountName, "fixture@example.test")
         XCTAssertEqual(server.startCount, 1)
         XCTAssertEqual(server.stopCount, 1)
         XCTAssertEqual(

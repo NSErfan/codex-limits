@@ -19,7 +19,8 @@ struct SettingsView: View {
             Section("Accounts") {
                 ProviderAccountSettings(monitor: providers.codex, login: login)
                 ProviderAccountSettings(monitor: providers.claude, login: login)
-                Text("Uses your existing CLI sign-ins. Sign in opens the official CLI in Terminal.")
+                ProviderAccountSettings(monitor: providers.copilot, login: login)
+                Text("Uses your existing CLI sign-ins. Copilot uses the GitHub CLI (gh). Sign in opens the official CLI in Terminal.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

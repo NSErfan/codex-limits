@@ -16,7 +16,7 @@ enum ProviderExecutable {
         ] + (environment["PATH"] ?? "").split(separator: ":").map(String.init)
         return directories
             .filter { $0.hasPrefix("/") }
-            .map { URL(fileURLWithPath: $0).appendingPathComponent(provider.rawValue).path }
+            .map { URL(fileURLWithPath: $0).appendingPathComponent(provider.executableName).path }
             .first(where: isExecutable)
     }
 }

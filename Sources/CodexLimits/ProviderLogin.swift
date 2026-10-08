@@ -7,6 +7,7 @@ enum ProviderLogin {
         switch provider {
         case .codex: URL(string: "https://developers.openai.com/codex/cli")!
         case .claude: URL(string: "https://code.claude.com/docs/en/setup")!
+        case .copilot: URL(string: "https://cli.github.com")!
         }
     }
 
@@ -33,15 +34,39 @@ enum ProviderLogin {
         for provider: UsageProvider, executable: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> String {
-        let arguments = provider == .claude ? ["auth", "login", "--claudeai"] : ["login"]
-        let profileKeys = provider == .claude
-            ? ["CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR"] : ["CODEX_HOME"]
-        let unsetProfile = profileKeys.filter { environment[$0] == nil }.flatMap { ["-u", $0] }
+        let profileKeys = profileKeys(for: provider)
+        let unsetKeys = profileKeys.filter { environment[$0] == nil } + credentialKeys(for: provider)
         let profile = profileKeys.compactMap { key in
             environment[key].map { "\(key)=\($0)" }
         }
-        return (["/usr/bin/env"] + unsetProfile + profile + [executable] + arguments)
+        return (["/usr/bin/env"] + unsetKeys.flatMap { ["-u", $0] } + profile + [executable]
+            + loginArguments(for: provider, environment: environment))
             .map(shellQuote).joined(separator: " ")
+    }
+
+    private static func loginArguments(for provider: UsageProvider, environment: [String: String]) -> [String] {
+        switch provider {
+        case .codex: ["login"]
+        case .claude: ["auth", "login", "--claudeai"]
+        case .copilot: ["auth", "login", "--web", "--hostname", environment["GH_HOST"] ?? "github.com"]
+        }
+    }
+
+    /// Variables that choose where the CLI keeps its sign-in. Terminal gets the app's values, so both use one profile.
+    private static func profileKeys(for provider: UsageProvider) -> [String] {
+        switch provider {
+        case .codex: ["CODEX_HOME"]
+        case .claude: ["CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR"]
+        case .copilot: ["GH_CONFIG_DIR", "XDG_CONFIG_HOME", "GH_HOST"]
+        }
+    }
+
+    /// Token variables that would make the CLI skip saving the new sign-in, which the app reads.
+    private static func credentialKeys(for provider: UsageProvider) -> [String] {
+        switch provider {
+        case .codex, .claude: []
+        case .copilot: ["GH_TOKEN", "GITHUB_TOKEN"]
+        }
     }
 
     private static func writeCommand(for provider: UsageProvider, executable: String) throws -> URL {
@@ -81,7 +106,7 @@ enum ProviderLogin {
 
         var errorDescription: String? {
             switch self {
-            case let .cliNotFound(provider): "Install \(provider.displayName) CLI first, then try signing in again."
+            case let .cliNotFound(provider): "Install the \(provider.cliDisplayName) first, then try signing in again."
             case .terminalUnavailable: "Terminal could not be found. Sign in from your preferred terminal, then refresh usage."
             case .couldNotOpenTerminal: "Couldn’t open Terminal. Try again or sign in from your preferred terminal."
             }

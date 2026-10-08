@@ -136,14 +136,31 @@ struct BurnDownChart: View {
         )
     }
 
+    private enum AxisScale {
+        case hours, days, weeks
+
+        init(window: UsageWindow) {
+            self = window.durationMinutes <= 24 * 60 ? .hours : window.durationMinutes <= 8 * 24 * 60 ? .days : .weeks
+        }
+    }
+
+    private var axisScale: AxisScale { AxisScale(window: window) }
+
     private var xAxisDates: [Date] {
         let calendar = Calendar.current
-        let component: Calendar.Component = window.durationMinutes <= 24 * 60 ? .hour : .day
+        let (component, step): (Calendar.Component, Int) = switch axisScale {
+        case .hours: (.hour, 1)
+        case .days: (.day, 1)
+        case .weeks: (.day, 7)
+        }
         var dates: [Date] = []
         guard var date = calendar.dateInterval(of: component, for: window.startsAt)?.start else { return [] }
+        if date < window.startsAt, let first = calendar.date(byAdding: component, value: 1, to: date) {
+            date = first
+        }
         while date <= window.resetsAt {
-            if date >= window.startsAt { dates.append(date) }
-            guard let next = calendar.date(byAdding: component, value: 1, to: date) else { break }
+            dates.append(date)
+            guard let next = calendar.date(byAdding: component, value: step, to: date) else { break }
             date = next
         }
         return dates
@@ -455,10 +472,10 @@ struct BurnDownChart: View {
                         .foregroundStyle(Color.primary.opacity(0.10))
                     AxisValueLabel(anchor: value.index == 0 ? .topLeading : value.index == value.count - 1 ? .topTrailing : .top) {
                         if let date = value.as(Date.self) {
-                            if window.durationMinutes <= 24 * 60 {
-                                Text(date, format: .dateTime.hour())
-                            } else {
-                                Text(date, format: .dateTime.weekday(.abbreviated))
+                            switch axisScale {
+                            case .hours: Text(date, format: .dateTime.hour())
+                            case .days: Text(date, format: .dateTime.weekday(.abbreviated))
+                            case .weeks: Text(date, format: .dateTime.month(.abbreviated).day())
                             }
                         }
                     }

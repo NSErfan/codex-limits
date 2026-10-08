@@ -21,6 +21,7 @@ public struct WeeklyWidgetStore: Sendable {
         switch provider {
         case .codex: percentageKind
         case .claude: "ClaudeWeeklyPercentage"
+        case .copilot: "CopilotWeeklyPercentage"
         }
     }
 
@@ -28,6 +29,7 @@ public struct WeeklyWidgetStore: Sendable {
         switch provider {
         case .codex: graphKind
         case .claude: "ClaudeWeeklyGraph"
+        case .copilot: "CopilotWeeklyGraph"
         }
     }
 

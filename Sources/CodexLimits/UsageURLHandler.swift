@@ -15,8 +15,10 @@ final class UsageURLHandler: NSObject, NSApplicationDelegate {
         guard let provider = urls.compactMap(Self.provider(from:)).last,
               let providers, let login else { return }
         providers.selectedProvider = provider
-        UserDefaults.standard.set(UsagePeriod.weekly.rawValue,
-                                  forKey: UsageDashboardPreferences.selectionKey(for: provider))
+        if let longestPeriod = provider.periods.last {
+            UserDefaults.standard.set(longestPeriod.rawValue,
+                                      forKey: UsageDashboardPreferences.selectionKey(for: provider))
+        }
         showUsageWindow()
         application.activate(ignoringOtherApps: true)
         Task { await login.refresh(provider) }

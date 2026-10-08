@@ -71,7 +71,9 @@ enum MenuPreviewRenderer {
             widgetStore: WeeklyWidgetStore(directory: temporary.appendingPathComponent("claude-widget"), provider: .claude),
             fetchUsage: { claudeSnapshot }, startsAutomatically: false
         )
-        let providers = UsageProviders(defaults: defaults, codex: monitor, claude: claudeMonitor)
+        let copilotMonitor = try copilotPreviewMonitor(at: now, defaults: defaults,
+                                                       directory: temporary.appendingPathComponent("copilot"))
+        let providers = UsageProviders(defaults: defaults, codex: monitor, claude: claudeMonitor, copilot: copilotMonitor)
         let login = ProviderLoginSession(providers: providers)
         let claudeMenus = HStack(alignment: .top, spacing: 24) {
             menu(monitor: claudeMonitor, defaults: defaults, scheme: .dark)
@@ -80,6 +82,14 @@ enum MenuPreviewRenderer {
         .padding(24)
         .background(Color.gray.opacity(0.15))
         try render(claudeMenus, to: output.appendingPathComponent("menu-claude.png"))
+        let copilotMenus = HStack(alignment: .top, spacing: 24) {
+            menu(monitor: copilotMonitor, defaults: defaults, scheme: .dark)
+            menu(monitor: copilotMonitor, defaults: defaults, scheme: .light)
+        }
+        .padding(24)
+        .background(Color.gray.opacity(0.15))
+        try render(copilotMenus, to: output.appendingPathComponent("menu-copilot.png"))
+        try renderMenuBarLabels(monitor: copilotMonitor, to: output)
         let signedOutSuite = suite + ".signed-out"
         let signedOutDefaults = UserDefaults(suiteName: signedOutSuite)!
         defer { signedOutDefaults.removePersistentDomain(forName: signedOutSuite) }
@@ -297,6 +307,35 @@ enum MenuPreviewRenderer {
         }
     }
 
+    /// A Copilot month part-way through: weekday sessions with quiet weekends.
+    @MainActor private static func copilotPreviewMonitor(at now: Date, defaults: UserDefaults, directory: URL) throws -> UsageMonitor {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let startsAt = calendar.dateInterval(of: .month, for: now)!.start
+        let resetsAt = calendar.date(byAdding: .month, value: 1, to: startsAt)!
+        let durationMinutes = Int(resetsAt.timeIntervalSince(startsAt) / 60)
+        let dailyUse = (0 ..< 31).map { [3.4, 4.6, 2.1, 5.2, 3.0, 0.4, 0.2][$0 % 7] }
+        let elapsedDays = now.timeIntervalSince(startsAt) / 86_400
+        let samples = stride(from: 0.0, through: elapsedDays, by: 1.0 / 8).map { days in
+            UsageSample(observedAt: startsAt.addingTimeInterval(days * 86_400),
+                        remainingPercent: max(0, 100 - cumulativeUse(at: days, dailyUse: dailyUse)),
+                        resetsAt: resetsAt, durationMinutes: durationMinutes)
+        }
+        let window = UsageWindow(remainingPercent: max(0, 100 - cumulativeUse(at: elapsedDays, dailyUse: dailyUse)),
+                                 resetsAt: resetsAt, durationMinutes: durationMinutes)
+        let snapshot = UsageSnapshot(
+            mainLimit: .init(limitId: "copilot", name: "Premium requests", window: window),
+            otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now, accountName: "octocat"
+        )
+        defaults.set(try JSONEncoder().encode(State(snapshot: snapshot, samples: samples, previousStatus: nil)),
+                     forKey: UsageProvider.copilot.preferenceKey("usageState"))
+        return UsageMonitor(
+            provider: .copilot, defaults: defaults, historyDirectory: directory,
+            widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"), provider: .copilot),
+            fetchUsage: { snapshot }, startsAutomatically: false
+        )
+    }
+
     private static func cumulativeUse(at days: Double, dailyUse: [Double]) -> Double {
         let completed = min(max(Int(days), 0), dailyUse.count)
         let consumed = dailyUse.prefix(completed).reduce(0, +)
@@ -319,7 +358,7 @@ enum MenuPreviewRenderer {
     }
 
     @MainActor private static func renderPeriods(at now: Date, to output: URL) async throws {
-        for provider in UsageProvider.allCases {
+        for provider in UsageProvider.allCases where provider.periods == [.fiveHour, .weekly] {
             for scenario in ["both", "missing-five-hour", "missing-weekly", "expired-five-hour", "weekly-only-expired"] {
                 let expiredWeekly = scenario == "weekly-only-expired"
                 let missingFiveHour = scenario == "missing-five-hour" || expiredWeekly
@@ -369,7 +408,7 @@ enum MenuPreviewRenderer {
                 if scenario == "both" {
                     try renderMenuBarLabels(monitor: monitor, to: output)
                 }
-                for period in UsagePeriod.allCases where !missingFiveHour || period == .weekly {
+                for period in provider.periods where !missingFiveHour || period == .weekly {
                     defaults.set(period.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: provider))
                     let comparison = HStack(alignment: .top, spacing: 24) {
                         menu(monitor: monitor, defaults: defaults, scheme: .dark)

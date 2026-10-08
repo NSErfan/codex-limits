@@ -3,7 +3,7 @@ import CodexWidgetKit
 extension UsageSnapshot {
     func limit(for period: UsagePeriod, provider: UsageProvider) -> LimitReading? {
         ([mainLimit] + otherLimits).first {
-            $0.limitId == provider.rawValue && $0.window.durationMinutes == period.durationMinutes
+            $0.limitId == provider.rawValue && period.includes(durationMinutes: $0.window.durationMinutes)
         }
     }
 

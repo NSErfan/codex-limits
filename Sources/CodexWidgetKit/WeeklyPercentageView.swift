@@ -62,10 +62,11 @@ public struct WeeklyPercentageView: View {
         case .stale: "Weekly · Last reading"
         case .expired: "Reset time passed · Open app"
         case .unavailable:
-            if provider == .claude {
-                snapshot == nil ? "Connect Claude Code in app" : "Weekly usage unavailable"
-            } else {
+            switch provider {
+            case .codex:
                 "Open Codex Limits to start"
+            case .claude, .copilot:
+                snapshot == nil ? "Connect \(provider.displayName) in app" : "Weekly usage unavailable"
             }
         }
     }

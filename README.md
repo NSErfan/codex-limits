@@ -1,11 +1,11 @@
 <h1 align="center">Codex Limits</h1>
 
 <p align="center">
-  <strong>Know whether your Codex and Claude Code limits will last until reset.</strong>
+  <strong>Know whether your Codex, Claude Code, and Copilot limits will last until reset.</strong>
 </p>
 
 <p align="center">
-  A native macOS menu-bar app and desktop widgets for tracking your Codex and Claude Code limits, usage history, and sustainable pace.
+  A native macOS menu-bar app and desktop widgets for tracking your Codex, Claude Code, and GitHub Copilot limits, usage history, and sustainable pace.
 </p>
 
 <p align="center">
@@ -22,21 +22,21 @@
 </p>
 
 > [!NOTE]
-> Codex Limits is an independent, unofficial project. It is not affiliated with or endorsed by OpenAI or Anthropic.
+> Codex Limits is an independent, unofficial project. It is not affiliated with or endorsed by OpenAI, Anthropic, or GitHub.
 
 > [!NOTE]
 > This is an independently developed fork of [thrr87/codex-limits](https://github.com/thrr87/codex-limits), released under the same MIT license. It follows its own direction and does not track the original.
 
-## Codex and Claude Code
+## Codex, Claude Code, and Copilot
 
-Use the selector at the top of the menu to switch between **Codex** and **Claude Code**.
+Use the selector at the top of the menu to switch between **Codex**, **Claude Code**, and **Copilot**.
 The menu bar shows the selected provider’s monochrome product icon and usage percentage by default.
 Choose **Icon only**, **Text only**, or **Icon and text** in **Settings → Appearance → Menu bar**.
-The percentage is always visible; this setting controls the provider icon and name. It applies to both
-providers and is saved across launches. [Icon sources and attribution](docs/provider-icons.md).
-Both providers refresh independently,
-with separate saved readings, history, chart preferences, and weekly widgets. Your existing
-Codex history stays in place.
+The percentage is always visible; this setting controls the provider icon and name. It applies to every
+provider and is saved across launches. [Icon sources and attribution](docs/provider-icons.md).
+Each provider refreshes independently,
+with separate saved readings, history, and chart preferences; Codex and Claude Code also have weekly
+widgets. Your existing Codex history stays in place.
 
 <details>
 <summary>Menu-bar appearance options</summary>
@@ -44,6 +44,8 @@ Codex history stays in place.
   <a href="docs/images/menu-bar-codex.png"><img src="docs/images/menu-bar-codex.png" width="446" alt="Codex menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance"></a>
   <br>
   <a href="docs/images/menu-bar-claude.png"><img src="docs/images/menu-bar-claude.png" width="524" alt="Claude Code menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance"></a>
+  <br>
+  <a href="docs/images/menu-bar-copilot.png"><img src="docs/images/menu-bar-copilot.png" width="455" alt="Copilot menu-bar label previews: icon only, text only, and icon and text, each retaining the usage percentage in dark and light appearance"></a>
   <br>
   <sub>SwiftUI label previews with synthetic percentages. Choose a style in Settings → Appearance → Menu bar.</sub>
 </p>
@@ -54,9 +56,9 @@ The **5-hour** and **Weekly** segments show both remaining balances together. Se
 either segment to switch the detailed chart, forecast, and usage budget to that window;
 hover for its reset time. The app remembers your selection and chart settings separately
 for each provider and period. Switching windows uses saved readings without making
-another usage request. If either provider omits its five-hour window, the entire
+another usage request. If Codex or Claude Code omits its five-hour window, the entire
 usage-window selector is hidden and a large weekly percentage appears above the weekly
-chart. Expired weekly readings are labeled **last weekly reading**. An unavailable
+chart. Copilot has a single monthly allowance, so it always shows a large monthly percentage. Expired weekly readings are labeled **last weekly reading**. An unavailable
 weekly window says **Not reported** when the selector is shown.
 After a window resets, its saved balance is labeled **(last)** and pacing waits for a
 new reading; its recorded history remains available.
@@ -79,11 +81,12 @@ Codex Limits never copies or rewrites the CLI’s tokens. Claude usage requires 
 claude.ai subscription login with usage access; API-key-only and inference-only tokens
 are not supported.
 
-**Settings → Accounts** shows the email associated with each provider's last usage
-reading and when that reading was fetched. Cached readings retain their original
-account email. Older readings or logins without account metadata show **Email unavailable**
-until a new reading includes it. Email addresses stay in local app state; they are not
-included in shared history or widget data.
+**Settings → Accounts** shows the account associated with each provider's last usage
+reading (the email for Codex and Claude Code, the GitHub username for Copilot) and when
+that reading was fetched. Cached readings retain their original account. Older readings
+or logins without account metadata show **Account name unavailable** until a new reading
+includes it. Account names stay in local app state; they are not included in shared
+history or widget data.
 
 Claude requests are spaced at least **15 minutes apart**, shared by the menu app and
 background collector for the same CLI profile on this Mac. Opening the menu, waking
@@ -125,6 +128,36 @@ This implementation does not import CodexBar or read browser cookies.
   <a href="docs/images/claude-widgets.png"><img src="docs/images/claude-widgets.png" width="720" alt="Claude weekly percentage and graph widgets in light and dark appearance, using synthetic example data"></a>
 </p>
 </details>
+
+### Copilot
+
+Copilot usage comes from the [GitHub CLI](https://cli.github.com) (`gh`), not the separate
+Copilot CLI. The app runs `gh api --include copilot_internal/user`, the account endpoint
+Copilot editors use, so `gh` keeps owning sign-in and token storage. Codex Limits never reads
+GitHub tokens or browser cookies. It respects `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, and `GH_HOST`
+when present in its environment, and ignores `GH_TOKEN` and `GITHUB_TOKEN` so the CLI's saved
+sign-in decides the account. **Sign in** opens Terminal with `gh auth login --web`.
+
+Copilot allowances reset monthly, at midnight UTC on the date GitHub reports. The menu tracks
+**Premium requests**, the monthly allowance shown in your GitHub Copilot settings. Plans without
+a premium-request allowance, such as Copilot Free, track the tightest of their chat and code
+completion quotas, and any other limited quota appears under **Other limits**. Unlimited quotas
+are not shown; if an account has no limited allowance, the app says so instead of showing a
+balance. Usage beyond the allowance shows as 0% left.
+
+Copilot refreshes every ten minutes, on wake, when you open the menu, and on request. Its
+readings and monthly chart history are kept separate from Codex and Claude Code, and history
+sync uses a `Copilot` subfolder. Copilot has no desktop widgets yet.
+
+The endpoint is internal and undocumented, so GitHub may change it. The integration was
+informed by [CodexBar's Copilot provider documentation](https://github.com/steipete/CodexBar/blob/main/docs/copilot.md);
+it reuses the GitHub CLI's sign-in instead of a separate device-flow login and does not import CodexBar.
+
+<p align="center">
+  <a href="docs/images/copilot-menu.png"><img src="docs/images/copilot-menu.png" width="992" alt="Copilot monthly premium-request balance with its forecast, weekly date marks across the month, and usage budget in dark and light appearance"></a>
+  <br>
+  <sub>Copilot's monthly allowance with its own history, forecast, and daily usage budget. All readings are synthetic example data.</sub>
+</p>
 
 ## What it tells you
 
@@ -203,23 +236,23 @@ when their saved window can be identified unambiguously.
 
 ## Features
 
-- Switches between Codex and Claude Code, with each provider’s account and model-specific limits.
-- Shows five-hour and weekly balances together, with separately selectable charts and pacing targets.
+- Switches between Codex, Claude Code, and Copilot, with each provider’s account and model-specific limits.
+- Shows five-hour and weekly balances together, with separately selectable charts and pacing targets, plus Copilot's monthly allowance.
 - Saves each account period's history and a separate weekly history for widgets.
 - Estimates the percentage left at reset from current and past use.
 - Keeps up to 90 days of each period's history in versioned daily JSON files, with 7-day and 30-day chart views.
 - Can copy history to a private folder that you choose.
-- Checks on launch, after wake, when you open the menu, and on request; Codex refreshes every ten minutes, while Claude uses a shared 15-minute minimum interval and failure cooldowns.
-- Preserves the last successful reading and cached history, including the account email and original reading time.
+- Checks on launch, after wake, when you open the menu, and on request; Codex and Copilot refresh every ten minutes, while Claude uses a shared 15-minute minimum interval and failure cooldowns.
+- Preserves the last successful reading and cached history, including the account name and original reading time.
 - Can collect usage on a 15-minute schedule while the menu-bar app is closed.
 - Runs as a native SwiftUI menu-bar app with no third-party runtime dependencies.
-- Includes weekly percentage and usage graph widgets for each provider, plus a combined Claude + Codex allowance widget in small and large sizes.
+- Includes weekly percentage and usage graph widgets for Codex and Claude Code, plus a combined Claude + Codex allowance widget in small and large sizes.
 
 ## Background collection
 
 In Settings, **Collect usage while the app is closed** controls a bundled background helper. On first app launch, Codex Limits attempts to register it automatically; macOS may require approval in **System Settings → Login Items**. Settings reports when approval is needed or registration fails.
 
-The helper runs a single collection on a 15-minute schedule, writing five-hour and weekly histories and weekly widget data. Codex keeps its ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and failure cooldowns, so simultaneous checks send only one request. Each provider is checked independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
+The helper runs a single collection on a 15-minute schedule, writing five-hour, weekly, and Copilot monthly histories and weekly widget data. Codex and Copilot keep their ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and failure cooldowns, so simultaneous checks send only one request. Each provider is checked independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
 
 Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 
@@ -284,6 +317,8 @@ running `Scripts/render-menu-previews.sh`; this reads local session metadata and
 Review the resulting usage totals and dates before sharing.
 
 ## Desktop widgets
+
+Widgets cover Codex and Claude Code; Copilot's monthly allowance is shown in the app only.
 
 **Claude + Codex allowance** shows both providers' account-wide weekly balances together.
 The small square keeps each balance and a compact **…%/day** suggested pace caption in view.
@@ -379,7 +414,7 @@ full, low, empty, stale, expired, and unavailable states.
 
 ## How it works
 
-1. Codex usage comes from your installed CLI’s local app server. Claude usage comes from the installed CLI’s local `/usage` command, which retrieves subscription usage from Anthropic.
+1. Codex usage comes from your installed CLI’s local app server. Claude usage comes from the installed CLI’s local `/usage` command, which retrieves subscription usage from Anthropic. Copilot usage comes from GitHub through the installed GitHub CLI.
 2. It saves percentage samples separately for each provider on your Mac. Codex daily token history can supply data for the first forecast.
 3. It calculates a sustainable pace toward the scheduled reset or a selected banked reset's expiry, reserving your chosen buffer.
 4. It shows a status and suggests how much you can use per hour or day.
@@ -392,7 +427,9 @@ flowchart LR
     CLI --> Collector[Background collector]
     Claude[Claude Code CLI /usage] --> App
     Claude --> Collector
-    App --> History[5-hour and weekly histories]
+    GitHub[GitHub CLI copilot_internal/user] --> App
+    GitHub --> Collector
+    App --> History[5-hour, weekly, and monthly histories]
     Collector --> History
     App --> Weekly[Weekly snapshots]
     Collector --> Weekly
@@ -403,13 +440,13 @@ flowchart LR
 
 Codex Limits keeps usage data on your Mac:
 
-- It does not read, copy, or store Claude credentials. The official Claude Code CLI manages its own login.
-- The app sends no telemetry or analytics. Claude usage requests go through the installed Claude Code CLI.
+- It does not read, copy, or store Claude or GitHub credentials. The official Claude Code CLI and GitHub CLI manage their own logins.
+- The app sends no telemetry or analytics. Claude usage requests go through the installed Claude Code CLI, and Copilot usage requests go through the installed GitHub CLI.
 - It stores percentage samples for each period in the app's Application Support directory.
 - Signed builds share weekly percentages, observation/reset times, and the selected accent color with the widget extension through a local App Group container. Ad-hoc builds keep weekly data beside local history for local storage.
 - If you enable history sync, it copies only usage samples to the selected folder. Preferences and raw usage responses are not synced; credentials are never written to history or widget files.
 - Synced JSON files contain observation times, remaining percentages, and reset times. Choose a folder that you do not share with other people.
-- Folder sync covers the five-hour and weekly chart histories, alongside the legacy main-limit history. The separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same account for each provider. Claude uses a separate `Claude` subfolder, and each chart period has its own folder, so choosing the same parent folder cannot mix providers or periods.
+- Folder sync covers the five-hour and weekly chart histories, alongside the legacy main-limit history. The separate weekly widget history does not sync between Macs. Use a sync folder only on Macs signed into the same account for each provider. Claude and Copilot use separate `Claude` and `Copilot` subfolders, and each chart period has its own folder, so choosing the same parent folder cannot mix providers or periods.
 - The installed CLIs may contact their provider services as part of their normal operation.
 
 Do not attach raw CLI output or screenshots containing account usage to public issues.
@@ -418,7 +455,7 @@ Do not attach raw CLI output or screenshots containing account usage to public i
 
 - macOS 14 or later
 - Xcode 16.4 or later
-- A signed-in standalone Codex CLI and/or a recent Claude Code CLI with structured `/usage` output (verified with 2.1.289). The app discovers CLIs on its `PATH` and in common Homebrew, npm, and `~/.local/bin` locations.
+- At least one of: a signed-in standalone Codex CLI; a recent Claude Code CLI with structured `/usage` output (verified with 2.1.289); or the GitHub CLI (`gh`, verified with 2.95.0) signed in to an account with Copilot. The app discovers CLIs on its `PATH` and in common Homebrew, npm, and `~/.local/bin` locations.
 
 Codex Limits does not use a Codex binary bundled with another app. Install and update the standalone CLI yourself.
 
@@ -498,6 +535,7 @@ hover values resume after scrolling stops.
 - The forecast needs local samples to improve.
 - CLI response formats may change between versions. Claude’s structured usage report is experimental; update the CLI and app if authentication or parsing stops working.
 - Claude token renewal stays with the official CLI. Run `/usage` in Claude Code or sign in again if subscription usage is unavailable.
+- Copilot usage relies on GitHub's internal `copilot_internal/user` endpoint, which is undocumented and may change. Copilot has no desktop widgets yet.
 
 ## Security
 

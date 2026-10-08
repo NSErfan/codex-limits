@@ -64,7 +64,8 @@ enum WeeklyWidgetPublisher {
         safetyBuffer: Double = 3,
         provider: UsageProvider = .codex
     ) {
-        guard let store, store.provider == provider else { return }
+        // Weekly widgets exist only for providers with a weekly allowance.
+        guard let store, store.provider == provider, provider.periods.contains(.weekly) else { return }
         do {
             try store.write(
                 snapshot(from: usage, previous: store.read(), safetyBuffer: safetyBuffer, provider: provider),

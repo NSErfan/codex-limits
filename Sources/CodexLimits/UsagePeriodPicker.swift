@@ -9,7 +9,7 @@ struct UsagePeriodPicker: View {
     let onSelect: (UsagePeriod) -> Void
 
     var body: some View {
-        SegmentedControl(options: UsagePeriod.allCases, selection: selection,
+        SegmentedControl(options: provider.periods, selection: selection,
                          isEnabled: { snapshot.limit(for: $0, provider: provider) != nil }, onSelect: onSelect) { period in
             Text(title(for: period))
                 .monospacedDigit()

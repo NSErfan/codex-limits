@@ -1,6 +1,7 @@
 public enum UsageProvider: String, Codable, CaseIterable, Sendable, Identifiable {
     case codex
     case claude
+    case copilot
 
     public var id: String { rawValue }
 
@@ -8,6 +9,7 @@ public enum UsageProvider: String, Codable, CaseIterable, Sendable, Identifiable
         switch self {
         case .codex: "Codex"
         case .claude: "Claude Code"
+        case .copilot: "Copilot"
         }
     }
 }

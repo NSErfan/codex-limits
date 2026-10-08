@@ -102,10 +102,12 @@ final class UsageMonitor: ObservableObject {
             provider: provider,
             now: historyNow
         )
-        periodSamples[.weekly] = Self.mergedSamples(
-            periodSamples[.weekly] ?? [],
-            Self.weeklySamples(from: self.widgetStore, provider: provider)
-        )
+        if provider.periods.contains(.weekly) {
+            periodSamples[.weekly] = Self.mergedSamples(
+                periodSamples[.weekly] ?? [],
+                Self.weeklySamples(from: self.widgetStore, provider: provider)
+            )
+        }
         recalculate()
 
         if startsAutomatically {
@@ -127,7 +129,7 @@ final class UsageMonitor: ObservableObject {
 
     func samples(for period: UsagePeriod) -> [UsageSample] {
         let saved = samples + (periodSamples[period] ?? [])
-        let matching = saved.filter { $0.durationMinutes == period.durationMinutes }
+        let matching = saved.filter { period.includes(durationMinutes: $0.durationMinutes) }
         let observation = snapshot?.sample(for: period, provider: provider)
         return Self.mergedSamples(matching, observation.map { [$0] } ?? [])
     }
@@ -172,7 +174,7 @@ final class UsageMonitor: ObservableObject {
 
         await prepareHistory()
 
-        if provider == .codex {
+        if provider.refreshSchedule == .fixedInterval {
             Timer.publish(every: provider.refreshInterval, on: .main, in: .common)
                 .autoconnect()
                 .sink { [weak self] _ in
@@ -283,7 +285,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     private func scheduleAutomaticRefresh(at date: Date?) {
-        guard started, provider == .claude else { return }
+        guard started, provider.refreshSchedule == .fetchDeadline else { return }
         automaticRefreshTask?.cancel()
         // Long server deadlines remain in the shared gate; wake at least daily
         // to re-read them without converting an unbounded header into Duration.
@@ -486,7 +488,7 @@ final class UsageMonitor: ObservableObject {
         for (period, incoming) in periodState?.samples ?? [:] {
             periodSamples[period] = Self.mergedSamples(
                 periodSamples[period] ?? [],
-                incoming.filter { $0.durationMinutes == period.durationMinutes }
+                incoming.filter { period.includes(durationMinutes: $0.durationMinutes) }
             )
         }
         syncFolderName = configuredFolderName ?? state.folderName
@@ -538,7 +540,7 @@ final class UsageMonitor: ObservableObject {
                 Bundle.main.bundleIdentifier ?? LegacyBundleMigration.legacyIdentifier,
                 isDirectory: true
             )
-            .appendingPathComponent(provider == .codex ? "History" : "ClaudeHistory", isDirectory: true)
+            .appendingPathComponent(provider.localHistoryDirectoryName, isDirectory: true)
     }
 }
 

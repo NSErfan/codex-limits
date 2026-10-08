@@ -45,7 +45,7 @@ struct ProviderAccountSettings: View {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
             if monitor.requiresLogin {
-                Link("Install \(monitor.provider.displayName) CLI", destination: ProviderLogin.installationURL(for: monitor.provider))
+                Link("Install \(monitor.provider.cliDisplayName)", destination: ProviderLogin.installationURL(for: monitor.provider))
                     .font(.caption)
             }
         }
@@ -53,8 +53,8 @@ struct ProviderAccountSettings: View {
 
     private var accountDescription: String {
         guard let snapshot = monitor.snapshot else { return "Account not loaded" }
-        guard let email = snapshot.accountEmail else { return "Email unavailable" }
-        return monitor.requiresLogin ? "Last account: \(email)" : email
+        guard let account = snapshot.accountName else { return "Account name unavailable" }
+        return monitor.requiresLogin ? "Last account: \(account)" : account
     }
 
     private var status: String {

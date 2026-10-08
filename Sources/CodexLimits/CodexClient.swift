@@ -221,7 +221,7 @@ enum CodexClient {
             tokenHistory: tokenHistory,
             resetCredits: resetCredits(from: rateResult.rateLimitResetCredits, fetchedAt: fetchedAt),
             fetchedAt: fetchedAt,
-            accountEmail: accountEmail(from: accountResponse)
+            accountName: accountEmail(from: accountResponse)
         )
     }
 

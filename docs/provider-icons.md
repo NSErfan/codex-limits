@@ -6,9 +6,10 @@ to revision `82e641b4fece9d1028a127149af9ded00df5ac0c`:
 
 - [Codex SVG](https://github.com/lobehub/lobe-icons/blob/82e641b4fece9d1028a127149af9ded00df5ac0c/packages/static-svg/icons/codex.svg): terminal mark in a filled rosette.
 - [Claude Code SVG](https://github.com/lobehub/lobe-icons/blob/82e641b4fece9d1028a127149af9ded00df5ac0c/packages/static-svg/icons/claudecode.svg): pixel mascot.
+- [GitHub Copilot SVG](https://github.com/lobehub/lobe-icons/blob/82e641b4fece9d1028a127149af9ded00df5ac0c/packages/static-svg/icons/githubcopilot.svg): Copilot head with goggles.
 
 These are community-maintained product marks. Codex belongs to OpenAI; Claude Code
-belongs to Anthropic. The icons identify the services whose usage is displayed;
+belongs to Anthropic; GitHub Copilot belongs to GitHub. The icons identify the services whose usage is displayed;
 they do not imply affiliation or endorsement.
 
 The original, unmodified SVGs are in `Resources/ProviderIcons`. The corresponding
@@ -30,6 +31,8 @@ Light and dark synthetic previews of all three modes at menu-bar size:
 
 <a href="images/menu-bar-claude.png"><img src="images/menu-bar-claude.png" width="524" alt="Claude Code menu-bar label"></a>
 
+<a href="images/menu-bar-copilot.png"><img src="images/menu-bar-copilot.png" width="455" alt="Copilot menu-bar label"></a>
+
 The icon library's [MIT license](https://github.com/lobehub/lobe-icons/blob/82e641b4fece9d1028a127149af9ded00df5ac0c/LICENSE)
 is included in the source and installed resource bundle as `LobeIcons-LICENSE.txt`.
 
@@ -42,7 +45,7 @@ text view; standalone SwiftUI previews therefore cannot validate these behaviors
 The image margin adds to the system's own spacing (two points on that version).
 
 Run `Scripts/check-menu-bar-labels.sh` on a Mac with an active desktop to inspect
-the actual `MenuBarExtra` status buttons for both providers in every display mode.
+the actual `MenuBarExtra` status buttons for every provider in every display mode.
 The check uses synthetic usage and saves native button captures alongside its
 title and image-size assertions.
 
@@ -51,7 +54,7 @@ title and image-size assertions.
 With librsvg's `rsvg-convert` available, run from the repository root:
 
 ```sh
-for provider in codex claude; do
+for provider in codex claude copilot; do
   SOURCE_DATE_EPOCH=0 rsvg-convert --format=pdf --width=24 --height=24 \
     --dpi-x=72 --dpi-y=72 "Resources/ProviderIcons/ProviderIcon-$provider.svg" \
     --output "Sources/CodexWidgetKit/Resources/ProviderIcon-$provider.pdf"

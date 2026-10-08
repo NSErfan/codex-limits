@@ -12,7 +12,7 @@ final class UsageProvidersTests: XCTestCase {
         let claudeSnapshot = Self.snapshot(provider: .claude, remainingPercent: 39)
         let codex = context.monitor(for: .codex) { codexSnapshot }
         let claude = context.monitor(for: .claude) { claudeSnapshot }
-        let providers = UsageProviders(defaults: context.defaults, codex: codex, claude: claude)
+        let providers = context.providers(codex: codex, claude: claude)
 
         await providers.refreshAll()
 
@@ -66,12 +66,12 @@ final class UsageProvidersTests: XCTestCase {
         defer { context.cleanUp() }
         let codex = context.monitor(for: .codex) { throw FetchFailure.generic }
         let claude = context.monitor(for: .claude) { throw FetchFailure.generic }
-        let providers = UsageProviders(defaults: context.defaults, codex: codex, claude: claude)
+        let providers = context.providers(codex: codex, claude: claude)
         XCTAssertEqual(providers.selectedProvider, .codex)
         XCTAssertTrue(providers.selectedMonitor === codex)
 
         providers.selectedProvider = .claude
-        let relaunched = UsageProviders(defaults: context.defaults, codex: codex, claude: claude)
+        let relaunched = context.providers(codex: codex, claude: claude)
 
         XCTAssertEqual(context.defaults.string(forKey: UsageProviders.selectionKey), "claude")
         XCTAssertEqual(relaunched.selectedProvider, .claude)
@@ -88,7 +88,7 @@ final class UsageProvidersTests: XCTestCase {
         let codex = context.monitor(for: .codex) { throw FetchFailure.generic }
         let claude = context.monitor(for: .claude) { throw FetchFailure.generic }
 
-        let providers = UsageProviders(defaults: context.defaults, codex: codex, claude: claude)
+        let providers = context.providers(codex: codex, claude: claude)
 
         XCTAssertEqual(providers.selectedProvider, .codex)
         XCTAssertTrue(providers.selectedMonitor === codex)
@@ -101,15 +101,13 @@ final class UsageProvidersTests: XCTestCase {
         let claudeSnapshot = Self.snapshot(provider: .claude, remainingPercent: 39)
         let codex = context.monitor(for: .codex) { codexSnapshot }
         let claude = context.monitor(for: .claude) { claudeSnapshot }
-        await UsageProviders(defaults: context.defaults, codex: codex, claude: claude).refreshAll()
+        await context.providers(codex: codex, claude: claude).refreshAll()
         let codexWidget = context.widgetStore(for: .codex).read()
         let claudeWidget = context.widgetStore(for: .claude).read()
         let failingCodex = context.monitor(for: .codex) { throw FetchFailure.generic }
         let failingClaude = context.monitor(for: .claude) { throw FetchFailure.loginRequired }
 
-        await UsageProviders(
-            defaults: context.defaults, codex: failingCodex, claude: failingClaude
-        ).refreshAll()
+        await context.providers(codex: failingCodex, claude: failingClaude).refreshAll()
 
         XCTAssertEqual(failingCodex.snapshot, codexSnapshot)
         XCTAssertEqual(failingClaude.snapshot, claudeSnapshot)
@@ -129,62 +127,64 @@ final class UsageProvidersTests: XCTestCase {
         XCTAssertEqual(failingCodex.errorMessage, FetchFailure.generic.localizedDescription)
     }
 
-    func testSharedHistoryFolderKeepsProvidersSeparateInEitherConnectionOrder() async throws {
-        for firstProvider in UsageProvider.allCases {
+    func testSharedHistoryFolderKeepsProvidersSeparateInEveryConnectionOrder() async throws {
+        let providers = UsageProvider.allCases
+        let remaining: [UsageProvider: Double] = [.codex: 81, .claude: 39, .copilot: 57]
+        for offset in providers.indices {
+            let order = Array(providers[offset...] + providers[..<offset])
             let context = try makeContext()
             defer { context.cleanUp() }
             let shared = context.directory.appendingPathComponent("shared", isDirectory: true)
             try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
-            let codexSnapshot = Self.snapshot(provider: .codex, remainingPercent: 81)
-            let claudeSnapshot = Self.snapshot(provider: .claude, remainingPercent: 39)
-            let codex = context.monitor(for: .codex) { codexSnapshot }
-            let claude = context.monitor(for: .claude) { claudeSnapshot }
-            let providers = UsageProviders(defaults: context.defaults, codex: codex, claude: claude)
-            await providers.refreshAll()
-            let secondProvider: UsageProvider = firstProvider == .codex ? .claude : .codex
+            func monitor(for provider: UsageProvider, in context: Context) -> UsageMonitor {
+                let snapshot = Self.snapshot(provider: provider, remainingPercent: remaining[provider]!)
+                return context.monitor(for: provider) { snapshot }
+            }
+            let monitors = Dictionary(uniqueKeysWithValues: providers.map { ($0, monitor(for: $0, in: context)) })
+            let usageProviders = context.providers(
+                codex: monitors[.codex]!, claude: monitors[.claude]!, copilot: monitors[.copilot]!
+            )
+            await usageProviders.refreshAll()
 
-            await providers.monitor(for: firstProvider).connectHistoryFolder(shared)
-            await providers.monitor(for: secondProvider).connectHistoryFolder(shared)
-            await providers.refreshAll()
+            for provider in order {
+                await usageProviders.monitor(for: provider).connectHistoryFolder(shared)
+            }
+            await usageProviders.refreshAll()
 
-            XCTAssertNil(codex.syncErrorMessage, "First provider: \(firstProvider)")
-            XCTAssertNil(claude.syncErrorMessage, "First provider: \(firstProvider)")
-            XCTAssertEqual(codex.syncFolderName, shared.lastPathComponent)
-            XCTAssertEqual(claude.syncFolderName, shared.lastPathComponent)
-            XCTAssertEqual(codex.samples.map(\.remainingPercent), [81])
-            XCTAssertEqual(claude.samples.map(\.remainingPercent), [39])
-            XCTAssertNotNil(context.defaults.data(forKey: "historySyncBookmark"))
-            XCTAssertNotNil(context.defaults.data(forKey: "claude.historySyncBookmark"))
+            for provider in providers {
+                let monitor = try XCTUnwrap(monitors[provider])
+                XCTAssertNil(monitor.syncErrorMessage, "Order: \(order), provider: \(provider)")
+                XCTAssertEqual(monitor.syncFolderName, shared.lastPathComponent)
+                XCTAssertEqual(monitor.samples.map(\.remainingPercent), [remaining[provider]!])
+                XCTAssertNotNil(context.defaults.data(forKey: provider.preferenceKey("historySyncBookmark")))
+            }
 
-            let relaunchedCodex = context.monitor(for: .codex) { codexSnapshot }
-            let relaunchedClaude = context.monitor(for: .claude) { claudeSnapshot }
-            await relaunchedCodex.refresh()
-            await relaunchedClaude.refresh()
-
-            XCTAssertNil(relaunchedCodex.syncErrorMessage)
-            XCTAssertNil(relaunchedClaude.syncErrorMessage)
-            XCTAssertEqual(relaunchedCodex.syncFolderName, shared.lastPathComponent)
-            XCTAssertEqual(relaunchedClaude.syncFolderName, shared.lastPathComponent)
-            XCTAssertEqual(relaunchedCodex.samples.map(\.remainingPercent), [81])
-            XCTAssertEqual(relaunchedClaude.samples.map(\.remainingPercent), [39])
+            var relaunched: [UsageProvider: UsageMonitor] = [:]
+            for provider in providers {
+                let monitor = monitor(for: provider, in: context)
+                await monitor.refresh()
+                XCTAssertNil(monitor.syncErrorMessage, "Order: \(order), provider: \(provider)")
+                XCTAssertEqual(monitor.syncFolderName, shared.lastPathComponent)
+                XCTAssertEqual(monitor.samples.map(\.remainingPercent), [remaining[provider]!])
+                relaunched[provider] = monitor
+            }
 
             let otherInstallation = try makeContext()
             defer { otherInstallation.cleanUp() }
-            let otherCodex = otherInstallation.monitor(for: .codex) { throw FetchFailure.generic }
-            let otherClaude = otherInstallation.monitor(for: .claude) { throw FetchFailure.generic }
-            await otherCodex.connectHistoryFolder(shared)
-            await otherClaude.connectHistoryFolder(shared)
+            for provider in providers {
+                let other = otherInstallation.monitor(for: provider) { throw FetchFailure.generic }
+                await other.connectHistoryFolder(shared)
+                XCTAssertNil(other.syncErrorMessage, "Order: \(order), provider: \(provider)")
+                XCTAssertEqual(other.samples.map(\.remainingPercent), [remaining[provider]!])
+            }
 
-            XCTAssertNil(otherCodex.syncErrorMessage)
-            XCTAssertNil(otherClaude.syncErrorMessage)
-            XCTAssertEqual(otherCodex.samples.map(\.remainingPercent), [81])
-            XCTAssertEqual(otherClaude.samples.map(\.remainingPercent), [39])
-
-            await relaunchedClaude.stopHistorySync()
+            await relaunched[.claude]?.stopHistorySync()
             XCTAssertNil(context.defaults.data(forKey: "claude.historySyncBookmark"))
             XCTAssertNotNil(context.defaults.data(forKey: "historySyncBookmark"))
-            XCTAssertNil(relaunchedClaude.syncFolderName)
-            XCTAssertEqual(relaunchedCodex.syncFolderName, shared.lastPathComponent)
+            XCTAssertNotNil(context.defaults.data(forKey: "copilot.historySyncBookmark"))
+            XCTAssertNil(relaunched[.claude]?.syncFolderName)
+            XCTAssertEqual(relaunched[.codex]?.syncFolderName, shared.lastPathComponent)
+            XCTAssertEqual(relaunched[.copilot]?.syncFolderName, shared.lastPathComponent)
         }
     }
 
@@ -195,7 +195,7 @@ final class UsageProvidersTests: XCTestCase {
         let claudeSnapshot = Self.snapshot(provider: .claude, remainingPercent: 59)
         let codex = context.monitor(for: .codex) { codexSnapshot }
         let claude = context.monitor(for: .claude) { claudeSnapshot }
-        let providers = UsageProviders(defaults: context.defaults, codex: codex, claude: claude)
+        let providers = context.providers(codex: codex, claude: claude)
         await providers.refreshAll()
         XCTAssertEqual(context.widgetStore(for: .codex).read()?.pace, .onTrack)
         XCTAssertEqual(context.widgetStore(for: .claude).read()?.pace, .onTrack)
@@ -229,7 +229,7 @@ final class UsageProvidersTests: XCTestCase {
                 window: UsageWindow(
                     remainingPercent: remainingPercent,
                     resetsAt: fixtureNow.addingTimeInterval(4 * 86_400),
-                    durationMinutes: 7 * 24 * 60
+                    durationMinutes: provider.periods.last!.durationMinutes
                 )
             ),
             otherLimits: [],
@@ -260,6 +260,17 @@ final class UsageProvidersTests: XCTestCase {
                 fetchUsage: fetchUsage,
                 recoveryDelaysNanoseconds: [],
                 startsAutomatically: false
+            )
+        }
+
+        func providers(
+            codex: UsageMonitor,
+            claude: UsageMonitor,
+            copilot: UsageMonitor? = nil
+        ) -> UsageProviders {
+            UsageProviders(
+                defaults: defaults, codex: codex, claude: claude,
+                copilot: copilot ?? monitor(for: .copilot) { throw FetchFailure.loginRequired }
             )
         }
 

@@ -33,13 +33,13 @@ final class UsageDashboardPreferencesTests: XCTestCase {
 
     func testPreferenceKeysSeparateBothProvidersAndBothPeriods() throws {
         let keys = UsageProvider.allCases.flatMap { provider in
-            UsagePeriod.allCases.flatMap { period in
+            provider.periods.flatMap { period in
                 ["chartRange", "burndownTarget", UsageMonitor.paceTargetCreditIDKey].map {
                     UsageDashboardPreferences.key($0, provider: provider, period: period)
                 }
             }
         }
-        XCTAssertEqual(Set(keys).count, 12)
+        XCTAssertEqual(Set(keys).count, 15)
         XCTAssertNotEqual(UsageDashboardPreferences.selectionKey(for: .codex), UsageDashboardPreferences.selectionKey(for: .claude))
         try withDefaults { defaults in
             let fiveHour = UsageDashboardPreferences.key("chartRange", provider: .claude, period: .fiveHour)

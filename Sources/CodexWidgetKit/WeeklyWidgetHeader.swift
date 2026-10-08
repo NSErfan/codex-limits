@@ -8,7 +8,7 @@ struct WeeklyWidgetHeader: View {
     var body: some View {
         HStack(spacing: 6) {
             ProviderIcon(provider: provider, size: 12)
-            Text(provider == .claude ? "CLAUDE" : "CODEX")
+            Text(title)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .tracking(2)
                 .accessibilityLabel(provider.displayName)
@@ -23,5 +23,13 @@ struct WeeklyWidgetHeader: View {
             }
         }
         .foregroundStyle(.secondary)
+    }
+
+    private var title: String {
+        switch provider {
+        case .codex: "CODEX"
+        case .claude: "CLAUDE"
+        case .copilot: "COPILOT"
+        }
     }
 }

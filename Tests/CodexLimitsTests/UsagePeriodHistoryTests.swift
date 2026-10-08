@@ -8,7 +8,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
     func testAccountPeriodsAreFoundInEitherMainOrderWithoutSelectingModelLimits() throws {
         let now = Date()
         for provider in UsageProvider.allCases {
-            for mainPeriod in UsagePeriod.allCases {
+            for mainPeriod in [UsagePeriod.fiveHour, .weekly] {
                 let snapshot = Self.snapshot(provider: provider, mainPeriod: mainPeriod, observedAt: now)
 
                 XCTAssertEqual(snapshot.limit(for: .fiveHour, provider: provider)?.window.remainingPercent, 82)
@@ -55,6 +55,47 @@ final class UsagePeriodHistoryTests: XCTestCase {
         XCTAssertEqual(monitor.samples.map(\.remainingPercent), [46, 71])
     }
 
+    func testMonthlyPeriodMatchesEveryCalendarMonthLengthOnly() {
+        for days in 28 ... 31 {
+            XCTAssertTrue(UsagePeriod.monthly.includes(durationMinutes: days * 1_440), "\(days) days")
+        }
+        for minutes in [nil, 300, 10_080, 27 * 1_440, 32 * 1_440] {
+            XCTAssertFalse(UsagePeriod.monthly.includes(durationMinutes: minutes), "\(String(describing: minutes))")
+        }
+        XCTAssertFalse(UsagePeriod.weekly.includes(durationMinutes: 10_081))
+        XCTAssertTrue(UsagePeriod.fiveHour.includes(durationMinutes: 300))
+        XCTAssertEqual(UsageProvider.codex.periods, [.fiveHour, .weekly])
+        XCTAssertEqual(UsageProvider.claude.periods, [.fiveHour, .weekly])
+        XCTAssertEqual(UsageProvider.copilot.periods, [.monthly])
+    }
+
+    func testCopilotRecordsMonthlyHistoryAcrossMonthLengthsAndSyncsInItsOwnFolder() async throws {
+        let context = try Context()
+        defer { context.cleanUp() }
+        let shared = try context.makeSharedDirectory()
+        let february = Self.monthlySnapshot(remainingPercent: 64, observedAt: context.now,
+                                            resetsAt: context.now.addingTimeInterval(86_400), days: 28)
+        let march = Self.monthlySnapshot(remainingPercent: 97, observedAt: context.now.addingTimeInterval(2 * 86_400),
+                                         resetsAt: context.now.addingTimeInterval(32 * 86_400), days: 31)
+        let sequence = SnapshotSequence([february, march])
+        let monitor = context.monitor(provider: .copilot) { .fetched(await sequence.next()) }
+
+        await monitor.refresh()
+        await monitor.connectHistoryFolder(shared)
+        await monitor.refresh()
+
+        XCTAssertEqual(monitor.samples(for: .monthly).map(\.remainingPercent), [64, 97])
+        XCTAssertEqual(UsageDashboardPreferences.selectedPeriod(savedValue: "", snapshot: march, provider: .copilot), .monthly)
+        let local = await context.readHistory(at: context.periodDirectory(provider: .copilot, period: .monthly))
+        XCTAssertEqual(local.samples.map(\.remainingPercent), [64, 97])
+        let remote = await context.readHistory(at: context.sharedPeriodDirectory(shared, provider: .copilot, period: .monthly))
+        XCTAssertEqual(remote.samples.map(\.remainingPercent), [64, 97])
+        for period in [UsagePeriod.fiveHour, .weekly] {
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: context.periodDirectory(provider: .copilot, period: period).path), "\(period)")
+        }
+    }
+
     func testPeriodsWithTheSameResetTimestampStaySeparateOnDisk() async throws {
         let context = try Context()
         defer { context.cleanUp() }
@@ -63,7 +104,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
 
         await monitor.refresh()
 
-        for period in UsagePeriod.allCases {
+        for period in UsageProvider.codex.periods {
             let expected = try Self.sample(in: snapshot, period: period, provider: .codex)
             XCTAssertEqual(monitor.samples(for: period), [expected])
             let saved = await context.readHistory(at: context.periodDirectory(provider: .codex, period: period))
@@ -93,7 +134,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
         let fetched = await restored.refresh()
 
         XCTAssertFalse(fetched)
-        for period in UsagePeriod.allCases {
+        for period in UsageProvider.claude.periods {
             XCTAssertEqual(restored.samples(for: period), [try Self.sample(in: snapshot, period: period, provider: .claude)])
         }
     }
@@ -192,7 +233,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
     func testCollectorPersistsBothPeriodsWithOriginalObservationAndPreservesLegacyMainHistory() async throws {
         let context = try Context()
         defer { context.cleanUp() }
-        for provider in UsageProvider.allCases {
+        for provider in [UsageProvider.codex, .claude] {
             let snapshot = Self.snapshot(provider: provider, mainPeriod: .fiveHour,
                                          observedAt: context.now.addingTimeInterval(-600))
 
@@ -205,7 +246,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
             )
 
             XCTAssertTrue(collected)
-            for period in UsagePeriod.allCases {
+            for period in provider.periods {
                 let saved = await context.readHistory(at: context.periodDirectory(provider: provider, period: period))
                 XCTAssertEqual(saved.samples, [try Self.sample(in: snapshot, period: period, provider: provider)])
             }
@@ -232,7 +273,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
 
             XCTAssertNil(monitor.syncErrorMessage)
             XCTAssertEqual(monitor.syncFolderName, shared.lastPathComponent)
-            for period in UsagePeriod.allCases {
+            for period in provider.periods {
                 let directory = context.sharedPeriodDirectory(shared, provider: provider, period: period)
                 let state = await context.readHistory(at: directory)
                 XCTAssertEqual(state.samples, [try Self.sample(in: snapshot, period: period, provider: provider)])
@@ -242,14 +283,14 @@ final class UsagePeriodHistoryTests: XCTestCase {
             await restored.refresh()
             XCTAssertEqual(restored.syncFolderName, shared.lastPathComponent)
             XCTAssertNil(restored.syncErrorMessage)
-            for period in UsagePeriod.allCases {
+            for period in provider.periods {
                 XCTAssertEqual(restored.samples(for: period), monitor.samples(for: period))
             }
         }
 
         let other = try Context(now: context.now)
         defer { other.cleanUp() }
-        for provider in UsageProvider.allCases {
+        for provider in [UsageProvider.codex, .claude] {
             let imported = other.monitor(provider: provider) { throw CodexClientError.invalidResponse }
             await imported.connectHistoryFolder(shared)
 
@@ -276,7 +317,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
 
         XCTAssertNil(monitor.syncFolderName)
         XCTAssertNil(context.defaults.data(forKey: "claude.historySyncBookmark"))
-        for period in UsagePeriod.allCases {
+        for period in UsageProvider.claude.periods {
             let directory = context.sharedPeriodDirectory(shared, provider: .claude, period: period)
             let remote = await context.readHistory(at: directory)
             XCTAssertEqual(remote.samples, [try Self.sample(in: first, period: period, provider: .claude)])
@@ -287,7 +328,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
 
         XCTAssertNil(monitor.syncErrorMessage)
         XCTAssertEqual(monitor.syncFolderName, shared.lastPathComponent)
-        for period in UsagePeriod.allCases {
+        for period in UsageProvider.claude.periods {
             let directory = context.sharedPeriodDirectory(shared, provider: .claude, period: period)
             let remote = await context.readHistory(at: directory)
             XCTAssertEqual(remote.samples, monitor.samples(for: period))
@@ -314,7 +355,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
         _ = await history.record(second)
 
         XCTAssertNotNil(failedReplacement.errorMessage)
-        for period in UsagePeriod.allCases {
+        for period in UsageProvider.codex.periods {
             let directory = context.sharedPeriodDirectory(firstFolder, provider: .codex, period: period)
             let remote = await context.readHistory(at: directory)
             XCTAssertEqual(remote.samples, [try Self.sample(in: first, period: period, provider: .codex)])
@@ -324,7 +365,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
         let recovered = await history.synchronize()
 
         XCTAssertNil(recovered.errorMessage)
-        for period in UsagePeriod.allCases {
+        for period in UsageProvider.codex.periods {
             let directory = context.sharedPeriodDirectory(replacement, provider: .codex, period: period)
             let remote = await context.readHistory(at: directory)
             XCTAssertEqual(remote.samples, [try Self.sample(in: first, period: period, provider: .codex),
@@ -348,6 +389,14 @@ final class UsagePeriodHistoryTests: XCTestCase {
         return UsageSnapshot(mainLimit: mainPeriod == .weekly ? weekly : fiveHour,
                              otherLimits: [model, mainPeriod == .weekly ? fiveHour : weekly],
                              tokenHistory: [], resetCredits: [], fetchedAt: observedAt)
+    }
+
+    private static func monthlySnapshot(remainingPercent: Double, observedAt: Date, resetsAt: Date, days: Int) -> UsageSnapshot {
+        UsageSnapshot(
+            mainLimit: LimitReading(limitId: "copilot", name: "Premium requests", window: UsageWindow(
+                remainingPercent: remainingPercent, resetsAt: resetsAt, durationMinutes: days * 1_440)),
+            otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: observedAt
+        )
     }
 
     private static func limit(
@@ -417,7 +466,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
         }
 
         func sharedPeriodDirectory(_ root: URL, provider: UsageProvider, period: UsagePeriod) -> URL {
-            let providerRoot = provider == .claude ? root.appendingPathComponent("Claude", isDirectory: true) : root
+            let providerRoot = provider.historySubdirectory.map { root.appendingPathComponent($0, isDirectory: true) } ?? root
             return providerRoot.appendingPathComponent("Windows", isDirectory: true)
                 .appendingPathComponent(String(period.durationMinutes), isDirectory: true)
         }

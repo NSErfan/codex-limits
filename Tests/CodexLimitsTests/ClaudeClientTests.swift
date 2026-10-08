@@ -125,7 +125,7 @@ final class ClaudeClientTests: XCTestCase {
             return try ClaudeUsageFixture.output()
         }
         XCTAssertEqual(snapshot.fetchedAt, currentDate)
-        XCTAssertNil(snapshot.accountEmail)
+        XCTAssertNil(snapshot.accountName)
     }
 
     func testCancellationIsPreserved() async {

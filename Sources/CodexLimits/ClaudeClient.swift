@@ -36,7 +36,7 @@ enum ClaudeClient {
         return UsageSnapshot(
             mainLimit: LimitReading(limitId: "claude", name: "Claude Code", window: primary.window),
             otherLimits: others,
-            tokenHistory: [], resetCredits: [], fetchedAt: fetchedAt, accountEmail: accountEmail
+            tokenHistory: [], resetCredits: [], fetchedAt: fetchedAt, accountName: accountEmail
         )
     }
 

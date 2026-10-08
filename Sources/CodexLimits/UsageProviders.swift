@@ -12,6 +12,7 @@ final class UsageProviders: ObservableObject {
 
     let codex: UsageMonitor
     let claude: UsageMonitor
+    let copilot: UsageMonitor
     private let defaults: UserDefaults
     private var cancellables: Set<AnyCancellable> = []
 
@@ -19,18 +20,24 @@ final class UsageProviders: ObservableObject {
         monitor(for: selectedProvider)
     }
 
+    var monitors: [UsageMonitor] {
+        UsageProvider.allCases.map(monitor(for:))
+    }
+
     init(
         defaults: UserDefaults = .standard,
         codex: UsageMonitor? = nil,
-        claude: UsageMonitor? = nil
+        claude: UsageMonitor? = nil,
+        copilot: UsageMonitor? = nil
     ) {
         self.defaults = defaults
         self.codex = codex ?? UsageMonitor(provider: .codex, defaults: defaults)
         self.claude = claude ?? UsageMonitor(provider: .claude, defaults: defaults)
+        self.copilot = copilot ?? UsageMonitor(provider: .copilot, defaults: defaults)
         selectedProvider = defaults.string(forKey: Self.selectionKey)
             .flatMap(UsageProvider.init(rawValue:)) ?? .codex
 
-        for monitor in [self.codex, self.claude] {
+        for monitor in monitors {
             monitor.objectWillChange
                 .sink { [weak self] _ in self?.objectWillChange.send() }
                 .store(in: &cancellables)
@@ -41,18 +48,22 @@ final class UsageProviders: ObservableObject {
         switch provider {
         case .codex: codex
         case .claude: claude
+        case .copilot: copilot
         }
     }
 
     func refreshAll() async {
-        async let codexRefresh: Bool = codex.refresh()
-        async let claudeRefresh: Bool = claude.refresh()
-        _ = await (codexRefresh, claudeRefresh)
+        await withTaskGroup(of: Void.self) { group in
+            for monitor in monitors {
+                group.addTask { _ = await monitor.refresh() }
+            }
+        }
     }
 
     func updateSafetyBuffer(_ value: Double) {
         defaults.set(value, forKey: UsageMonitor.safetyBufferKey)
-        codex.updateSafetyBuffer(value)
-        claude.updateSafetyBuffer(value)
+        for monitor in monitors {
+            monitor.updateSafetyBuffer(value)
+        }
     }
 }

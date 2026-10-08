@@ -8,7 +8,7 @@ final class AccountEmailTests: XCTestCase {
         let restored = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(snapshot))
 
         XCTAssertEqual(restored, snapshot)
-        XCTAssertEqual(restored.accountEmail, "first@example.test")
+        XCTAssertEqual(restored.accountName, "first@example.test")
     }
 
     func testLegacySnapshotWithoutAccountEmailStillDecodes() throws {
@@ -22,13 +22,13 @@ final class AccountEmailTests: XCTestCase {
             from: JSONSerialization.data(withJSONObject: payload)
         )
 
-        XCTAssertNil(restored.accountEmail)
+        XCTAssertNil(restored.accountName)
         XCTAssertEqual(restored.mainLimit, snapshot.mainLimit)
     }
 
     func testCodexReadsOnlyTheChatGPTAccountEmail() throws {
         XCTAssertEqual(
-            try codexSnapshot(account: #"{"type":"chatgpt","email":"  fixture@example.test  "}"#).accountEmail,
+            try codexSnapshot(account: #"{"type":"chatgpt","email":"  fixture@example.test  "}"#).accountName,
             "fixture@example.test"
         )
         for account in [
@@ -38,7 +38,7 @@ final class AccountEmailTests: XCTestCase {
             #"{"type":"apiKey","email":"unrelated@example.test"}"#,
             #"{"type":"futureAccount","email":"unrelated@example.test"}"#
         ] {
-            XCTAssertNil(try codexSnapshot(account: account).accountEmail)
+            XCTAssertNil(try codexSnapshot(account: account).accountName)
         }
     }
 
@@ -55,7 +55,7 @@ final class AccountEmailTests: XCTestCase {
                 accountResponse
             ])
 
-            XCTAssertNil(snapshot.accountEmail)
+            XCTAssertNil(snapshot.accountName)
             XCTAssertEqual(snapshot.mainLimit.window.remainingPercent, 80)
         }
     }
@@ -68,7 +68,7 @@ final class AccountEmailTests: XCTestCase {
         ] {
             let snapshot = try await readCodexSnapshot(responses: responses)
 
-            XCTAssertEqual(snapshot.accountEmail, "fixture@example.test")
+            XCTAssertEqual(snapshot.accountName, "fixture@example.test")
             XCTAssertEqual(snapshot.mainLimit.window.remainingPercent, 80)
         }
     }
@@ -183,19 +183,19 @@ final class AccountEmailTests: XCTestCase {
 
     func testClaudeAttachesAccountThatStaysStableDuringCommand() async throws {
         let snapshot = try await fetchClaudeSnapshot(before: Self.firstAccount, after: Self.firstAccount)
-        XCTAssertEqual(snapshot.accountEmail, Self.firstAccount.email)
+        XCTAssertEqual(snapshot.accountName, Self.firstAccount.email)
     }
 
     func testClaudeAccountSwitchDuringCommandOmitsEmail() async throws {
         let snapshot = try await fetchClaudeSnapshot(before: Self.firstAccount, after: Self.secondAccount)
-        XCTAssertNil(snapshot.accountEmail)
+        XCTAssertNil(snapshot.accountName)
     }
 
     func testClaudeMissingAccountCannotAcquireEmailLater() async throws {
         let cases: [(ClaudeAccountReader.Account?, ClaudeAccountReader.Account?)] = [(nil, Self.firstAccount), (Self.firstAccount, nil)]
         for accounts in cases {
             let snapshot = try await fetchClaudeSnapshot(before: accounts.0, after: accounts.1)
-            XCTAssertNil(snapshot.accountEmail)
+            XCTAssertNil(snapshot.accountName)
         }
     }
 

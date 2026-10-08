@@ -176,9 +176,16 @@ final class ProviderLoginSessionTests: XCTestCase {
             fetchResult: { await source.fetch() },
             recoveryDelaysNanoseconds: [], startsAutomatically: false
         )
+        let copilot = UsageMonitor(
+            provider: .copilot, defaults: defaults,
+            historyDirectory: directory.appendingPathComponent("copilot"),
+            widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("copilot-widget"), provider: .copilot),
+            fetchUsage: { throw CopilotClientError.credentialsMissing },
+            recoveryDelaysNanoseconds: [], startsAutomatically: false
+        )
         return Context(
             suite: suite, defaults: defaults, directory: directory,
-            providers: UsageProviders(defaults: defaults, codex: codex, claude: claude)
+            providers: UsageProviders(defaults: defaults, codex: codex, claude: claude, copilot: copilot)
         )
     }
 

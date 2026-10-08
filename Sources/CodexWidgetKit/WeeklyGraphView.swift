@@ -103,8 +103,8 @@ public struct WeeklyGraphView: View {
     }
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var emptyStateHint: String {
-        if provider == .claude, snapshot == nil {
-            return "Open Codex Limits to connect Claude Code and refresh usage."
+        if provider != .codex, snapshot == nil {
+            return "Open Codex Limits to connect \(provider.displayName) and refresh usage."
         }
         return "Open Codex Limits to refresh your \(provider.displayName) weekly allowance."
     }
