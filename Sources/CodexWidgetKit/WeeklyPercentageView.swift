@@ -4,13 +4,16 @@ public struct WeeklyPercentageView: View {
     public let snapshot: WeeklyWidgetSnapshot?
     public let date: Date
     public let provider: UsageProvider
+    /// The provider is turned off in the app, so no reading is shown.
+    public let isTurnedOff: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.usageAccent) private var usageAccent
 
-    public init(snapshot: WeeklyWidgetSnapshot?, date: Date, provider: UsageProvider = .codex) {
-        self.snapshot = snapshot
+    public init(snapshot: WeeklyWidgetSnapshot?, date: Date, provider: UsageProvider = .codex, isTurnedOff: Bool = false) {
+        self.snapshot = isTurnedOff ? nil : snapshot
         self.date = date
         self.provider = provider
+        self.isTurnedOff = isTurnedOff
     }
 
     public var body: some View {
@@ -57,7 +60,8 @@ public struct WeeklyPercentageView: View {
     }
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var caption: String {
-        switch status {
+        if isTurnedOff { return "Turned off in Codex Limits" }
+        return switch status {
         case .current: "Weekly allowance left"
         case .stale: "Weekly · Last reading"
         case .expired: "Reset time passed · Open app"

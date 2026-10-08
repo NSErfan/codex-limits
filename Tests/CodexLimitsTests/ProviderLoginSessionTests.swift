@@ -148,6 +148,79 @@ final class ProviderLoginSessionTests: XCTestCase {
         XCTAssertNil(login.message(for: .claude))
     }
 
+    func testRefreshSkipsTurnedOffProvider() async throws {
+        let source = ResultSource([.fetched(Self.snapshot(at: Self.startedAt))])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in })
+        context.providers.setEnabled(false, for: .claude)
+
+        await login.refresh(.claude)
+
+        let fetchCount = await source.fetchCount
+        XCTAssertEqual(fetchCount, 0)
+    }
+
+    func testTurningOffProviderForgetsItsPendingSignIn() async throws {
+        let source = ResultSource([.deferred(ClaudeClientError.cliUpdateRequired, snapshot: nil)])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in }, now: { Self.startedAt })
+        await openLogin(login)
+
+        context.providers.setEnabled(false, for: .claude)
+        await login.refreshPendingLogins()
+
+        XCTAssertNil(login.message(for: .claude))
+        let fetchCount = await source.fetchCount
+        XCTAssertEqual(fetchCount, 0)
+    }
+
+    func testSignInFinishingAfterProviderIsTurnedOffIsNotKeptPending() async throws {
+        let source = ResultSource([.fetched(Self.snapshot(at: Self.startedAt))])
+        let context = try makeContext(source: source)
+        defer { context.cleanUp() }
+        let gate = SignInGate()
+        let login = ProviderLoginSession(providers: context.providers, openLogin: { _ in await gate.wait() })
+
+        login.signIn(to: .claude)
+        await gate.waitUntilWaiting()
+        context.providers.setEnabled(false, for: .claude)
+        await gate.open()
+        for _ in 0 ..< 100 where login.isOpening(.claude) {
+            await Task.yield()
+        }
+
+        XCTAssertFalse(login.isOpening(.claude))
+        XCTAssertNil(login.message(for: .claude), "No pending sign-in is recorded for a turned-off provider")
+    }
+
+    private actor SignInGate {
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        private var arrivals: [CheckedContinuation<Void, Never>] = []
+        private var hasArrived = false
+
+        func wait() async {
+            hasArrived = true
+            arrivals.forEach { $0.resume() }
+            arrivals.removeAll()
+            guard !isOpen else { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+
+        func waitUntilWaiting() async {
+            guard !hasArrived else { return }
+            await withCheckedContinuation { arrivals.append($0) }
+        }
+
+        func open() {
+            isOpen = true
+            waiters.forEach { $0.resume() }
+            waiters.removeAll()
+        }
+    }
+
     private func openLogin(_ login: ProviderLoginSession) async {
         login.signIn(to: .claude)
         for _ in 0 ..< 100 {

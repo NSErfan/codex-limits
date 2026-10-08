@@ -71,6 +71,28 @@ public struct WeeklyWidgetStore: Sendable {
         )
     }
 
+    /// Providers turned off in the app. Like the accent, this is shared by every provider's store.
+    public func readDisabledProviders() -> Set<UsageProvider> {
+        let url = directory.appendingPathComponent("providers.json")
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= 4_096,
+              let data = try? Data(contentsOf: url),
+              let stored = try? JSONDecoder().decode(ProviderSettings.self, from: data) else { return [] }
+        return Set(stored.disabled.compactMap(UsageProvider.init(rawValue:)))
+    }
+
+    public func writeDisabledProviders(_ providers: Set<UsageProvider>) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let settings = ProviderSettings(disabled: providers.map(\.rawValue).sorted())
+        try JSONEncoder().encode(settings).write(
+            to: directory.appendingPathComponent("providers.json"), options: .atomic
+        )
+    }
+
+    private struct ProviderSettings: Codable {
+        let disabled: [String]
+    }
+
     public func write(_ snapshot: WeeklyWidgetSnapshot, writer: Writer) throws {
         // Each process owns its file. Atomic replacement prevents partial reads;
         // separate files prevent an older concurrent fetch overwriting a newer one.

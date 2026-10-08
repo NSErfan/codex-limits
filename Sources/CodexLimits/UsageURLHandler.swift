@@ -14,14 +14,15 @@ final class UsageURLHandler: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let provider = urls.compactMap(Self.provider(from:)).last,
               let providers, let login else { return }
-        providers.selectedProvider = provider
-        if let longestPeriod = provider.periods.last {
+        // A link to a turned-off provider, such as its old widget, opens the current provider instead.
+        let selected = providers.select(provider)
+        if selected, let longestPeriod = provider.periods.last {
             UserDefaults.standard.set(longestPeriod.rawValue,
                                       forKey: UsageDashboardPreferences.selectionKey(for: provider))
         }
         showUsageWindow()
         application.activate(ignoringOtherApps: true)
-        Task { await login.refresh(provider) }
+        if selected { Task { await login.refresh(provider) } }
     }
 
     private func showUsageWindow() {

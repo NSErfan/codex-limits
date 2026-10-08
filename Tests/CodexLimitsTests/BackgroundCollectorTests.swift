@@ -1,3 +1,4 @@
+import CodexWidgetKit
 import Foundation
 import XCTest
 @testable import CodexLimits
@@ -55,6 +56,32 @@ final class BackgroundCollectorTests: XCTestCase {
             includingPropertiesForKeys: nil
         )
         XCTAssertEqual(writerFiles.filter { $0.pathExtension == "json" }.count, 1)
+    }
+
+    func testCollectorSkipsTurnedOffProvidersAndIgnoresThemInTheResult() async throws {
+        let suite = "BackgroundCollectorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["claude"], forKey: ProviderEnablement.disabledKey)
+        let visited = VisitRecorder()
+
+        let collected = await BackgroundCollector.collectEnabledProviders(defaults: defaults) { provider in
+            await visited.record(provider)
+            return provider == .claude
+        }
+
+        let providers = await visited.providers
+        XCTAssertEqual(providers, [.codex, .copilot])
+        XCTAssertFalse(collected, "Only turned-on providers count toward success")
+
+        defaults.removeObject(forKey: ProviderEnablement.disabledKey)
+        let collectedWithClaude = await BackgroundCollector.collectEnabledProviders(defaults: defaults) { $0 == .claude }
+        XCTAssertTrue(collectedWithClaude)
+    }
+
+    private actor VisitRecorder {
+        private(set) var providers: [UsageProvider] = []
+        func record(_ provider: UsageProvider) { providers.append(provider) }
     }
 
     func testCollectorInstallationIDIsStableAndDistinctFromTheApps() throws {

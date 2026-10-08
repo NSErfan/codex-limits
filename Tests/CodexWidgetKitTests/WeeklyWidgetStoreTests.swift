@@ -5,6 +5,23 @@ import XCTest
 final class WeeklyWidgetStoreTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func testTurnedOffProvidersAreSharedAcrossProviderStoresAndIgnoreUnknownValues() throws {
+        let codex = temporaryStore()
+        let claude = WeeklyWidgetStore(directory: codex.directory, provider: .claude)
+        defer { try? FileManager.default.removeItem(at: codex.directory) }
+
+        XCTAssertEqual(codex.readDisabledProviders(), [])
+        try codex.writeDisabledProviders([.claude, .copilot])
+        XCTAssertEqual(claude.readDisabledProviders(), [.claude, .copilot])
+
+        try Data(#"{"disabled":["claude","future-provider"]}"#.utf8)
+            .write(to: codex.directory.appendingPathComponent("providers.json"))
+        XCTAssertEqual(codex.readDisabledProviders(), [.claude])
+
+        try Data("not json".utf8).write(to: codex.directory.appendingPathComponent("providers.json"))
+        XCTAssertEqual(codex.readDisabledProviders(), [], "Unreadable data leaves every provider shown")
+    }
+
     func testProvidersKeepSeparateBalancesAndHistoryWithSharedAppearance() throws {
         let codex = temporaryStore()
         let claude = WeeklyWidgetStore(directory: codex.directory, provider: .claude)

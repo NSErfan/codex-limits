@@ -12,10 +12,10 @@ struct ProviderUsageWindow: View {
                 selectedProvider: Binding(
                     get: { providers.selectedProvider },
                     set: { provider in
-                        providers.selectedProvider = provider
-                        Task { await login.refresh(provider) }
+                        if providers.select(provider) { Task { await login.refresh(provider) } }
                     }
                 ),
+                providerOptions: providers.enabledProviders,
                 onSignIn: { login.signIn(to: providers.selectedProvider) },
                 loginMessage: login.message(for: providers.selectedProvider),
                 isOpeningLogin: login.isOpening(providers.selectedProvider),

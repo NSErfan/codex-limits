@@ -57,6 +57,14 @@ enum WeeklyWidgetPublisher {
         )
     }
 
+    static func reloadAllTimelines() {
+        for provider in UsageProvider.allCases {
+            WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.percentageKind(for: provider))
+            WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.graphKind(for: provider))
+        }
+        WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.combinedKind)
+    }
+
     static func publish(
         _ usage: UsageSnapshot,
         writer: WeeklyWidgetStore.Writer,

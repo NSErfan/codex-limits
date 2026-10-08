@@ -13,7 +13,7 @@ struct CombinedWeeklyAllowanceWidget: Widget {
                         .environment(\.usageAccent, entry.accent)
                 }
                 .environment(\.usageAccent, entry.accent)
-                .widgetURL(URL(string: "codexlimits://usage/codex"))
+                .widgetURL(URL(string: "codexlimits://usage/\(entry.linkedProvider.rawValue)"))
         }
         .configurationDisplayName("Claude + Codex allowance")
         .description("Both weekly allowances, with a suggested daily pace until each scheduled reset.")
@@ -27,7 +27,8 @@ struct CombinedWeeklyAllowanceWidget: Widget {
 
         var body: some View {
             CombinedWeeklyAllowanceView(
-                codex: entry.codex, claude: entry.claude, date: entry.date, expanded: family == .systemLarge
+                codex: entry.codex, claude: entry.claude, date: entry.date, expanded: family == .systemLarge,
+                disabledProviders: entry.disabledProviders
             )
         }
     }

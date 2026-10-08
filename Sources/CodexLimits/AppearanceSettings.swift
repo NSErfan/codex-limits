@@ -1,7 +1,6 @@
 import CodexWidgetKit
 import Combine
 import Foundation
-import WidgetKit
 
 @MainActor
 final class AppearanceSettings: ObservableObject {
@@ -20,13 +19,7 @@ final class AppearanceSettings: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         widgetStore: WeeklyWidgetStore? = .shared(),
-        reloadWidgets: @escaping () -> Void = {
-            for provider in UsageProvider.allCases {
-                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.percentageKind(for: provider))
-                WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.graphKind(for: provider))
-            }
-            WidgetCenter.shared.reloadTimelines(ofKind: WeeklyWidgetStore.combinedKind)
-        }
+        reloadWidgets: @escaping () -> Void = WeeklyWidgetPublisher.reloadAllTimelines
     ) {
         self.defaults = defaults
         self.widgetStore = widgetStore

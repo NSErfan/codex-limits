@@ -9,6 +9,7 @@ final class ProviderLoginSession: ObservableObject {
     private var pendingLogins: [UsageProvider: Date] = [:]
     private var refreshingProviders: Set<UsageProvider> = []
     private var activation: AnyCancellable?
+    private var enablement: AnyCancellable?
     private let providers: UsageProviders
     private let openLogin: @MainActor (UsageProvider) async throws -> Void
     private let now: () -> Date
@@ -27,6 +28,8 @@ final class ProviderLoginSession: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor in await self?.refreshPendingLogins() }
             }
+        enablement = providers.$enabledProviders
+            .sink { [weak self] enabled in self?.forgetSignIns(except: enabled) }
     }
 
     func message(for provider: UsageProvider) -> String? { messages[provider] }
@@ -42,11 +45,20 @@ final class ProviderLoginSession: ObservableObject {
             defer { openingProviders.remove(provider) }
             do {
                 try await openLogin(provider)
+                guard providers.isEnabled(provider) else { return }
                 pendingLogins[provider] = attemptStartedAt
                 messages[provider] = "Finish signing in in Terminal, then refresh usage."
             } catch {
                 messages[provider] = error.localizedDescription
             }
+        }
+    }
+
+    /// A sign-in started before its provider was turned off no longer needs finishing.
+    private func forgetSignIns(except enabled: [UsageProvider]) {
+        for provider in UsageProvider.allCases where !enabled.contains(provider) {
+            pendingLogins[provider] = nil
+            messages[provider] = nil
         }
     }
 
@@ -57,7 +69,7 @@ final class ProviderLoginSession: ObservableObject {
     }
 
     func refresh(_ provider: UsageProvider) async {
-        guard refreshingProviders.insert(provider).inserted else { return }
+        guard providers.isEnabled(provider), refreshingProviders.insert(provider).inserted else { return }
         defer { refreshingProviders.remove(provider) }
         let monitor = providers.monitor(for: provider)
         let didFetch = await monitor.refresh()

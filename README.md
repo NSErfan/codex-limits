@@ -38,6 +38,12 @@ Each provider refreshes independently,
 with separate saved readings, history, and chart preferences; Codex and Claude Code also have weekly
 widgets. Your existing Codex history stays in place.
 
+Turn providers you don't use on or off in **Settings → Providers**. A turned-off provider disappears
+from the menu selector, **Accounts**, and **History sync**, and it isn't checked, including by the
+background helper. Its saved readings and history are kept for when you turn it back on, and its
+desktop widgets say **Turned off in Codex Limits** instead of showing an old reading. At least one
+provider stays on; when only one is on, the menu hides the provider selector.
+
 <details>
 <summary>Menu-bar appearance options</summary>
 <p align="center">
@@ -236,7 +242,7 @@ when their saved window can be identified unambiguously.
 
 ## Features
 
-- Switches between Codex, Claude Code, and Copilot, with each provider’s account and model-specific limits.
+- Switches between Codex, Claude Code, and Copilot, with each provider’s account and model-specific limits; turn off the ones you don't use.
 - Shows five-hour and weekly balances together, with separately selectable charts and pacing targets, plus Copilot's monthly allowance.
 - Saves each account period's history and a separate weekly history for widgets.
 - Estimates the percentage left at reset from current and past use.
@@ -252,14 +258,14 @@ when their saved window can be identified unambiguously.
 
 In Settings, **Collect usage while the app is closed** controls a bundled background helper. On first app launch, Codex Limits attempts to register it automatically; macOS may require approval in **System Settings → Login Items**. Settings reports when approval is needed or registration fails.
 
-The helper runs a single collection on a 15-minute schedule, writing five-hour, weekly, and Copilot monthly histories and weekly widget data. Codex and Copilot keep their ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and failure cooldowns, so simultaneous checks send only one request. Each provider is checked independently, so one provider’s failed login does not prevent the other from updating. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
+The helper runs a single collection on a 15-minute schedule, writing five-hour, weekly, and Copilot monthly histories and weekly widget data. Codex and Copilot keep their ten-minute menu-app schedule. Claude's app and collector share cached readings, request spacing, and failure cooldowns, so simultaneous checks send only one request. Each turned-on provider is checked independently, so one provider’s failed login does not prevent the others from updating; turned-off providers are skipped. Background execution depends on macOS scheduling and valid provider credentials; it is not continuous polling while the Mac sleeps.
 
 Install the app in `/Applications` before enabling background collection, since registration uses the app bundle's location. **Launch at login** is a separate setting for the menu-bar app.
 
 ## Model and effort activity
 
-Open **Activity** from the menu-bar window to inspect local Codex token activity in
-a separate, resizable window. While Activity is open (including minimized), Codex
+Open **Activity** from the Codex menu to inspect local Codex token activity in
+a separate, resizable window. Activity is available while Codex is on; turning Codex off closes it. While Activity is open (including minimized), Codex
 Limits appears in the Dock and Command-Tab. Closing Activity restores menu-bar-only
 mode. Choose Window, 7 days, or 30 days, then group events
 into 30-minute, hourly, six-hour, or daily intervals. Model and reasoning-effort
@@ -327,7 +333,7 @@ Daily pace spreads the allowance left after your safety buffer over the actual t
 provider's reset; it is expressed as percentage points of the full weekly allowance per day.
 Each provider's pace is hidden once its reading is stale, and its balance is hidden after its reset.
 Older saved readings show their balance and ask you to refresh for pace advice.
-Clicking the small widget opens Codex's weekly chart; each provider section in the large widget opens its own chart.
+Clicking the small widget opens Codex's weekly chart, or Claude Code's when Codex is off; each provider section in the large widget opens its own chart. A provider turned off in **Settings → Providers** shows **Turned off in Codex Limits** in every widget, and clicking it opens the app on a provider that is on.
 
 **Weekly Percentage** and **Claude Weekly Percentage** show the percentage of the selected provider’s weekly limit remaining,
 with a segmented balance indicator. **Weekly Graph** and **Claude Weekly Graph** add the current week's

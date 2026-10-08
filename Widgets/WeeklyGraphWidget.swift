@@ -7,7 +7,7 @@ struct WeeklyGraphWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: WeeklyWidgetProvider()) { entry in
-            WeeklyGraphView(snapshot: entry.snapshot, date: entry.date)
+            WeeklyGraphView(snapshot: entry.snapshot, date: entry.date, isTurnedOff: entry.isTurnedOff)
                 .containerBackground(for: .widget) {
                     UsageSurfaceBackground(remaining: entry.snapshot?.window?.remainingPercent)
                         .environment(\.usageAccent, entry.accent)

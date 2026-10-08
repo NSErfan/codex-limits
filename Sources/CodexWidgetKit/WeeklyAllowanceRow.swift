@@ -5,6 +5,8 @@ struct WeeklyAllowanceRow: View {
     let date: Date
     let provider: UsageProvider
     let expanded: Bool
+    /// The provider is turned off in the app; the caller passes no snapshot.
+    var isTurnedOff = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.usageAccent) private var usageAccent
 
@@ -17,7 +19,7 @@ struct WeeklyAllowanceRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
                 Spacer(minLength: 2)
-                Text(status == .stale ? "Saved" : "Weekly")
+                Text(isTurnedOff ? "Off" : status == .stale ? "Saved" : "Weekly")
                     .font(.system(size: expanded ? 9 : 8, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -74,6 +76,7 @@ struct WeeklyAllowanceRow: View {
     }
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var paceText: String {
+        if isTurnedOff { return "Turned off in Codex Limits" }
         if let pace = snapshot?.suggestedDailyPercent(at: date) {
             let roundedDown = floor(pace * 10) / 10
             return "\(roundedDown.formatted(.number.precision(.fractionLength(1))))%/day"

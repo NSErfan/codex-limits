@@ -61,6 +61,8 @@ enum WidgetPreviewRenderer {
             row(snapshot: snapshot, date: now.addingTimeInterval(2_000), scheme: .dark, provider: provider)
             row(snapshot: snapshot, date: now.addingTimeInterval(5 * 86_400), scheme: .dark, provider: provider)
             row(snapshot: nil, date: now, scheme: .light, provider: provider)
+            row(snapshot: snapshot, date: now, scheme: .dark, provider: provider, isTurnedOff: true)
+            row(snapshot: snapshot, date: now, scheme: .light, provider: provider, isTurnedOff: true)
         }
         .padding(30)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -99,28 +101,43 @@ enum WidgetPreviewRenderer {
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.colorScheme, .dark)
         try render(states, to: directory.appendingPathComponent("combined-weekly-states.png"))
+        let turnedOff = HStack(alignment: .center, spacing: 20) {
+            ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                combined(codex: codex, claude: claude, date: date, family: .systemSmall, disabledProviders: [.claude])
+                    .environment(\.colorScheme, scheme)
+                combined(codex: codex, claude: claude, date: date, family: .systemLarge, disabledProviders: [.claude])
+                    .environment(\.colorScheme, scheme)
+            }
+        }
+        .padding(24)
+        .background(Color(nsColor: .windowBackgroundColor))
+        try render(turnedOff, to: directory.appendingPathComponent("combined-weekly-turned-off.png"))
     }
 
     @MainActor private static func combined(
-        codex: WeeklyWidgetSnapshot?, claude: WeeklyWidgetSnapshot?, date: Date, family: WidgetFamily
+        codex: WeeklyWidgetSnapshot?, claude: WeeklyWidgetSnapshot?, date: Date, family: WidgetFamily,
+        disabledProviders: Set<UsageProvider> = []
     ) -> some View {
-        CombinedWeeklyAllowanceView(codex: codex, claude: claude, date: date, expanded: family == .systemLarge)
+        CombinedWeeklyAllowanceView(codex: codex, claude: claude, date: date, expanded: family == .systemLarge,
+                                    disabledProviders: disabledProviders)
             .frame(width: family == .systemSmall ? 170 : 364, height: family == .systemSmall ? 170 : 382)
             .background { UsageSurfaceBackground(remaining: nil) }
             .clipShape(RoundedRectangle(cornerRadius: 23))
     }
 
     @MainActor private static func row(
-        snapshot: WeeklyWidgetSnapshot?, date: Date, scheme: ColorScheme, provider: UsageProvider
+        snapshot: WeeklyWidgetSnapshot?, date: Date, scheme: ColorScheme, provider: UsageProvider,
+        isTurnedOff: Bool = false
     ) -> some View {
-        HStack(spacing: 24) {
-            WeeklyPercentageView(snapshot: snapshot, date: date, provider: provider)
+        let remaining = isTurnedOff ? nil : snapshot?.window?.remainingPercent
+        return HStack(spacing: 24) {
+            WeeklyPercentageView(snapshot: snapshot, date: date, provider: provider, isTurnedOff: isTurnedOff)
                 .frame(width: 170, height: 170)
-                .background { UsageSurfaceBackground(remaining: snapshot?.window?.remainingPercent) }
+                .background { UsageSurfaceBackground(remaining: remaining) }
                 .clipShape(RoundedRectangle(cornerRadius: 23))
-            WeeklyGraphView(snapshot: snapshot, date: date, provider: provider)
+            WeeklyGraphView(snapshot: snapshot, date: date, provider: provider, isTurnedOff: isTurnedOff)
                 .frame(width: 364, height: 170)
-                .background { UsageSurfaceBackground(remaining: snapshot?.window?.remainingPercent) }
+                .background { UsageSurfaceBackground(remaining: remaining) }
                 .clipShape(RoundedRectangle(cornerRadius: 23))
         }
         .environment(\.colorScheme, scheme)

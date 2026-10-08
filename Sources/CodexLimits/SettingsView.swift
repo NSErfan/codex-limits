@@ -16,11 +16,20 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Providers") {
+                ForEach(UsageProvider.allCases) { provider in
+                    providerToggle(provider)
+                }
+                Text("Turned-off providers are hidden from the menu and aren’t checked, even in the background. Their saved history is kept, and their desktop widgets show that they’re off. Keep at least one provider on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Accounts") {
-                ProviderAccountSettings(monitor: providers.codex, login: login)
-                ProviderAccountSettings(monitor: providers.claude, login: login)
-                ProviderAccountSettings(monitor: providers.copilot, login: login)
-                Text("Uses your existing CLI sign-ins. Copilot uses the GitHub CLI (gh). Sign in opens the official CLI in Terminal.")
+                ForEach(providers.enabledProviders) { provider in
+                    ProviderAccountSettings(monitor: providers.monitor(for: provider), login: login)
+                }
+                Text(accountsCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -92,7 +101,10 @@ struct SettingsView: View {
             }
 
             Section("History sync") {
-                ProviderPicker(selection: $providers.selectedProvider)
+                ProviderPicker(
+                    selection: Binding(get: { providers.selectedProvider }, set: { providers.select($0) }),
+                    options: providers.enabledProviders
+                )
                 ProviderHistorySettings(monitor: providers.selectedMonitor)
             }
         }
@@ -101,6 +113,27 @@ struct SettingsView: View {
         .padding()
         .frame(width: 440)
         .frame(minHeight: 620, idealHeight: 800)
+    }
+
+    private func providerToggle(_ provider: UsageProvider) -> some View {
+        let isLastProviderOn = providers.enabledProviders == [provider]
+        return Toggle(isOn: Binding(
+            get: { providers.isEnabled(provider) },
+            set: { providers.setEnabled($0, for: provider) }
+        )) {
+            Label {
+                Text(provider.displayName)
+            } icon: {
+                ProviderIcon(provider: provider, size: 14)
+            }
+        }
+        .disabled(isLastProviderOn)
+        .help(isLastProviderOn ? "Keep at least one provider on." : "Show and check \(provider.displayName) usage.")
+    }
+
+    private var accountsCaption: String {
+        let gitHubCLI = providers.isEnabled(.copilot) ? " Copilot uses the GitHub CLI (gh)." : ""
+        return "Uses your existing CLI sign-ins.\(gitHubCLI) Sign in opens the official CLI in Terminal."
     }
 
     private func updateLaunchAtLogin(_ enabled: Bool) {

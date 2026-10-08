@@ -5,12 +5,18 @@ public struct CombinedWeeklyAllowanceView: View {
     public let claude: WeeklyWidgetSnapshot?
     public let date: Date
     public let expanded: Bool
+    /// Providers turned off in the app; their rows show no reading.
+    public let disabledProviders: Set<UsageProvider>
 
-    public init(codex: WeeklyWidgetSnapshot?, claude: WeeklyWidgetSnapshot?, date: Date, expanded: Bool = false) {
+    public init(
+        codex: WeeklyWidgetSnapshot?, claude: WeeklyWidgetSnapshot?, date: Date, expanded: Bool = false,
+        disabledProviders: Set<UsageProvider> = []
+    ) {
         self.codex = codex
         self.claude = claude
         self.date = date
         self.expanded = expanded
+        self.disabledProviders = disabledProviders
     }
 
     public var body: some View {
@@ -32,13 +38,14 @@ public struct CombinedWeeklyAllowanceView: View {
     }
 
     @ViewBuilder private func allowance(snapshot: WeeklyWidgetSnapshot?, provider: UsageProvider) -> some View {
-        if expanded, let url = URL(string: "codexlimits://usage/\(provider.rawValue)") {
-            Link(destination: url) {
-                WeeklyAllowanceRow(snapshot: snapshot, date: date, provider: provider, expanded: true)
-            }
-            .buttonStyle(.plain)
+        let isTurnedOff = disabledProviders.contains(provider)
+        let row = WeeklyAllowanceRow(snapshot: isTurnedOff ? nil : snapshot, date: date, provider: provider,
+                                     expanded: expanded, isTurnedOff: isTurnedOff)
+        if expanded, !isTurnedOff, let url = URL(string: "codexlimits://usage/\(provider.rawValue)") {
+            Link(destination: url) { row }
+                .buttonStyle(.plain)
         } else {
-            WeeklyAllowanceRow(snapshot: snapshot, date: date, provider: provider, expanded: false)
+            row
         }
     }
 }

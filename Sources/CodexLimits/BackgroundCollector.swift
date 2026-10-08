@@ -26,9 +26,8 @@ enum BackgroundCollector {
     private static func collectOnce() async -> Bool {
         // Must precede any preference or history access.
         LegacyBundleMigration.run()
-        var collectedAny = false
-        for provider in UsageProvider.allCases {
-            let collected = await collectOnce(
+        return await collectEnabledProviders(defaults: .standard) { provider in
+            await collectOnce(
                 defaults: .standard,
                 historyDirectory: UsageMonitor.historyDirectory(provider: provider),
                 provider: provider,
@@ -39,6 +38,17 @@ enum BackgroundCollector {
                     }
                 }
             )
+        }
+    }
+
+    /// Collects each provider that is on, in turn; true when any collection succeeded.
+    static func collectEnabledProviders(
+        defaults: UserDefaults,
+        collect: (UsageProvider) async -> Bool
+    ) async -> Bool {
+        var collectedAny = false
+        for provider in ProviderEnablement.enabledProviders(in: defaults) {
+            let collected = await collect(provider)
             collectedAny = collectedAny || collected
         }
         return collectedAny

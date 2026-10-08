@@ -4,13 +4,16 @@ public struct WeeklyGraphView: View {
     public let snapshot: WeeklyWidgetSnapshot?
     public let date: Date
     public let provider: UsageProvider
+    /// The provider is turned off in the app, so no reading is shown.
+    public let isTurnedOff: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.usageAccent) private var usageAccent
 
-    public init(snapshot: WeeklyWidgetSnapshot?, date: Date, provider: UsageProvider = .codex) {
-        self.snapshot = snapshot
+    public init(snapshot: WeeklyWidgetSnapshot?, date: Date, provider: UsageProvider = .codex, isTurnedOff: Bool = false) {
+        self.snapshot = isTurnedOff ? nil : snapshot
         self.date = date
         self.provider = provider
+        self.isTurnedOff = isTurnedOff
     }
 
     public var body: some View {
@@ -37,7 +40,7 @@ public struct WeeklyGraphView: View {
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    Text(status == .stale ? "at last update" : "remaining")
+                    Text(isTurnedOff ? "turned off" : status == .stale ? "at last update" : "remaining")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 8)
@@ -83,10 +86,10 @@ public struct WeeklyGraphView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 7) {
-                Image(systemName: status == .expired ? "arrow.clockwise" : "chart.xyaxis.line")
+                Image(systemName: isTurnedOff ? "power" : status == .expired ? "arrow.clockwise" : "chart.xyaxis.line")
                     .font(.system(size: 20, weight: .light))
                     .foregroundStyle(accent)
-                Text(status == .expired ? "New reading needed" : "Weekly usage unavailable")
+                Text(isTurnedOff ? "Turned off in Codex Limits" : status == .expired ? "New reading needed" : "Weekly usage unavailable")
                     .font(.system(size: 11, weight: .medium))
                 Text(emptyStateHint)
                     .font(.system(size: 10))
@@ -103,6 +106,9 @@ public struct WeeklyGraphView: View {
     }
     private var accent: Color { UsageChartStyle.accent(for: remaining, scheme: scheme, selection: usageAccent) }
     private var emptyStateHint: String {
+        if isTurnedOff {
+            return "Turn \(provider.displayName) on in Codex Limits Settings to see its weekly allowance."
+        }
         if provider != .codex, snapshot == nil {
             return "Open Codex Limits to connect \(provider.displayName) and refresh usage."
         }
@@ -110,6 +116,7 @@ public struct WeeklyGraphView: View {
     }
     private var resetText: String {
         guard remaining != nil, let reset = snapshot?.window?.resetsAt else {
+            if isTurnedOff { return "Not checked" }
             return status == .expired ? "Reset time passed" : "Weekly limit"
         }
         let seconds = max(0, reset.timeIntervalSince(date))

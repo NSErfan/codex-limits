@@ -5,6 +5,7 @@ import SwiftUI
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
     @Binding var selectedProvider: UsageProvider
+    var providerOptions: [UsageProvider]
     var onSignIn: () -> Void
     var loginMessage: String?
     var isOpeningLogin: Bool
@@ -20,6 +21,7 @@ struct MenuContentView: View {
     init(
         monitor: UsageMonitor,
         selectedProvider: Binding<UsageProvider>? = nil,
+        providerOptions: [UsageProvider] = UsageProvider.allCases,
         onSignIn: @escaping () -> Void = {},
         loginMessage: String? = nil,
         isOpeningLogin: Bool = false,
@@ -30,6 +32,7 @@ struct MenuContentView: View {
         self.monitor = monitor
         self.defaults = defaults
         _selectedProvider = selectedProvider ?? .constant(monitor.provider)
+        self.providerOptions = providerOptions
         self.onSignIn = onSignIn
         self.loginMessage = loginMessage
         self.isOpeningLogin = isOpeningLogin
@@ -40,7 +43,7 @@ struct MenuContentView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            ProviderPicker(selection: $selectedProvider)
+            ProviderPicker(selection: $selectedProvider, options: providerOptions)
                 .frame(maxWidth: 320)
             if let snapshot = monitor.snapshot {
                 TimelineView(.periodic(from: .now, by: 60)) { context in

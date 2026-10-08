@@ -34,7 +34,7 @@ final class UsageMonitor: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var recoveryTask: Task<Void, Never>?
     private var automaticRefreshTask: Task<Void, Never>?
-    private var started = false
+    private var lifecycle = Lifecycle.idle
     private var historyPrepared = false
     private var historyUsesFiles = false
     private var periodHistoryUsesFiles = false
@@ -112,6 +112,8 @@ final class UsageMonitor: ObservableObject {
 
         if startsAutomatically {
             Task { [weak self] in
+                // A stop() before this task runs, such as for a turned-off provider, wins.
+                guard self?.lifecycle == .idle else { return }
                 await self?.start()
             }
         }
@@ -168,17 +170,17 @@ final class UsageMonitor: ObservableObject {
         }
     }
 
+    /// Begins automatic refreshes and refreshes once. Subscriptions are made before
+    /// any suspension, so a stop() that arrives while that refresh runs always wins.
     func start() async {
-        guard !started else { return }
-        started = true
-
-        await prepareHistory()
+        guard lifecycle != .running else { return }
+        lifecycle = .running
 
         if provider.refreshSchedule == .fixedInterval {
             Timer.publish(every: provider.refreshInterval, on: .main, in: .common)
                 .autoconnect()
                 .sink { [weak self] _ in
-                    Task { @MainActor in await self?.refresh() }
+                    Task { @MainActor in await self?.refreshAutomatically() }
                 }
                 .store(in: &cancellables)
         }
@@ -186,10 +188,26 @@ final class UsageMonitor: ObservableObject {
         NSWorkspace.shared.notificationCenter
             .publisher(for: NSWorkspace.didWakeNotification)
             .sink { [weak self] _ in
-                Task { @MainActor in await self?.refresh() }
+                Task { @MainActor in await self?.refreshAutomatically() }
             }
             .store(in: &cancellables)
 
+        await refresh()
+    }
+
+    /// Ends automatic refreshes and retries, and refuses later refreshes until start().
+    /// A fetch already in progress still completes and saves its reading.
+    func stop() {
+        lifecycle = .stopped
+        cancellables.removeAll()
+        automaticRefreshTask?.cancel()
+        automaticRefreshTask = nil
+        recoveryTask?.cancel()
+        recoveryTask = nil
+    }
+
+    private func refreshAutomatically() async {
+        guard lifecycle == .running else { return }
         await refresh()
     }
 
@@ -202,7 +220,7 @@ final class UsageMonitor: ObservableObject {
 
     @discardableResult
     private func refresh(recoveryAttempt: Int) async -> Bool {
-        guard !isRefreshing else { return false }
+        guard lifecycle != .stopped, !isRefreshing else { return false }
         isRefreshing = true
         var nextAutomaticRefresh: Date?
         defer {
@@ -214,6 +232,8 @@ final class UsageMonitor: ObservableObject {
         if !historyUsesFiles || !periodHistoryUsesFiles {
             await loadHistory()
         }
+        // stop() may have arrived while history loaded; only a fetch already started may finish.
+        guard lifecycle != .stopped else { return false }
 
         let fetchUsage = self.fetchUsage
         let fetchTask = Task { try await fetchUsage() }
@@ -285,21 +305,22 @@ final class UsageMonitor: ObservableObject {
     }
 
     private func scheduleAutomaticRefresh(at date: Date?) {
-        guard started, provider.refreshSchedule == .fetchDeadline else { return }
+        guard lifecycle == .running, provider.refreshSchedule == .fetchDeadline else { return }
         automaticRefreshTask?.cancel()
         // Long server deadlines remain in the shared gate; wake at least daily
         // to re-read them without converting an unbounded header into Duration.
         let delay = min(max(date?.timeIntervalSinceNow ?? provider.refreshInterval, 1), 86_400)
         automaticRefreshTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
-            guard let self else { return }
+            guard let self, lifecycle == .running else { return }
             automaticRefreshTask = nil
             await refresh()
         }
     }
 
     private func scheduleRecovery(afterFailedAttempt attempt: Int) {
-        guard attempt < recoveryDelaysNanoseconds.count else { return }
+        // Monitors that were never started still retry; only stop() ends retries.
+        guard lifecycle != .stopped, attempt < recoveryDelaysNanoseconds.count else { return }
         let delay = recoveryDelaysNanoseconds[attempt]
         let sleepBeforeRecovery = self.sleepBeforeRecovery
         recoveryTask?.cancel()
@@ -542,6 +563,14 @@ final class UsageMonitor: ObservableObject {
             )
             .appendingPathComponent(provider.localHistoryDirectoryName, isDirectory: true)
     }
+}
+
+private enum Lifecycle {
+    /// Created without automatic refreshes; manual refreshes and retries still run.
+    case idle
+    case running
+    /// Turned off: no automatic, manual, or retry refreshes.
+    case stopped
 }
 
 private struct StoredState: Codable {

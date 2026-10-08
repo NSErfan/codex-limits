@@ -166,6 +166,20 @@ enum MenuPreviewRenderer {
         }
         .padding(24).background(Color.gray.opacity(0.15))
         try render(settingsPreview, to: output.appendingPathComponent("accent-settings.png"))
+        providers.setEnabled(false, for: .copilot)
+        try render(settingsPreview, to: output.appendingPathComponent("settings-providers.png"))
+        providers.setEnabled(false, for: .claude)
+        try render(HStack(alignment: .top, spacing: 24) {
+            ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
+                MenuContentView(monitor: monitor, providerOptions: providers.enabledProviders,
+                                refreshesOnAppear: false, defaults: defaults)
+                    .defaultAppStorage(defaults)
+                    .environment(\.colorScheme, scheme)
+                    .clipShape(RoundedRectangle(cornerRadius: 23))
+            }
+        }.padding(24).background(Color.gray.opacity(0.15)), to: output.appendingPathComponent("menu-single-provider.png"))
+        providers.setEnabled(true, for: .claude)
+        providers.setEnabled(true, for: .copilot)
 
         let targetPicker = HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in

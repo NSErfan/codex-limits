@@ -8,6 +8,7 @@ struct WeeklyWidgetProvider: TimelineProvider {
         let date: Date
         let snapshot: WeeklyWidgetSnapshot?
         var accent: UsageAccent = .automatic
+        var isTurnedOff = false
     }
 
     func placeholder(in context: Context) -> Entry {
@@ -16,14 +17,20 @@ struct WeeklyWidgetProvider: TimelineProvider {
 
     func getSnapshot(in context: Context, completion: @escaping (Entry) -> Void) {
         let store = WeeklyWidgetStore.shared(provider: provider)
-        let snapshot = context.isPreview ? WeeklyWidgetSnapshot.preview() : store?.read()
-        completion(Entry(date: .now, snapshot: snapshot, accent: store?.readAccent() ?? .automatic))
+        if context.isPreview {
+            completion(Entry(date: .now, snapshot: .preview(), accent: store?.readAccent() ?? .automatic))
+            return
+        }
+        let isTurnedOff = store?.readDisabledProviders().contains(provider) == true
+        completion(Entry(date: .now, snapshot: isTurnedOff ? nil : store?.read(),
+                         accent: store?.readAccent() ?? .automatic, isTurnedOff: isTurnedOff))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         let now = Date()
         let store = WeeklyWidgetStore.shared(provider: provider)
-        let snapshot = store?.read()
+        let isTurnedOff = store?.readDisabledProviders().contains(provider) == true
+        let snapshot = isTurnedOff ? nil : store?.read()
         let accent = store?.readAccent() ?? .automatic
         var dates = [now]
         if let snapshot {
@@ -33,7 +40,7 @@ struct WeeklyWidgetProvider: TimelineProvider {
             if staleAt > now { dates.append(staleAt) }
             if let reset = snapshot.window?.resetsAt, reset > now { dates.append(reset) }
         }
-        let entries = dates.sorted().map { Entry(date: $0, snapshot: snapshot, accent: accent) }
+        let entries = dates.sorted().map { Entry(date: $0, snapshot: snapshot, accent: accent, isTurnedOff: isTurnedOff) }
         completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
     }
 }
