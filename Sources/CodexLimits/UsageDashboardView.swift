@@ -147,10 +147,11 @@ struct UsageDashboardView: View {
                     Text(StatusText.pace(
                         recommendedPercentPerDay: forecast.recommendedPercentPerDay,
                         deadline: paceDeadline,
-                        now: snapshot.fetchedAt
+                        now: snapshot.fetchedAt,
+                        targetName: paceDeadline == window.resetsAt ? "reset" : "target"
                     ))
                 }
-                .help("Average usage that would leave your \(Int(safetyBuffer.rounded()))% reserve at \(paceDeadline.formatted(date: .abbreviated, time: .shortened)). Percentages refer to the full allowance for this period.")
+                .help("Usage budget that would leave your \(Int(safetyBuffer.rounded()))% reserve at \(paceDeadline.formatted(date: .abbreviated, time: .shortened)). Percentages refer to the full allowance for this period.")
                 if !resetCredits.isEmpty {
                     GridRow(alignment: .firstTextBaseline) {
                         Text("Banked resets")

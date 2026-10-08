@@ -139,6 +139,99 @@ final class StatusTextTests: XCTestCase {
         )
     }
 
+    func testFinalHourBudgetShowsSpendableAllowanceInsteadOfExtrapolatedRate() {
+        let deadline = fetchedAt.addingTimeInterval(51 / 159.7 * 3_600)
+        let window = UsageWindow(remainingPercent: 54, resetsAt: deadline, durationMinutes: 300)
+        let forecast = ForecastEngine.evaluate(
+            window: window, samples: [], tokenHistory: [], safetyBuffer: 3,
+            now: fetchedAt, previousStatus: nil
+        )
+
+        XCTAssertEqual(forecast.recommendedPercentPerDay / 24, 159.7, accuracy: 0.0001)
+        XCTAssertEqual(
+            StatusText.pace(
+                recommendedPercentPerDay: forecast.recommendedPercentPerDay,
+                deadline: deadline, now: fetchedAt
+            ),
+            "Up to 51.0% before reset"
+        )
+    }
+
+    func testFinalHourBudgetPreservesReserveEvenSecondsBeforeReset() {
+        for timeLeft: TimeInterval in [3_599, 60, 1] {
+            let deadline = fetchedAt.addingTimeInterval(timeLeft)
+            let window = UsageWindow(remainingPercent: 54, resetsAt: deadline, durationMinutes: 300)
+            let forecast = ForecastEngine.evaluate(
+                window: window, samples: [], tokenHistory: [], safetyBuffer: 10,
+                now: fetchedAt, previousStatus: nil
+            )
+
+            XCTAssertEqual(
+                StatusText.pace(
+                    recommendedPercentPerDay: forecast.recommendedPercentPerDay,
+                    deadline: deadline, now: fetchedAt
+                ),
+                "Up to 44.0% before reset"
+            )
+        }
+    }
+
+    func testBudgetStaysHourlyAtExactlyOneHour() {
+        XCTAssertEqual(
+            StatusText.pace(
+                recommendedPercentPerDay: 51 * 24,
+                deadline: fetchedAt.addingTimeInterval(3_600), now: fetchedAt
+            ),
+            "Up to 51.0% an hour"
+        )
+    }
+
+    func testFinalHourBudgetHasNoHeadroomAtOrBelowReserve() {
+        let deadline = fetchedAt.addingTimeInterval(60)
+        for remainingPercent in [0.0, 2, 3] {
+            let window = UsageWindow(remainingPercent: remainingPercent, resetsAt: deadline, durationMinutes: 300)
+            let forecast = ForecastEngine.evaluate(
+                window: window, samples: [], tokenHistory: [], safetyBuffer: 3,
+                now: fetchedAt, previousStatus: nil
+            )
+
+            XCTAssertEqual(
+                StatusText.pace(
+                    recommendedPercentPerDay: forecast.recommendedPercentPerDay,
+                    deadline: deadline, now: fetchedAt
+                ),
+                "Up to 0.0% before reset"
+            )
+        }
+    }
+
+    func testElapsedDeadlineHasNoNegativeBudget() {
+        for deadline in [fetchedAt, fetchedAt.addingTimeInterval(-60)] {
+            XCTAssertEqual(
+                StatusText.pace(recommendedPercentPerDay: 24, deadline: deadline, now: fetchedAt),
+                "Up to 0.0% before reset"
+            )
+        }
+    }
+
+    func testFinalHourBudgetNamesEarlierPacingTarget() {
+        let reset = fetchedAt.addingTimeInterval(3 * day)
+        let deadline = fetchedAt.addingTimeInterval(20 * 60)
+        let window = UsageWindow(remainingPercent: 54, resetsAt: reset, durationMinutes: 10_080)
+        let forecast = ForecastEngine.evaluate(
+            window: window, samples: [], tokenHistory: [], safetyBuffer: 3,
+            now: fetchedAt, previousStatus: nil, deadline: deadline
+        )
+
+        XCTAssertEqual(
+            StatusText.pace(
+                recommendedPercentPerDay: forecast.recommendedPercentPerDay,
+                deadline: deadline, now: fetchedAt, targetName: "target"
+            ),
+            "Up to 51.0% before target"
+        )
+    }
+
     func testDurationsPluralize() {
         XCTAssertEqual(StatusText.duration(30 * 60), "1 hour")
         XCTAssertEqual(StatusText.duration(5 * 3_600), "5 hours")
