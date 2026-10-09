@@ -6,6 +6,7 @@ struct CodexLimitsApp: App {
     @StateObject private var providers: UsageProviders
     @StateObject private var login: ProviderLoginSession
     @StateObject private var appearance: AppearanceSettings
+    @State private var settingsWindowPresenter = SettingsWindowPresenter()
 
     init() {
         // Must precede any preference or history access.
@@ -36,7 +37,8 @@ struct CodexLimitsApp: App {
                 providerOptions: providers.enabledProviders,
                 onSignIn: { login.signIn(to: providers.selectedProvider) },
                 loginMessage: login.message(for: providers.selectedProvider),
-                isOpeningLogin: login.isOpening(providers.selectedProvider)
+                isOpeningLogin: login.isOpening(providers.selectedProvider),
+                settingsWindowPresenter: settingsWindowPresenter
             )
                 .id(providers.selectedProvider)
                 .environment(\.usageAccent, appearance.accent)
@@ -59,6 +61,7 @@ struct CodexLimitsApp: App {
         Settings {
             SettingsView(providers: providers, appearance: appearance, login: login)
                 .environment(\.usageAccent, appearance.accent)
+                .background(SettingsWindowRegistration(presenter: settingsWindowPresenter))
         }
     }
 }

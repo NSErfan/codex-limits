@@ -12,6 +12,7 @@ struct MenuContentView: View {
     var showsFooterActions: Bool
     var refreshesOnAppear: Bool
     private let defaults: UserDefaults
+    private let settingsWindowPresenter: SettingsWindowPresenter?
     @AppStorage private var savedPeriod: String
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
@@ -27,10 +28,12 @@ struct MenuContentView: View {
         isOpeningLogin: Bool = false,
         showsFooterActions: Bool = true,
         refreshesOnAppear: Bool = true,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        settingsWindowPresenter: SettingsWindowPresenter? = nil
     ) {
         self.monitor = monitor
         self.defaults = defaults
+        self.settingsWindowPresenter = settingsWindowPresenter
         _selectedProvider = selectedProvider ?? .constant(monitor.provider)
         self.providerOptions = providerOptions
         self.onSignIn = onSignIn
@@ -202,11 +205,10 @@ struct MenuContentView: View {
                 activityButton
             }
             Button {
-                openSettings()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    NSApp.windows.first {
-                        $0.isVisible && $0.styleMask.contains(.titled)
-                    }?.orderFrontRegardless()
+                if let settingsWindowPresenter {
+                    settingsWindowPresenter.open { openSettings() }
+                } else {
+                    openSettings()
                 }
             } label: {
                 Label("Settings", systemImage: "gearshape")
