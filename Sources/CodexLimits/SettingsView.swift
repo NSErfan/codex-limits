@@ -47,6 +47,22 @@ struct SettingsView: View {
                 Text("The usage percentage is always shown.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if !menuBarWindowProviders.isEmpty {
+                    ForEach(menuBarWindowProviders) { provider in
+                        Picker("\(provider.displayName) usage window", selection: Binding(
+                            get: { appearance.menuBarUsageWindow(for: provider) },
+                            set: { appearance.setMenuBarUsageWindow($0, for: provider) }
+                        )) {
+                            ForEach(MenuBarUsageWindow.options(for: provider)) { selection in
+                                Text(selection.title).tag(selection)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                    Text("Automatic shows the account window with the lowest percentage remaining. A fixed window shows — when its usage is unavailable.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 AccentColorPicker(appearance: appearance)
             }
 
@@ -113,6 +129,10 @@ struct SettingsView: View {
         .padding()
         .frame(width: 440)
         .frame(minHeight: 620, idealHeight: 800)
+    }
+
+    private var menuBarWindowProviders: [UsageProvider] {
+        providers.enabledProviders.filter { MenuBarUsageWindow.options(for: $0).count > 1 }
     }
 
     private func providerToggle(_ provider: UsageProvider) -> some View {

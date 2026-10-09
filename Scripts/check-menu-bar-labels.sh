@@ -27,21 +27,49 @@ xcrun swiftc -parse-as-library -target "$(uname -m)-apple-macosx14.0" \
     -o "$probe_bundle/Contents/MacOS/MenuBarLabelProbe"
 ditto "$bin_dir/CodexLimits_CodexWidgetKit.bundle" "$probe_bundle/Contents/Resources/CodexLimits_CodexWidgetKit.bundle"
 codesign --force --sign - "$probe_bundle"
+suite="MenuBarLabelProbe.$(uuidgen)"
+trap '"$probe_bundle/Contents/MacOS/MenuBarLabelProbe" --cleanup "$suite"' EXIT
+launch_count=0
+
+run_probe() {
+    local provider=$1 mode=$2 selection=$3 fixture=$4 phase=${5:-single}
+    local scenario="$output/$provider-$mode-$selection-$fixture-$phase"
+    mkdir -p "$scenario"
+    rm -f "$scenario/result.txt"
+    open -n -W "$probe_bundle" --args "$provider" "$mode" "$scenario" "$selection" "$fixture" "$suite" "$phase"
+    if [[ ! -f "$scenario/result.txt" ]] || ! rg --quiet '^PASS:' "$scenario/result.txt"; then
+        print -u2 -- "Native menu-bar check failed: $scenario"
+        if [[ -f "$scenario/result.txt" ]]; then cat "$scenario/result.txt" >&2; fi
+        return 1
+    fi
+    rg '^PASS:' "$scenario/result.txt"
+    launch_count=$((launch_count + 1))
+}
+
 for provider in codex claude copilot; do
+    selections=(automatic)
+    if [[ "$provider" != copilot ]]; then selections+=(fiveHour weekly); fi
     for mode in iconOnly textOnly iconAndText; do
-        scenario="$output/$provider-$mode"
-        mkdir -p "$scenario"
-        rm -f "$scenario/result.txt"
-        open -n -W "$probe_bundle" --args "$provider" "$mode" "$scenario"
-        title="46%"
-        if [[ "$mode" != iconOnly ]]; then
-            case "$provider" in
-                codex) title="Codex 46%" ;;
-                claude) title="Claude Code 46%" ;;
-                copilot) title="Copilot 46%" ;;
-            esac
+        for selection in "${selections[@]}"; do
+            run_probe "$provider" "$mode" "$selection" complete
+        done
+        run_probe "$provider" "$mode" automatic unavailable
+        if [[ "$provider" != copilot ]]; then
+            run_probe "$provider" "$mode" automatic fiveHourLowest
+            run_probe "$provider" "$mode" fiveHour missingFiveHour
+            run_probe "$provider" "$mode" weekly missingWeekly
+            run_probe "$provider" "$mode" fiveHour unavailable
+            run_probe "$provider" "$mode" weekly unavailable
+            run_probe "$provider" "$mode" automatic complete switching
         fi
-        if [[ "$mode" == textOnly ]]; then image="nil"; else image="Optional((25.0, 18.0))"; fi
-        rg --fixed-strings "button title: $title; image: $image;" "$scenario/result.txt"
     done
 done
+
+for provider in codex claude; do
+    for selection in fiveHour weekly; do
+        run_probe "$provider" iconOnly "$selection" complete write
+        run_probe "$provider" iconOnly "$selection" complete read
+    done
+done
+
+print -r -- "Passed $launch_count native menu-bar probe launches, including repeated switching and preferences read after relaunch."

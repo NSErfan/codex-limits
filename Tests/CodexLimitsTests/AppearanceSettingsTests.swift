@@ -35,6 +35,50 @@ final class AppearanceSettingsTests: XCTestCase {
         }
     }
 
+    func testUsageWindowsDefaultToAutomaticForMissingInvalidAndUnsupportedPreferences() throws {
+        let suite = UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for provider in UsageProvider.allCases {
+            XCTAssertEqual(AppearanceSettings(defaults: defaults, widgetStore: nil).menuBarUsageWindow(for: provider), .automatic)
+            defaults.set("unknown-window", forKey: provider.preferenceKey(AppearanceSettings.menuBarUsageWindowKey))
+            XCTAssertEqual(AppearanceSettings(defaults: defaults, widgetStore: nil).menuBarUsageWindow(for: provider), .automatic)
+        }
+        defaults.set("fiveHour", forKey: UsageProvider.copilot.preferenceKey(AppearanceSettings.menuBarUsageWindowKey))
+        let settings = AppearanceSettings(defaults: defaults, widgetStore: nil)
+        settings.setMenuBarUsageWindow(.weekly, for: .copilot)
+        XCTAssertEqual(settings.menuBarUsageWindow(for: .copilot), .automatic)
+    }
+
+    func testUsageWindowsSwitchRepeatedlyAndPersistIndependentlyAcrossRelaunch() throws {
+        let suite = UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = AppearanceSettings(defaults: defaults, widgetStore: nil)
+        settings.setAccent(.violet)
+        settings.setMenuBarDisplayMode(.iconAndText)
+        settings.setMenuBarUsageWindow(.weekly, for: .claude)
+
+        for selection in [MenuBarUsageWindow.fiveHour, .weekly, .automatic, .weekly, .fiveHour, .automatic] {
+            settings.setMenuBarUsageWindow(selection, for: .codex)
+            XCTAssertEqual(settings.menuBarUsageWindow(for: .codex), selection)
+            let relaunchedDefaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            let relaunched = AppearanceSettings(defaults: relaunchedDefaults, widgetStore: nil)
+            XCTAssertEqual(relaunched.menuBarUsageWindow(for: .codex), selection)
+            XCTAssertEqual(relaunched.menuBarUsageWindow(for: .claude), .weekly)
+            XCTAssertEqual(relaunched.menuBarUsageWindow(for: .copilot), .automatic)
+            XCTAssertEqual(relaunched.menuBarDisplayMode, .iconAndText)
+            XCTAssertEqual(relaunched.accent, .violet)
+        }
+        settings.setMenuBarUsageWindow(.fiveHour, for: .codex)
+        for selection in [MenuBarUsageWindow.weekly, .fiveHour, .automatic, .fiveHour, .weekly] {
+            settings.setMenuBarUsageWindow(selection, for: .claude)
+            let relaunched = AppearanceSettings(defaults: defaults, widgetStore: nil)
+            XCTAssertEqual(relaunched.menuBarUsageWindow(for: .claude), selection)
+            XCTAssertEqual(relaunched.menuBarUsageWindow(for: .codex), .fiveHour)
+        }
+    }
+
     func testSelectionPersistsAcrossRelaunchAndSharesWithWidgets() throws {
         let suite = UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!

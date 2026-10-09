@@ -3,6 +3,7 @@ import SwiftUI
 struct ProviderMenuLabel: View {
     @ObservedObject var monitor: UsageMonitor
     var displayMode: MenuBarDisplayMode = .iconOnly
+    var usageWindow: MenuBarUsageWindow = .automatic
 
     var body: some View {
         HStack(spacing: 2) {
@@ -23,13 +24,27 @@ struct ProviderMenuLabel: View {
 
     private var title: String {
         displayMode == .iconOnly
-            ? monitor.menuBarText
-            : "\(monitor.provider.displayName) \(monitor.menuBarText)"
+            ? menuBarText
+            : "\(monitor.provider.displayName) \(menuBarText)"
+    }
+
+    private var limit: LimitReading? {
+        usageWindow.limit(in: monitor.snapshot, provider: monitor.provider)
+    }
+
+    private var menuBarText: String {
+        let percentage = UsageMonitor.menuBarText(remainingPercent: limit?.window.remainingPercent)
+        return showsFixedWindow ? "\(usageWindow.shortTitle) \(percentage)" : percentage
+    }
+
+    private var showsFixedWindow: Bool {
+        usageWindow != .automatic && MenuBarUsageWindow.options(for: monitor.provider).contains(usageWindow)
     }
 
     private var usageDescription: String {
-        monitor.snapshot == nil
-            ? "\(monitor.provider.displayName): usage unavailable"
-            : "\(monitor.provider.displayName): \(monitor.menuBarText) remaining"
+        let windowName = showsFixedWindow ? "\(usageWindow.title) " : ""
+        let percentage = UsageMonitor.menuBarText(remainingPercent: limit?.window.remainingPercent)
+        let status = limit == nil ? "usage unavailable" : "\(percentage) remaining"
+        return "\(monitor.provider.displayName): \(windowName)\(status)"
     }
 }

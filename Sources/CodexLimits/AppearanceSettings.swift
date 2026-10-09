@@ -6,10 +6,13 @@ import Foundation
 final class AppearanceSettings: ObservableObject {
     static let preferenceKey = "usageAccent"
     static let menuBarDisplayModeKey = "menuBarDisplayMode"
+    static let menuBarUsageWindowKey = "menuBarUsageWindow"
 
     @Published private(set) var accent: UsageAccent
     @Published private(set) var menuBarDisplayMode: MenuBarDisplayMode
     @Published private(set) var widgetError: String?
+
+    @Published private var menuBarUsageWindows: [UsageProvider: MenuBarUsageWindow]
 
     private let defaults: UserDefaults
     private let widgetStore: WeeklyWidgetStore?
@@ -26,6 +29,12 @@ final class AppearanceSettings: ObservableObject {
         self.reloadWidgets = reloadWidgets
         menuBarDisplayMode = defaults.string(forKey: Self.menuBarDisplayModeKey)
             .flatMap(MenuBarDisplayMode.init(rawValue:)) ?? .iconOnly
+        menuBarUsageWindows = Dictionary(uniqueKeysWithValues: UsageProvider.allCases.map { provider in
+            let saved = defaults.string(forKey: provider.preferenceKey(Self.menuBarUsageWindowKey))
+                .flatMap(MenuBarUsageWindow.init(rawValue:)) ?? .automatic
+            let selection = MenuBarUsageWindow.options(for: provider).contains(saved) ? saved : .automatic
+            return (provider, selection)
+        })
         if let data = defaults.data(forKey: Self.preferenceKey),
            let saved = try? JSONDecoder().decode(UsageAccent.self, from: data), saved.isValid {
             accent = saved
@@ -48,6 +57,16 @@ final class AppearanceSettings: ObservableObject {
     func setMenuBarDisplayMode(_ mode: MenuBarDisplayMode) {
         defaults.set(mode.rawValue, forKey: Self.menuBarDisplayModeKey)
         menuBarDisplayMode = mode
+    }
+
+    func menuBarUsageWindow(for provider: UsageProvider) -> MenuBarUsageWindow {
+        menuBarUsageWindows[provider] ?? .automatic
+    }
+
+    func setMenuBarUsageWindow(_ selection: MenuBarUsageWindow, for provider: UsageProvider) {
+        guard MenuBarUsageWindow.options(for: provider).contains(selection) else { return }
+        defaults.set(selection.rawValue, forKey: provider.preferenceKey(Self.menuBarUsageWindowKey))
+        menuBarUsageWindows[provider] = selection
     }
 
     private func synchronizeWidgets() {

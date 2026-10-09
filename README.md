@@ -171,7 +171,7 @@ Each provider reports how much usage remains. That number does not tell you whet
 
 Open the menu to see:
 
-- Both five-hour and weekly percentages, with selectable charts for each. The menu-bar label continues to show the account window with the lowest remaining percentage.
+- Both five-hour and weekly percentages, with selectable charts for each. The menu-bar label defaults to the account window with the lowest remaining percentage. In **Settings → Appearance**, choose **Automatic**, **5-hour**, or **Weekly** independently for Codex and Claude Code. Selections are saved across relaunches. Fixed selections identify their window in the label, for example **5h 81%** or **Week 46%**. Unavailable selected usage shows **5h —** or **Week —**. Copilot continues to show its monthly allowance.
 - A status: `Slow down`, `On track`, or `Room to use more`.
 - A suggested hourly or daily pace.
 - Current and past use plotted against the target.
