@@ -50,7 +50,7 @@ struct ModelActivityView: View {
                             Text("6 hours").tag(6.0)
                             Text("1 day").tag(24.0)
                         }
-                        .frame(width: 160)
+                        .fixedSize()
                     }
                 }
                 .padding(26)
@@ -174,7 +174,7 @@ struct ModelActivityView: View {
                     Text("7 days").tag(7)
                     Text("30 days").tag(30)
                 }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 220)
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
             }
             HStack {
                 Text("Explore tokens recorded on this Mac by model and reasoning effort.")
