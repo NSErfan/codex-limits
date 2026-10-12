@@ -329,7 +329,7 @@ Review the resulting usage totals and dates before sharing.
 Widgets cover Codex and Claude Code; Copilot's monthly allowance is shown in the app only.
 
 **Claude + Codex allowance** shows both providers' account-wide weekly balances together.
-The small square keeps each balance and a compact **…%/day** suggested pace caption in view.
+The small square keeps each balance and a compact **…% / day** suggested pace caption in view.
 The large size adds each provider's recorded usage curve, pace status, and scheduled reset time.
 Daily pace spreads the allowance left after your safety buffer over the actual time until that
 provider's reset; it is expressed as percentage points of the full weekly allowance per day.

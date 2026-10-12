@@ -79,7 +79,7 @@ struct WeeklyAllowanceRow: View {
         if isTurnedOff { return "Turned off in Codex Limits" }
         if let pace = snapshot?.suggestedDailyPercent(at: date) {
             let roundedDown = floor(pace * 10) / 10
-            return "\(roundedDown.formatted(.number.precision(.fractionLength(1))))%/day"
+            return "\(roundedDown.formatted(.number.precision(.fractionLength(1))))% / day"
         }
         switch status {
         case .current: return "Refresh app for suggested pace"
