@@ -84,10 +84,38 @@ final class ClaudeClientTests: XCTestCase {
         }
     }
 
-    func testSignedOutCLIWithoutSubscriptionReportIsUnavailable() throws {
+    func testMissingSubscriptionReportIsUnavailable() throws {
         let data = try ClaudeUsageFixture.output(includeReport: false)
         XCTAssertThrowsError(try ClaudeClient.decode(data, fetchedAt: Self.fetchedAt)) {
             XCTAssertEqual($0 as? ClaudeClientError, .usageUnavailable)
+        }
+    }
+
+    func testSignedOutCLIRequiresSignInInsteadOfReportingUnavailableUsage() async throws {
+        let data = try ClaudeUsageFixture.output(includeReport: false)
+        for (signedOut, expected) in [(true, ClaudeClientError.credentialsMissing), (false, .usageUnavailable)] {
+            do {
+                _ = try await ClaudeClient.fetch(readAccount: { nil }, isSignedOut: { signedOut }) { data }
+                XCTFail("Expected missing usage")
+            } catch let error as ClaudeClientError {
+                XCTAssertEqual(error, expected)
+                XCTAssertEqual(error.requiresLogin, signedOut)
+            }
+        }
+    }
+
+    func testSignInStateIsOnlyCheckedWhenUsageIsMissing() async throws {
+        let snapshot = try await ClaudeClient.fetch(readAccount: { nil }, isSignedOut: Self.unexpectedSignInCheck) {
+            try ClaudeUsageFixture.output()
+        }
+        XCTAssertEqual(snapshot.mainLimit.window.remainingPercent, 66)
+        do {
+            _ = try await ClaudeClient.fetch(readAccount: { nil }, isSignedOut: Self.unexpectedSignInCheck) {
+                try ClaudeUsageFixture.output(turns: 1)
+            }
+            XCTFail("Expected rejected output")
+        } catch {
+            XCTAssertEqual(error as? ClaudeClientError, .cliUpdateRequired)
         }
     }
 
@@ -120,7 +148,7 @@ final class ClaudeClientTests: XCTestCase {
 
     func testSuccessfulSnapshotIsTimestampedWhenCommandCompletes() async throws {
         var currentDate = Self.fetchedAt
-        let snapshot = try await ClaudeClient.fetch(now: { currentDate }, readAccount: { nil }) {
+        let snapshot = try await ClaudeClient.fetch(now: { currentDate }, readAccount: { nil }, isSignedOut: { false }) {
             currentDate = Self.fetchedAt.addingTimeInterval(20)
             return try ClaudeUsageFixture.output()
         }
@@ -130,10 +158,17 @@ final class ClaudeClientTests: XCTestCase {
 
     func testCancellationIsPreserved() async {
         do {
-            _ = try await ClaudeClient.fetch(readAccount: { nil }) { throw CancellationError() }
+            _ = try await ClaudeClient.fetch(readAccount: { nil }, isSignedOut: Self.unexpectedSignInCheck) {
+                throw CancellationError()
+            }
             XCTFail("Expected cancellation")
         } catch is CancellationError {
         } catch { XCTFail("Expected CancellationError") }
+    }
+
+    private static func unexpectedSignInCheck() -> Bool {
+        XCTFail("Sign-in state should only be checked when subscription usage is missing")
+        return false
     }
 
     private func decode(_ limits: [[String: Any]]) throws -> UsageSnapshot {

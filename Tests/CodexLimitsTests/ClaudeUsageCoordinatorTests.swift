@@ -289,6 +289,34 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         XCTAssertEqual(try fetched(result).fetchedAt, context.clock.now)
     }
 
+    func testSignedOutCLIDoesNotDelayTheCheckAfterSigningIn() async throws {
+        let context = try Context()
+        defer { context.cleanUp() }
+        let firstAttemptAt = context.clock.now
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
+            Self.snapshot(at: context.clock.now)
+        }
+        context.clock.advance(by: 900)
+        do {
+            _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
+                throw ClaudeClientError.credentialsMissing
+            }
+            XCTFail("Expected sign-in failure")
+        } catch let error as ClaudeClientError {
+            XCTAssertEqual(error, .credentialsMissing)
+            XCTAssertTrue(error.requiresLogin)
+        }
+        let data = try Data(contentsOf: context.directory.appendingPathComponent("state.json"))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["lastAttemptAt"] as? Double, firstAttemptAt.timeIntervalSinceReferenceDate)
+
+        let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
+            Self.snapshot(at: context.clock.now)
+        }
+
+        XCTAssertEqual(try fetched(result).fetchedAt, context.clock.now)
+    }
+
     func testCancelledRequestRetainsPersistedReservation() async throws {
         let context = try Context()
         defer { context.cleanUp() }

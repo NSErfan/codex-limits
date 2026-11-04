@@ -203,7 +203,7 @@ final class AccountEmailTests: XCTestCase {
         before: ClaudeAccountReader.Account?, after: ClaudeAccountReader.Account?
     ) async throws -> UsageSnapshot {
         var account = before
-        return try await ClaudeClient.fetch(readAccount: { account }) {
+        return try await ClaudeClient.fetch(readAccount: { account }, isSignedOut: { false }) {
             account = after
             return try ClaudeUsageFixture.output()
         }

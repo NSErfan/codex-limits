@@ -4,6 +4,7 @@ enum ClaudeClient {
     static func fetch(
         now: () -> Date = Date.init,
         readAccount: () -> ClaudeAccountReader.Account? = { ClaudeAccountReader.read() },
+        isSignedOut: () async throws -> Bool,
         runCommand: () async throws -> Data
     ) async throws -> UsageSnapshot {
         try Task.checkCancellation()
@@ -11,7 +12,13 @@ enum ClaudeClient {
         let data = try await runCommand()
         try Task.checkCancellation()
         let email = account.flatMap { $0 == readAccount() ? $0.email : nil }
-        return try decode(data, fetchedAt: now(), accountEmail: email)
+        do {
+            return try decode(data, fetchedAt: now(), accountEmail: email)
+        } catch ClaudeClientError.usageUnavailable {
+            // A signed-out CLI still runs /usage, so only its sign-in state tells login apart from an outage.
+            if try await isSignedOut() { throw ClaudeClientError.credentialsMissing }
+            throw ClaudeClientError.usageUnavailable
+        }
     }
 
     static func decode(_ data: Data, fetchedAt: Date, accountEmail: String? = nil) throws -> UsageSnapshot {

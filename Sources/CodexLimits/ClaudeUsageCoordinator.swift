@@ -26,7 +26,10 @@ struct ClaudeUsageCoordinator: Sendable {
 
     func fetch() async throws -> UsageFetchResult {
         try await fetch(prepare: { try ClaudeUsageCommand.executable() }) { executable in
-            try await ClaudeClient.fetch { try await ClaudeUsageCommand.run(executable: executable) }
+            try await ClaudeClient.fetch(
+                isSignedOut: { try await ClaudeAuthStatus.isSignedOut(executable: executable) },
+                runCommand: { try await ClaudeUsageCommand.run(executable: executable) }
+            )
         }
     }
 
@@ -47,6 +50,7 @@ struct ClaudeUsageCoordinator: Sendable {
         // Missing CLI installations must not consume a refresh reservation.
         let prepared = try await prepare()
         try Task.checkCancellation()
+        let previousAttemptAt = state.lastAttemptAt
         state.lastAttemptAt = now()
         try writeState(state)
         do {
@@ -60,6 +64,11 @@ struct ClaudeUsageCoordinator: Sendable {
             state.authenticationFailure = nil
             try writeState(state)
             return .fetched(snapshot, nextRefreshAt: completedAt.addingTimeInterval(Self.minimumInterval))
+        } catch ClaudeClientError.credentialsMissing {
+            // A signed-out CLI can't request usage, so it must not delay the first check after signing in.
+            state.lastAttemptAt = previousAttemptAt
+            try writeState(state)
+            throw ClaudeClientError.credentialsMissing
         } catch let error as ClaudeClientError {
             let completedAt = now()
             let nextRefreshAt = completedAt.addingTimeInterval(Self.minimumInterval)

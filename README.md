@@ -80,6 +80,12 @@ This requires a recent CLI with structured `/usage` output (verified with Claude
 and session saving disabled. If structured output is unavailable, the app keeps its
 last reading and asks you to update Claude Code or check `/usage` in Terminal.
 
+A signed-out Claude Code CLI, including one whose saved login expired and couldn't be
+renewed, still answers `/usage`, but with local session costs instead of subscription usage.
+When that report lacks usage, the app checks `claude auth status` and, if the CLI reports no
+login, asks you to sign in instead of starting a cooldown. That check doesn't count toward the
+15-minute spacing, so the first refresh after signing in runs immediately.
+
 If sign-in is needed, use **Sign in** in the menu or **Settings → Accounts**. The app opens
 Terminal with the provider's official CLI login command. Complete that flow, then return
 to the app and refresh. Claude Code handles expired credentials during its normal login lifecycle;
@@ -96,8 +102,8 @@ history or widget data.
 
 Claude requests are spaced at least **15 minutes apart**, shared by the menu app and
 background collector for the same CLI profile on this Mac. Opening the menu, waking
-the Mac, and pressing Refresh reuse the saved reading during that interval. If the CLI
-returns a report without current usage rows, the app waits 30 minutes, then 60 minutes,
+the Mac, and pressing Refresh reuse the saved reading during that interval. If a signed-in
+CLI returns a report without current usage rows, the app waits 30 minutes, then 60 minutes,
 then up to two hours after consecutive failures. The CLI does not expose HTTP
 `Retry-After` headers through this report, so the app uses these conservative delays.
 The saved cooldown survives relaunches, and the menu and Accounts show when another
