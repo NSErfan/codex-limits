@@ -514,5 +514,6 @@ final class UsageProvidersTests: XCTestCase {
 
         var shouldRetryAutomatically: Bool { false }
         var requiresLogin: Bool { self == .loginRequired }
+        var requiresInstallation: Bool { false }
     }
 }

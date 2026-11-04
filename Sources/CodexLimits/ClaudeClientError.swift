@@ -70,4 +70,6 @@ enum ClaudeClientError: UsageFetchError, Equatable, Sendable {
             false
         }
     }
+
+    var requiresInstallation: Bool { self == .cliNotFound }
 }

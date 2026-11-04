@@ -52,6 +52,11 @@ enum CodexClientError: UsageFetchError, Sendable {
         }
     }
 
+    var requiresInstallation: Bool {
+        if case .cliNotFound = self { return true }
+        return false
+    }
+
     private static func appServerMessage(_ message: String) -> String {
         let detail = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !detail.isEmpty else {

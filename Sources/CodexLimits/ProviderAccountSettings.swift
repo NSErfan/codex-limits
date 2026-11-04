@@ -44,7 +44,7 @@ struct ProviderAccountSettings: View {
             if let message = login.message(for: monitor.provider) {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-            if monitor.requiresLogin {
+            if monitor.requiresInstallation {
                 Link("Install \(monitor.provider.cliDisplayName)", destination: ProviderLogin.installationURL(for: monitor.provider))
                     .font(.caption)
             }

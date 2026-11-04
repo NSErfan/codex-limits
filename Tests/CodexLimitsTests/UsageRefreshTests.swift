@@ -86,6 +86,35 @@ final class UsageRefreshTests: XCTestCase {
         XCTAssertNotNil(monitor.refreshMessage)
     }
 
+    func testInstallationIsOnlyOfferedWhenTheCLIIsMissing() async throws {
+        let context = try Context()
+        defer { context.cleanUp() }
+        let saved = context.snapshot()
+        let failures = Failures([ClaudeClientError.credentialsMissing, ClaudeClientError.cliNotFound])
+        let monitor = context.monitor {
+            if let failure = await failures.next() { throw failure }
+            return .cached(saved, nextRefreshAt: saved.fetchedAt.addingTimeInterval(900))
+        }
+
+        await monitor.refresh()
+        XCTAssertTrue(monitor.requiresLogin)
+        XCTAssertFalse(monitor.requiresInstallation)
+
+        await monitor.refresh()
+        XCTAssertTrue(monitor.requiresInstallation)
+
+        await monitor.refresh()
+        XCTAssertFalse(monitor.requiresLogin)
+        XCTAssertFalse(monitor.requiresInstallation)
+    }
+
+    private actor Failures {
+        private var failures: [ClaudeClientError]
+
+        init(_ failures: [ClaudeClientError]) { self.failures = failures }
+        func next() -> ClaudeClientError? { failures.isEmpty ? nil : failures.removeFirst() }
+    }
+
     private actor FetchResults {
         private var results: [UsageFetchResult]
 
@@ -112,10 +141,10 @@ final class UsageRefreshTests: XCTestCase {
                 accountName: "saved-account@example.test")
         }
 
-        @MainActor func monitor(_ fetch: @escaping @Sendable () async -> UsageFetchResult) -> UsageMonitor {
+        @MainActor func monitor(_ fetch: @escaping @Sendable () async throws -> UsageFetchResult) -> UsageMonitor {
             UsageMonitor(provider: .claude, defaults: defaults, historyDirectory: directory,
                          widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"), provider: .claude),
-                         fetchResult: { await fetch() }, recoveryDelaysNanoseconds: [], startsAutomatically: false)
+                         fetchResult: { try await fetch() }, recoveryDelaysNanoseconds: [], startsAutomatically: false)
         }
 
         func cleanUp() {

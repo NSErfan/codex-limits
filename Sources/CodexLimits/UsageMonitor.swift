@@ -10,6 +10,7 @@ final class UsageMonitor: ObservableObject {
 
     let provider: UsageProvider
     @Published private(set) var requiresLogin = false
+    @Published private(set) var requiresInstallation = false
     @Published private(set) var snapshot: UsageSnapshot?
     @Published private(set) var forecast: Forecast?
     @Published private(set) var samples: [UsageSample] = []
@@ -252,6 +253,7 @@ final class UsageMonitor: ObservableObject {
                 errorMessage = nil
                 refreshMessage = nil
                 requiresLogin = false
+                requiresInstallation = false
                 return true
             case let .cached(cached, nextRefreshAt):
                 nextAutomaticRefresh = nextRefreshAt
@@ -259,6 +261,7 @@ final class UsageMonitor: ObservableObject {
                 refreshMessage = "Using saved \(provider.displayName) usage. Next check available \(nextRefreshAt.formatted(date: .abbreviated, time: .shortened))."
                 errorMessage = nil
                 requiresLogin = false
+                requiresInstallation = false
             case let .deferred(error, cached, nextRefreshAt):
                 nextAutomaticRefresh = nextRefreshAt
                 if let cached { await accept(cached, exchangeErrorMessage: exchangeErrorMessage) }
@@ -270,6 +273,7 @@ final class UsageMonitor: ObservableObject {
             errorMessage = "Couldn’t load \(provider.displayName) usage. Refresh to try again."
             refreshMessage = nil
             requiresLogin = false
+            requiresInstallation = false
             scheduleRecovery(afterFailedAttempt: recoveryAttempt)
         }
         return false
@@ -301,6 +305,7 @@ final class UsageMonitor: ObservableObject {
         errorMessage = error.localizedDescription
         refreshMessage = nil
         requiresLogin = error.requiresLogin
+        requiresInstallation = error.requiresInstallation
         if error.shouldRetryAutomatically { scheduleRecovery(afterFailedAttempt: recoveryAttempt) }
     }
 

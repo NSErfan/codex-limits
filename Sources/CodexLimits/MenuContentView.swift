@@ -136,7 +136,7 @@ struct MenuContentView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if monitor.requiresLogin { signInControls }
+            if monitor.requiresLogin || monitor.requiresInstallation { signInControls }
             Divider()
             footer(snapshot: snapshot)
         }
@@ -258,7 +258,7 @@ struct MenuContentView: View {
                 Button("Try again") {
                     Task { await monitor.refresh() }
                 }
-                if monitor.requiresLogin {
+                if monitor.requiresLogin || monitor.requiresInstallation {
                     signInControls
                 }
             }
@@ -272,15 +272,19 @@ struct MenuContentView: View {
 
     private var signInControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button("Sign in to \(monitor.provider.displayName)…", action: onSignIn)
-                .disabled(isOpeningLogin)
-            if let loginMessage {
-                Text(loginMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if monitor.requiresLogin {
+                Button("Sign in to \(monitor.provider.displayName)…", action: onSignIn)
+                    .disabled(isOpeningLogin)
+                if let loginMessage {
+                    Text(loginMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Link("Install \(monitor.provider.cliDisplayName)", destination: ProviderLogin.installationURL(for: monitor.provider))
-                .font(.caption)
+            if monitor.requiresInstallation {
+                Link("Install \(monitor.provider.cliDisplayName)", destination: ProviderLogin.installationURL(for: monitor.provider))
+                    .font(.caption)
+            }
         }
     }
 

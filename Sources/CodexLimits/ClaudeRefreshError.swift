@@ -11,6 +11,10 @@ enum ClaudeRefreshError: UsageFetchError {
         if case let .failed(error, _) = self { return error.requiresLogin }
         return false
     }
+    var requiresInstallation: Bool {
+        if case let .failed(error, _) = self { return error.requiresInstallation }
+        return false
+    }
     var shouldRetryAutomatically: Bool { false }
 
     var errorDescription: String? {
