@@ -93,7 +93,7 @@ struct MenuContentView: View {
             }
             .foregroundStyle(.secondary)
 
-            if snapshot.limit(for: .fiveHour, provider: monitor.provider) != nil {
+            if monitor.provider.periods.count > 1 {
                 UsagePeriodPicker(snapshot: snapshot, provider: monitor.provider, selection: period, now: now,
                                   onSelect: { savedPeriod = $0.rawValue })
             } else if let period, let window = snapshot.limit(for: period, provider: monitor.provider)?.window {

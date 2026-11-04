@@ -74,9 +74,11 @@ struct ClaudeUsageCoordinator: Sendable {
             let nextRefreshAt = completedAt.addingTimeInterval(Self.minimumInterval)
             state.lastAttemptAt = completedAt
             if error == .usageUnavailable || error.isRateLimited {
-                state.cooldownCount = min(state.cooldownCount + 1, 3)
-                let fallback = min(Self.fallbackCooldown * pow(2, Double(state.cooldownCount - 1)),
-                                   Self.maximumFallbackCooldown)
+                // Missing usage does not establish throttling; keep checking at the normal interval.
+                state.cooldownCount = error.isRateLimited ? min(state.cooldownCount + 1, 3) : 0
+                let fallback = error.isRateLimited
+                    ? min(Self.fallbackCooldown * pow(2, Double(state.cooldownCount - 1)), Self.maximumFallbackCooldown)
+                    : Self.minimumInterval
                 let retryAfter: Date?
                 if case let .rateLimited(date) = error { retryAfter = date } else { retryAfter = nil }
                 let cooldown = max(nextRefreshAt, retryAfter ?? completedAt.addingTimeInterval(fallback))
@@ -143,9 +145,14 @@ struct ClaudeUsageCoordinator: Sendable {
         do {
             let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
             guard size <= 1_000_000 else { throw ClaudeRefreshError.storageUnavailable }
-            let state = try JSONDecoder().decode(State.self, from: Data(contentsOf: url))
+            var state = try JSONDecoder().decode(State.self, from: Data(contentsOf: url))
             guard state.version == 1, (0 ... 3).contains(state.cooldownCount) else {
                 throw ClaudeRefreshError.storageUnavailable
+            }
+            // Older versions applied rate-limit backoff to missing reports, including across app upgrades.
+            if state.cooldownFailure == .usageUnavailable, let attempt = state.lastAttemptAt {
+                state.cooldownUntil = attempt.addingTimeInterval(Self.minimumInterval)
+                state.cooldownCount = 0
             }
             return state
         } catch { throw ClaudeRefreshError.storageUnavailable }

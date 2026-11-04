@@ -62,10 +62,10 @@ The **5-hour** and **Weekly** segments show both remaining balances together. Se
 either segment to switch the detailed chart, forecast, and usage budget to that window;
 hover for its reset time. The app remembers your selection and chart settings separately
 for each provider and period. Switching windows uses saved readings without making
-another usage request. If Codex or Claude Code omits its five-hour window, the entire
-usage-window selector is hidden and a large weekly percentage appears above the weekly
-chart. Copilot has a single monthly allowance, so it always shows a large monthly percentage. Expired weekly readings are labeled **last weekly reading**. An unavailable
-weekly window says **Not reported** when the selector is shown.
+another usage request. Codex and Claude Code keep both window tabs visible even when
+one is unavailable: the missing window says **Not reported**, and the chart uses an
+available window. Copilot has a single monthly allowance, so it always shows a large
+monthly percentage.
 After a window resets, its saved balance is labeled **(last)** and pacing waits for a
 new reading; its recorded history remains available.
 
@@ -103,12 +103,14 @@ history or widget data.
 Claude requests are spaced at least **15 minutes apart**, shared by the menu app and
 background collector for the same CLI profile on this Mac. Opening the menu, waking
 the Mac, and pressing Refresh reuse the saved reading during that interval. If a signed-in
-CLI returns a report without current usage rows, the app waits 30 minutes, then 60 minutes,
-then up to two hours after consecutive failures. The CLI does not expose HTTP
-`Retry-After` headers through this report, so the app uses these conservative delays.
-The saved cooldown survives relaunches, and the menu and Accounts show when another
-check is available. Manual Refresh cannot bypass it. These are conservative local
-defaults, not a published Anthropic polling allowance.
+CLI returns a report without current usage rows, the app keeps the last reading and
+automatically retries after the normal 15-minute interval. Missing reports do not
+establish rate limiting, so they no longer trigger escalating 30-minute to two-hour
+delays. Upgrading also shortens those previously saved delays. The CLI does not expose
+HTTP status or `Retry-After` headers through this report; explicitly identified rate-limit
+responses retain their separate backoff. The saved refresh schedule survives relaunches,
+and the menu and Accounts show when another check is available. Manual Refresh cannot
+bypass request spacing. These are local defaults, not a published Anthropic polling allowance.
 
 Claude shows account-wide five-hour and seven-day quotas, plus model-specific limits
 when Anthropic reports them. Weekly widgets use only the account-wide seven-day quota.

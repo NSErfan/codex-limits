@@ -27,6 +27,8 @@ enum ClaudeRefreshError: UsageFetchError {
             "Another Claude usage check is in progress. Showing the last reading; try again shortly."
         case .storageUnavailable:
             "Couldn’t read or save Claude’s refresh schedule. Usage checks are paused to avoid repeated requests."
+        case let .failed(.usageUnavailable, until):
+            "Claude Code couldn’t retrieve current usage. Any displayed balances are from the last successful check. Next automatic check \(until.formatted(date: .abbreviated, time: .shortened))."
         case let .failed(error, until):
             "\(error.localizedDescription) Next usage check available \(until.formatted(date: .abbreviated, time: .shortened))."
         }

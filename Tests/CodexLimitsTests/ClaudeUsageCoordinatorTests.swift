@@ -143,10 +143,11 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
         }
     }
 
-    func testUnavailableCLIReportsBackOffWithoutClaimingARateLimit() async throws {
+    func testUnavailableCLIReportsKeepNormalIntervalAcrossRepeatedFailuresAndRelaunches() async throws {
         let context = try Context()
         defer { context.cleanUp() }
-        for delay in [1_800.0, 3_600, 7_200, 7_200] {
+        for _ in 0 ..< 4 {
+            let delay = 900.0
             let deadline = context.clock.now.addingTimeInterval(delay)
             let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
                 throw ClaudeClientError.usageUnavailable
@@ -166,6 +167,73 @@ final class ClaudeUsageCoordinatorTests: XCTestCase {
             XCTAssertEqual(savedError, .usageUnavailable)
             XCTAssertEqual(savedDeadline, deadline)
             context.clock.advance(by: 1)
+        }
+    }
+
+    func testSuccessfulRetryReplacesWeeklyOnlyCacheWithBothWindows() async throws {
+        let context = try Context()
+        defer { context.cleanUp() }
+        let weekly = try ClaudeClient.decode(ClaudeUsageFixture.output(), fetchedAt: context.clock.now)
+        _ = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in weekly }
+        context.clock.advance(by: 900)
+
+        let failure = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
+            throw ClaudeClientError.usageUnavailable
+        }
+        guard case let .deferred(_, saved, next) = failure else {
+            return XCTFail("Expected the previous reading while awaiting a retry")
+        }
+        XCTAssertEqual(saved, weekly)
+        XCTAssertNil(saved?.limit(for: .fiveHour, provider: .claude))
+        XCTAssertEqual(next, context.clock.now.addingTimeInterval(900))
+        XCTAssertTrue(try deferredError(failure).localizedDescription.contains("last successful check"))
+        context.clock.advance(by: 900)
+        let recovered = try ClaudeClient.decode(ClaudeUsageFixture.output(limits: [
+            ClaudeUsageFixture.limit("session", percent: 13),
+            ClaudeUsageFixture.limit(percent: 11)
+        ]), fetchedAt: context.clock.now)
+
+        let result = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in recovered }
+
+        let snapshot = try fetched(result)
+        XCTAssertEqual(snapshot.limit(for: .fiveHour, provider: .claude)?.window.remainingPercent, 87)
+        XCTAssertEqual(snapshot.limit(for: .weekly, provider: .claude)?.window.remainingPercent, 89)
+        XCTAssertEqual(snapshot.fetchedAt, context.clock.now)
+        let shared = try await context.coordinator().fetch(
+            prepare: { try Self.unexpectedPreparation() }, request: { _ in recovered }
+        )
+        XCTAssertEqual(try cached(shared).snapshot, recovered)
+    }
+
+    func testUnavailableCooldownFromEarlierVersionUsesNormalInterval() async throws {
+        for delay in [1_800.0, 3_600, 7_200] {
+            let context = try Context()
+            defer { context.cleanUp() }
+            let attempt = context.clock.now
+            let state: [String: Any] = [
+                "version": 1, "rateLimitCount": 3,
+                "lastAttemptAt": attempt.timeIntervalSinceReferenceDate,
+                "cooldownUntil": attempt.addingTimeInterval(delay).timeIntervalSinceReferenceDate,
+                "cooldownFailure": "usageUnavailable"
+            ]
+            try JSONSerialization.data(withJSONObject: state).write(to: context.directory.appendingPathComponent("state.json"))
+            context.clock.advance(by: 899)
+
+            let blocked = try await context.coordinator().fetch(
+                prepare: { try Self.unexpectedPreparation() }, request: { _ in Self.snapshot(at: context.clock.now) }
+            )
+            guard case let .failed(error, until) = try deferredError(blocked) as? ClaudeRefreshError else {
+                return XCTFail("Expected the normal interval to remain enforced after upgrading")
+            }
+            XCTAssertEqual(error, .usageUnavailable)
+            XCTAssertEqual(until, attempt.addingTimeInterval(900))
+            context.clock.advance(by: 1)
+
+            let limited = try await context.coordinator().fetch(prepare: { Self.command() }) { _ in
+                throw ClaudeClientError.rateLimited(retryAfter: nil)
+            }
+
+            XCTAssertEqual(try rateLimitDeadline(limited), context.clock.now.addingTimeInterval(1_800))
         }
     }
 
