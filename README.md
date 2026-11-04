@@ -62,10 +62,11 @@ The **5-hour** and **Weekly** segments show both remaining balances together. Se
 either segment to switch the detailed chart, forecast, and usage budget to that window;
 hover for its reset time. The app remembers your selection and chart settings separately
 for each provider and period. Switching windows uses saved readings without making
-another usage request. Codex and Claude Code keep both window tabs visible even when
-one is unavailable: the missing window says **Not reported**, and the chart uses an
-available window. Copilot has a single monthly allowance, so it always shows a large
-monthly percentage.
+another usage request. The window selector appears when the account reports a five-hour
+window. If Codex or Claude Code reports only a weekly limit, the menu shows a large
+weekly percentage above its chart, with no empty five-hour tab. An unavailable weekly
+window says **Not reported** when the selector is shown. Copilot has a single monthly
+allowance, so it always shows a large monthly percentage.
 After a window resets, its saved balance is labeled **(last)** and pacing waits for a
 new reading; its recorded history remains available.
 

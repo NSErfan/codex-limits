@@ -79,6 +79,10 @@ struct MenuContentView: View {
         return snapshot.limit(for: period, provider: monitor.provider)?.window
     }
 
+    var showsPeriodPicker: Bool {
+        monitor.snapshot?.limit(for: .fiveHour, provider: monitor.provider) != nil
+    }
+
     private func dashboard(snapshot: UsageSnapshot, now: Date) -> some View {
         let period = UsageDashboardPreferences.selectedPeriod(savedValue: savedPeriod, snapshot: snapshot, provider: monitor.provider)
         let otherLimits = UsageDashboardPreferences.otherLimits(in: snapshot, provider: monitor.provider)
@@ -93,7 +97,7 @@ struct MenuContentView: View {
             }
             .foregroundStyle(.secondary)
 
-            if monitor.provider.periods.count > 1 {
+            if showsPeriodPicker {
                 UsagePeriodPicker(snapshot: snapshot, provider: monitor.provider, selection: period, now: now,
                                   onSelect: { savedPeriod = $0.rawValue })
             } else if let period, let window = snapshot.limit(for: period, provider: monitor.provider)?.window {
