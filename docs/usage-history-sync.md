@@ -4,7 +4,7 @@
 
 Shared usage history is optional and contains only main-limit usage samples. A usage sample consists of its locally recorded observation time, remaining percentage, and the window reset returned by Codex. Preferences, launch settings, credentials, raw Codex responses, and other device state never sync.
 
-One sync folder represents one Codex account. The app does not identify or verify the account, so the settings interface tells the user to use the folder only on Macs signed in to the same Codex account. The folder must be private and not shared with other people. Files remain readable JSON without app-level encryption and contain no credentials or Codex content.
+Use the same account on Macs connected to a sync folder. For Codex 2, the app keys the sync connection and its subfolder to the account and workspace reported by the CLI. A different subscription requires its own sync setup; returning to the previous subscription restores its connection. Readings without a verified subscription and history from before this separation are not synced into those subfolders. The folder must be private and not shared with other people. Files remain readable JSON without app-level encryption and contain no credentials or Codex content.
 
 ## Behavior
 

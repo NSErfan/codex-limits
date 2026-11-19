@@ -231,24 +231,31 @@ enum CodexClient {
             return TokenDay(date: date, tokens: bucket.tokens)
         }
 
+        let account = accountResponse.flatMap { try? decoder.decode(RPCResponse<AccountResult>.self, from: $0).result }
+        let reportedWorkspace = Self.identityValue(rateResult.accountId)
+        let activeWorkspace = Self.identityValue(account?.workspaceRouting?.chatgptAccountId)
+        if let reportedWorkspace, let activeWorkspace, reportedWorkspace != activeWorkspace {
+            throw CodexClientError.invalidResponse
+        }
+        let accountName = account?.account?.type == "chatgpt" ? Self.identityValue(account?.account?.email) : nil
+        let subscriptionKey = (reportedWorkspace ?? activeWorkspace).flatMap { workspace in
+            accountName.map { UsageSubscriptionKey(workspaceID: workspace, accountName: $0) }
+        }
         return UsageSnapshot(
             mainLimit: LimitReading(limitId: "codex", name: "Codex", window: mainWindow),
             otherLimits: others,
             tokenHistory: tokenHistory,
             resetCredits: resetCredits(from: rateResult.rateLimitResetCredits, fetchedAt: fetchedAt),
             fetchedAt: fetchedAt,
-            accountName: accountEmail(from: accountResponse)
+            accountName: accountName,
+            subscriptionKey: subscriptionKey
         )
     }
 
-    private static func accountEmail(from response: Data?) -> String? {
-        guard let response,
-              let result = try? JSONDecoder().decode(RPCResponse<AccountResult>.self, from: response).result,
-              let account = result.account,
-              account.type == "chatgpt",
-              let email = account.email?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !email.isEmpty else { return nil }
-        return email
+    private static func identityValue(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty,
+              !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { return nil }
+        return value
     }
 
     private static func resetCredits(
@@ -574,14 +581,20 @@ private struct RPCResponse<Result: Decodable>: Decodable {
 
 private struct AccountResult: Decodable {
     let account: Account?
+    let workspaceRouting: WorkspaceRouting?
 
     struct Account: Decodable {
         let type: String
         let email: String?
     }
+
+    struct WorkspaceRouting: Decodable {
+        let chatgptAccountId: String?
+    }
 }
 
 private struct RateLimitsResult: Decodable {
+    let accountId: String?
     let rateLimits: RateLimitSnapshot
     let rateLimitsByLimitId: [String: RateLimitSnapshot]?
     let rateLimitResetCredits: ResetCredits?

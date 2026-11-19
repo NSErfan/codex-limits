@@ -42,6 +42,22 @@ final class AccountEmailTests: XCTestCase {
         }
     }
 
+    func testCodexHistoryIdentityDistinguishesWorkspacesAndAccounts() throws {
+        let account = #"{"type":"chatgpt","email":"fixture@example.test"}"#
+        let first = try XCTUnwrap(codexSnapshot(account: account, usageWorkspace: "first").subscriptionKey)
+        let second = try XCTUnwrap(codexSnapshot(account: account, usageWorkspace: "second").subscriptionKey)
+        let colleague = try XCTUnwrap(codexSnapshot(
+            account: #"{"type":"chatgpt","email":"other@example.test"}"#, usageWorkspace: "first"
+        ).subscriptionKey)
+        XCTAssertNotEqual(first, second)
+        XCTAssertNotEqual(first, colleague)
+        XCTAssertEqual(try codexSnapshot(account: account, routedWorkspace: "first").subscriptionKey, first)
+        XCTAssertNil(try codexSnapshot(account: account).subscriptionKey)
+        XCTAssertNil(try codexSnapshot(account: "null", usageWorkspace: "first").subscriptionKey)
+        XCTAssertThrowsError(try codexSnapshot(account: account, usageWorkspace: "first", routedWorkspace: "second"))
+        XCTAssertEqual(try JSONDecoder().decode(UsageSubscriptionKey.self, from: JSONEncoder().encode(first)), first)
+    }
+
     func testOptionalCodexAccountFailureDoesNotDiscardUsage() async throws {
         for accountResponse in [
             #"{"id":4,"error":{"code":-32601,"message":"Method not found"}}"#,
@@ -209,12 +225,16 @@ final class AccountEmailTests: XCTestCase {
         }
     }
 
-    private func codexSnapshot(account: String) throws -> UsageSnapshot {
-        try CodexClient.decode(
-            rateLimitsResponse: Data(Self.rateLimitsResponse.utf8),
+    private func codexSnapshot(account: String, usageWorkspace: String? = nil, routedWorkspace: String? = nil) throws -> UsageSnapshot {
+        let rateLimits = usageWorkspace.map {
+            Self.rateLimitsResponse.replacingOccurrences(of: #""rateLimits":"#, with: #""accountId":"\#($0)","rateLimits":"#)
+        } ?? Self.rateLimitsResponse
+        let routing = routedWorkspace.map { #","workspaceRouting":{"chatgptAccountId":"\#($0)"}"# } ?? ""
+        return try CodexClient.decode(
+            rateLimitsResponse: Data(rateLimits.utf8),
             usageResponse: nil,
             fetchedAt: Date(timeIntervalSince1970: 1_000),
-            accountResponse: Data("{\"result\":{\"account\":\(account)}}".utf8)
+            accountResponse: Data("{\"result\":{\"account\":\(account)\(routing)}}".utf8)
         )
     }
 

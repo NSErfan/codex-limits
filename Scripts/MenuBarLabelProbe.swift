@@ -58,7 +58,7 @@ private struct MenuBarLabelProbeApp: App {
         self.configuration = configuration
         _appearance = StateObject(wrappedValue: appearance)
         _monitor = StateObject(wrappedValue: UsageMonitor(
-            provider: configuration.provider, defaults: defaults, historyDirectory: configuration.output,
+            account: UsageAccount(provider: configuration.provider), defaults: defaults, historyDirectory: configuration.output,
             widgetStore: WeeklyWidgetStore(
                 directory: configuration.output.appendingPathComponent("widget"), provider: configuration.provider
             ),

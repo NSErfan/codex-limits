@@ -41,8 +41,8 @@ enum ProviderLogin {
         let isSecondary = account == .secondaryCodex
         let environment = isSecondary ? CodexProfile.secondaryEnvironment(home: secondaryHome, base: environment) : environment
         let profileKeys = profileKeys(for: provider)
-        let inheritedCredentialKeys = isSecondary ? CodexProfile.credentialEnvironmentKeys : credentialKeys(for: provider)
-        let unsetKeys = profileKeys.filter { environment[$0] == nil } + inheritedCredentialKeys
+        let isolatedKeys = isSecondary ? CodexProfile.secondaryUnsetEnvironmentKeys : credentialKeys(for: provider)
+        let unsetKeys = profileKeys.filter { environment[$0] == nil } + isolatedKeys
         let profile = profileKeys.compactMap { key in
             environment[key].map { "\(key)=\($0)" }
         }

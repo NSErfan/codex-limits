@@ -81,7 +81,9 @@ enum BackgroundCollector {
         account: UsageAccount = .primaryCodex,
         fetchUsage: @Sendable () async throws -> UsageSnapshot
     ) async -> Bool {
-        guard let snapshot = try? await fetchUsage() else { return false }
+        guard let snapshot = try? await fetchUsage(),
+              let location = account.historyLocation(at: historyDirectory, subscription: snapshot.subscriptionKey)
+        else { return false }
         let provider = account.provider
         let window = snapshot.mainLimit.window
         let sample = UsageSample(
@@ -91,12 +93,12 @@ enum BackgroundCollector {
             durationMinutes: window.durationMinutes
         )
         let history = UsageHistory(
-            localDirectory: historyDirectory,
+            localDirectory: location.directory,
             installationID: installationID(in: defaults)
         )
         let recorded = await history.record(sample)
         let periodHistory = UsagePeriodHistory(
-            localDirectory: historyDirectory,
+            localDirectory: location.directory,
             installationID: installationID(in: defaults),
             provider: provider
         )

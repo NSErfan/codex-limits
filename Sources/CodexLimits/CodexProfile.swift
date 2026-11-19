@@ -11,9 +11,11 @@ enum CodexProfile: Sendable {
     case primary
     case secondary
 
-    static let credentialEnvironmentKeys = [
+    static let secondaryUnsetEnvironmentKeys = [
         "CODEX_API_KEY", "OPENAI_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_ACCESS_TOKEN",
-        "OPENAI_IDENTITY_TOKEN_FILE", "OPENAI_SERVICE_ACCOUNT_ID"
+        "OPENAI_FEDERATION_RULE_ID", "OPENAI_IDENTITY_TOKEN_FILE", "OPENAI_IDENTITY_TOKEN_SOURCE",
+        "OPENAI_WORKLOAD_IDENTITY_CONTEXT", "OPENAI_SPIFFE_AUDIENCE", "OPENAI_SPIFFE_ID",
+        "OPENAI_SERVICE_ACCOUNT_ID", "CODEX_SQLITE_HOME"
     ]
 
     static var secondaryHome: URL {
@@ -59,7 +61,7 @@ enum CodexProfile: Sendable {
 
     static func secondaryEnvironment(home: URL, base: [String: String]) -> [String: String] {
         var environment = base
-        for key in credentialEnvironmentKeys { environment.removeValue(forKey: key) }
+        for key in secondaryUnsetEnvironmentKeys { environment.removeValue(forKey: key) }
         environment["CODEX_HOME"] = home.path
         return environment
     }

@@ -15,6 +15,12 @@ struct ProviderHistorySettings: View {
             }
         } else {
             Button("Choose folder…", action: chooseHistoryFolder)
+                .disabled(!monitor.allowsHistorySync)
+            if !monitor.allowsHistorySync {
+                Text("Refresh usage after Codex reports your account and workspace to enable history sync.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
 
         Text("Use the same \(monitor.account.displayName) account on every Mac connected to this folder.")

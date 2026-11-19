@@ -24,13 +24,14 @@ final class UsageMonitor: ObservableObject {
 
     private var stateKey: String { account.preferenceKey("usageState") }
     private static let historyInstallationIDKey = "historyInstallationID"
-    private var historySyncBookmarkKey: String { account.preferenceKey("historySyncBookmark") }
     private let defaults: UserDefaults
     private let fetchUsage: @Sendable () async throws -> UsageFetchResult
     private let recoveryDelaysNanoseconds: [UInt64]
     private let sleepBeforeRecovery: @Sendable (UInt64) async throws -> Void
-    private let history: UsageHistory
-    private let periodHistory: UsagePeriodHistory
+    private let historyDirectory: URL
+    private let historyInstallationID: String
+    private let historyNow: @Sendable () -> Date
+    private var history: HistoryStores?
     private let widgetStore: WeeklyWidgetStore?
     private var previousStatus: PaceStatus?
     private var cancellables: Set<AnyCancellable> = []
@@ -65,6 +66,8 @@ final class UsageMonitor: ObservableObject {
         self.defaults = defaults
         let provider = account.provider
         let localHistory = historyDirectory ?? Self.historyDirectory(account: account)
+        self.historyDirectory = localHistory
+        self.historyNow = historyNow
         self.widgetStore = account.publishesWeeklyWidget
             ? widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
                 directory: localHistory.appendingPathComponent("WeeklyWidget", isDirectory: true),
@@ -83,9 +86,11 @@ final class UsageMonitor: ObservableObject {
         if let data = defaults.data(forKey: account.preferenceKey("usageState")),
            let state = try? JSONDecoder().decode(StoredState.self, from: data) {
             snapshot = state.snapshot
-            samples = state.samples
-            periodSamples = state.periodSamples ?? [:]
-            previousStatus = state.previousStatus
+            if account != .secondaryCodex || state.snapshot?.subscriptionKey != nil {
+                samples = state.samples
+                periodSamples = state.periodSamples ?? [:]
+                previousStatus = state.previousStatus
+            }
         }
 
         let installationID: String
@@ -96,18 +101,8 @@ final class UsageMonitor: ObservableObject {
             installationID = UUID().uuidString.lowercased()
             defaults.set(installationID, forKey: Self.historyInstallationIDKey)
         }
-        history = UsageHistory(
-            localDirectory: localHistory,
-            installationID: installationID,
-            now: historyNow
-        )
-        periodHistory = UsagePeriodHistory(
-            localDirectory: localHistory,
-            installationID: installationID,
-            provider: provider,
-            historySubdirectory: account.historySubdirectory,
-            now: historyNow
-        )
+        historyInstallationID = installationID
+        history = makeHistory(for: snapshot)
         if provider.periods.contains(.weekly) {
             periodSamples[.weekly] = Self.mergedSamples(
                 periodSamples[.weekly] ?? [],
@@ -130,6 +125,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     var weeklyWidgetSnapshot: WeeklyWidgetSnapshot? { widgetStore?.read() }
+    var allowsHistorySync: Bool { account != .secondaryCodex || snapshot?.subscriptionKey != nil }
 
     var currentWindowSamples: [UsageSample] {
         Self.windowSamples(samples, reset: snapshot?.mainLimit.window.resetsAt)
@@ -243,10 +239,7 @@ final class UsageMonitor: ObservableObject {
 
         let fetchUsage = self.fetchUsage
         let fetchTask = Task { try await fetchUsage() }
-        let historyState = await exchangeHistory()
-        apply(historyState.legacy, periodState: historyState.periods,
-              configuredFolderName: configuredSyncDirectory?.lastPathComponent)
-        let exchangeErrorMessage = historyState.legacy.errorMessage ?? historyState.periods.errorMessage
+        let exchangeErrorMessage = await exchangeHistory()
         recalculate()
         persist()
 
@@ -256,7 +249,7 @@ final class UsageMonitor: ObservableObject {
                 nextAutomaticRefresh = nextRefreshAt
                 await accept(newSnapshot, exchangeErrorMessage: exchangeErrorMessage)
                 errorMessage = nil
-                refreshMessage = nil
+                refreshMessage = allowsHistorySync ? nil : "History is paused until Codex reports the signed-in account and workspace."
                 requiresLogin = false
                 requiresInstallation = false
                 return true
@@ -287,16 +280,11 @@ final class UsageMonitor: ObservableObject {
     private func accept(_ newSnapshot: UsageSnapshot, exchangeErrorMessage: String?) async {
         guard snapshot == nil || newSnapshot.fetchedAt >= snapshot!.fetchedAt else { return }
         if newSnapshot != snapshot {
-            let window = newSnapshot.mainLimit.window
-            let sample = UsageSample(observedAt: newSnapshot.fetchedAt,
-                                     remainingPercent: window.remainingPercent,
-                                     resetsAt: window.resetsAt,
-                                     durationMinutes: window.durationMinutes)
-            let recordedState = await history.record(sample)
-            let periodState = await periodHistory.record(newSnapshot)
-            apply(recordedState, periodState: periodState,
-                  configuredFolderName: configuredSyncDirectory?.lastPathComponent)
-            if syncErrorMessage == nil { syncErrorMessage = exchangeErrorMessage }
+            let changedHistory = await selectHistory(for: newSnapshot)
+            if let history {
+                await record(newSnapshot, in: history)
+                if !changedHistory, syncErrorMessage == nil { syncErrorMessage = exchangeErrorMessage }
+            }
             snapshot = newSnapshot
             WeeklyWidgetPublisher.publish(newSnapshot, writer: .app, store: widgetStore,
                                           safetyBuffer: defaults.object(forKey: Self.safetyBufferKey) as? Double ?? 3,
@@ -304,6 +292,41 @@ final class UsageMonitor: ObservableObject {
         }
         recalculate()
         persist()
+    }
+
+    private func record(_ snapshot: UsageSnapshot, in history: HistoryStores) async {
+        let window = snapshot.mainLimit.window
+        let sample = UsageSample(observedAt: snapshot.fetchedAt, remainingPercent: window.remainingPercent,
+                                 resetsAt: window.resetsAt, durationMinutes: window.durationMinutes)
+        let recorded = await history.legacy.record(sample)
+        let periods = await history.periods.record(snapshot)
+        guard self.history === history else { return }
+        apply(recorded, periodState: periods, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
+    }
+
+    private func selectHistory(for snapshot: UsageSnapshot) async -> Bool {
+        let location = account.historyLocation(at: historyDirectory, subscription: snapshot.subscriptionKey)
+        guard history?.location != location else { return false }
+        history = makeHistory(for: snapshot)
+        samples = []
+        periodSamples = [:]
+        previousStatus = nil
+        historyPrepared = false
+        historyUsesFiles = false
+        periodHistoryUsesFiles = false
+        configuredSyncDirectory = nil
+        historyConnectionActive = false
+        syncFolderName = nil
+        syncErrorMessage = nil
+        self.snapshot = snapshot
+        await prepareHistory()
+        return true
+    }
+
+    private func makeHistory(for snapshot: UsageSnapshot?) -> HistoryStores? {
+        account.historyLocation(at: historyDirectory, subscription: snapshot?.subscriptionKey).map { location in
+            HistoryStores(location: location, installationID: historyInstallationID, provider: provider, now: historyNow)
+        }
     }
 
     private func applyFetchError(_ error: any UsageFetchError, recoveryAttempt: Int) {
@@ -362,14 +385,19 @@ final class UsageMonitor: ObservableObject {
     }
 
     func connectHistoryFolder(_ directory: URL) async {
+        guard let history else { return }
         await prepareHistory()
+        guard self.history === history else { return }
         await stopHistorySync()
-        let state = await history.connect(to: directory, subdirectory: account.historySubdirectory)
+        guard self.history === history else { return }
+        let state = await history.legacy.connect(to: directory, subdirectory: history.location.syncSubdirectory)
+        guard self.history === history else { return }
         apply(state)
         historyConnectionActive = state.folderName != nil
         guard historyConnectionActive else { return }
-        apply(state, periodState: await periodHistory.connect(to: directory),
-              configuredFolderName: directory.lastPathComponent)
+        let periods = await history.periods.connect(to: directory)
+        guard self.history === history else { return }
+        apply(state, periodState: periods, configuredFolderName: directory.lastPathComponent)
 
         do {
             let bookmark = try directory.bookmarkData(
@@ -377,12 +405,13 @@ final class UsageMonitor: ObservableObject {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            defaults.set(bookmark, forKey: historySyncBookmarkKey)
+            defaults.set(bookmark, forKey: bookmarkKey(for: history))
             configuredSyncDirectory = directory
             syncFolderName = directory.lastPathComponent
         } catch {
-            _ = await history.disconnect()
-            _ = await periodHistory.disconnect()
+            _ = await history.legacy.disconnect()
+            _ = await history.periods.disconnect()
+            guard self.history === history else { return }
             configuredSyncDirectory = nil
             historyConnectionActive = false
             syncFolderName = nil
@@ -391,11 +420,14 @@ final class UsageMonitor: ObservableObject {
     }
 
     func stopHistorySync() async {
-        defaults.removeObject(forKey: historySyncBookmarkKey)
+        guard let history else { return }
+        defaults.removeObject(forKey: bookmarkKey(for: history))
         configuredSyncDirectory = nil
         historyConnectionActive = false
-        let state = await history.disconnect()
-        apply(state, periodState: await periodHistory.disconnect())
+        let state = await history.legacy.disconnect()
+        let periods = await history.periods.disconnect()
+        guard self.history === history else { return }
+        apply(state, periodState: periods)
     }
 
     private func recalculate(
@@ -440,12 +472,13 @@ final class UsageMonitor: ObservableObject {
     }
 
     private func prepareHistory() async {
-        guard !historyPrepared else { return }
+        guard let history, !historyPrepared else { return }
         historyPrepared = true
 
         await loadHistory()
 
-        guard let bookmark = defaults.data(forKey: historySyncBookmarkKey) else {
+        let bookmarkKey = bookmarkKey(for: history)
+        guard self.history === history, let bookmark = defaults.data(forKey: bookmarkKey) else {
             return
         }
         let directory: URL
@@ -458,15 +491,17 @@ final class UsageMonitor: ObservableObject {
                 bookmarkDataIsStale: &isStale
             )
         } catch {
-            defaults.removeObject(forKey: historySyncBookmarkKey)
+            defaults.removeObject(forKey: bookmarkKey)
             syncErrorMessage = "Couldn’t access the history folder. Choose it again."
             return
         }
 
         configuredSyncDirectory = directory
-        let connectedState = await history.connect(to: directory, subdirectory: account.historySubdirectory)
+        let connectedState = await history.legacy.connect(to: directory, subdirectory: history.location.syncSubdirectory)
+        guard self.history === history else { return }
         historyConnectionActive = connectedState.folderName != nil
-        let periodState = historyConnectionActive ? await periodHistory.connect(to: directory) : nil
+        let periodState = historyConnectionActive ? await history.periods.connect(to: directory) : nil
+        guard self.history === history else { return }
         apply(connectedState, periodState: periodState, configuredFolderName: directory.lastPathComponent)
         if isStale, historyConnectionActive {
             do {
@@ -475,7 +510,7 @@ final class UsageMonitor: ObservableObject {
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
-                defaults.set(refreshed, forKey: historySyncBookmarkKey)
+                defaults.set(refreshed, forKey: bookmarkKey)
             } catch {
                 syncErrorMessage = "Couldn’t renew access to the history folder. Choose it again."
             }
@@ -483,29 +518,46 @@ final class UsageMonitor: ObservableObject {
     }
 
     private func loadHistory() async {
-        let state = await history.load(legacySamples: samples)
-        let periodState = await periodHistory.load(
-            legacySamples: Self.mergedSamples(samples, state.samples),
-            savedSamples: periodSamples,
-            snapshot: snapshot
+        guard let history else { return }
+        let currentSamples = samples
+        let currentPeriodSamples = periodSamples
+        let currentSnapshot = snapshot
+        let state = await history.legacy.load(legacySamples: currentSamples)
+        let periodState = await history.periods.load(
+            legacySamples: Self.mergedSamples(currentSamples, state.samples),
+            savedSamples: currentPeriodSamples,
+            snapshot: currentSnapshot
         )
+        guard self.history === history else { return }
         apply(state, periodState: periodState)
         historyUsesFiles = state.errorMessage == nil
         periodHistoryUsesFiles = periodState.errorMessage == nil
         if historyUsesFiles && periodHistoryUsesFiles { persist() }
     }
 
-    private func exchangeHistory() async -> (legacy: UsageHistory.State, periods: UsagePeriodHistory.State) {
+    private func exchangeHistory() async -> String? {
+        guard let history else { return nil }
+        let state: UsageHistory.State
+        let periods: UsagePeriodHistory.State
         if let configuredSyncDirectory, !historyConnectionActive {
-            let state = await history.connect(to: configuredSyncDirectory, subdirectory: account.historySubdirectory)
+            state = await history.legacy.connect(to: configuredSyncDirectory, subdirectory: history.location.syncSubdirectory)
+            guard self.history === history else { return nil }
             historyConnectionActive = state.folderName != nil
-            let periods = historyConnectionActive
-                ? await periodHistory.connect(to: configuredSyncDirectory)
-                : await periodHistory.synchronize()
-            return (state, periods)
+            periods = historyConnectionActive
+                ? await history.periods.connect(to: configuredSyncDirectory)
+                : await history.periods.synchronize()
+        } else {
+            state = await history.legacy.synchronize()
+            periods = await history.periods.synchronize()
         }
-        let state = await history.synchronize()
-        return (state, await periodHistory.synchronize())
+        guard self.history === history else { return nil }
+        apply(state, periodState: periods, configuredFolderName: configuredSyncDirectory?.lastPathComponent)
+        return state.errorMessage ?? periods.errorMessage
+    }
+
+    private func bookmarkKey(for history: HistoryStores) -> String {
+        let key = account.preferenceKey("historySyncBookmark")
+        return history.location.subscription.map { "\(key).\($0.rawValue)" } ?? key
     }
 
     private func apply(
@@ -572,6 +624,20 @@ final class UsageMonitor: ObservableObject {
                 isDirectory: true
             )
             .appendingPathComponent(account.localHistoryDirectoryName, isDirectory: true)
+    }
+
+    private final class HistoryStores {
+        let location: UsageHistoryLocation
+        let legacy: UsageHistory
+        let periods: UsagePeriodHistory
+
+        init(location: UsageHistoryLocation, installationID: String,
+             provider: UsageProvider, now: @escaping @Sendable () -> Date) {
+            self.location = location
+            legacy = UsageHistory(localDirectory: location.directory, installationID: installationID, now: now)
+            periods = UsagePeriodHistory(localDirectory: location.directory, installationID: installationID,
+                                         provider: provider, historySubdirectory: location.syncSubdirectory, now: now)
+        }
     }
 }
 

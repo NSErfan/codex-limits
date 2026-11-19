@@ -56,6 +56,9 @@ Both accounts refresh independently, including during background updates. Each h
 saved readings, history, and chart settings. Codex 2 uses its own CLI home at
 `~/Library/Application Support/com.github.nserfan.CodexLimits/CodexSecondaryProfile`;
 the Codex CLI manages its login there. Your existing CLI profile stays in use for the first account.
+Codex 2 records history and remembers sync folders for each identified subscription separately.
+If the CLI doesn’t report the account and workspace, live limits are still shown but history and
+sync pause. History recorded by older versions without an identity stays on disk and is not imported.
 Turning off Codex 2 stops its checks and keeps its sign-in and history. Desktop widgets show
 the **Codex** account regardless of menu order. To open its own **Activity** window, select
 **Codex 2** in the menu and click **Activity**.
@@ -339,7 +342,12 @@ that's `CODEX_HOME` when set, otherwise `~/.codex`. For **Codex 2**, run the CLI
 separate profile to record sessions there:
 
 ```sh
-CODEX_HOME="$HOME/Library/Application Support/com.github.nserfan.CodexLimits/CodexSecondaryProfile" codex
+/usr/bin/env \
+  -u CODEX_API_KEY -u OPENAI_API_KEY -u CODEX_ACCESS_TOKEN -u OPENAI_ACCESS_TOKEN \
+  -u OPENAI_FEDERATION_RULE_ID -u OPENAI_IDENTITY_TOKEN_FILE -u OPENAI_IDENTITY_TOKEN_SOURCE \
+  -u OPENAI_WORKLOAD_IDENTITY_CONTEXT -u OPENAI_SPIFFE_AUDIENCE -u OPENAI_SPIFFE_ID \
+  -u OPENAI_SERVICE_ACCOUNT_ID -u CODEX_SQLITE_HOME \
+  CODEX_HOME="$HOME/Library/Application Support/com.github.nserfan.CodexLimits/CodexSecondaryProfile" codex
 ```
 
 The app does not save or display conversation content, modify logs, or send activity data

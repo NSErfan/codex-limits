@@ -50,11 +50,18 @@ final class ProviderLoginTests: XCTestCase {
         let executable = directory.appendingPathComponent("codex")
         try """
         #!/bin/sh
-        printf '%s\\n' "$CODEX_HOME" "${CODEX_API_KEY-unset}" "${CODEX_ACCESS_TOKEN-unset}" "$@"
+        printf '%s\\n' "$CODEX_HOME" "${CODEX_API_KEY-unset}" "${CODEX_ACCESS_TOKEN-unset}"
+        printf '%s\\n' "${OPENAI_FEDERATION_RULE_ID-unset}" "${OPENAI_IDENTITY_TOKEN_FILE-unset}" \
+            "${OPENAI_IDENTITY_TOKEN_SOURCE-unset}" "${OPENAI_WORKLOAD_IDENTITY_CONTEXT-unset}" "${CODEX_SQLITE_HOME-unset}" "$@"
         """.write(to: executable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
         let secondaryHome = directory.appendingPathComponent("second account's profile", isDirectory: true)
-        let inherited = ["CODEX_HOME": "/primary/profile", "CODEX_API_KEY": "test-key", "CODEX_ACCESS_TOKEN": "test-token"]
+        let inherited = [
+            "CODEX_HOME": "/primary/profile", "CODEX_API_KEY": "test-key", "CODEX_ACCESS_TOKEN": "test-token",
+            "OPENAI_FEDERATION_RULE_ID": "rule", "OPENAI_IDENTITY_TOKEN_FILE": "/primary/token",
+            "OPENAI_IDENTITY_TOKEN_SOURCE": "file", "OPENAI_WORKLOAD_IDENTITY_CONTEXT": "context",
+            "CODEX_SQLITE_HOME": "/primary/db"
+        ]
         let output = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -68,7 +75,18 @@ final class ProviderLoginTests: XCTestCase {
 
         XCTAssertEqual(process.terminationStatus, 0)
         let result = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        XCTAssertEqual(result, "\(secondaryHome.path)\nunset\nunset\nlogin\n")
+        XCTAssertEqual(result, "\(secondaryHome.path)\n" + String(repeating: "unset\n", count: 7) + "login\n")
+    }
+
+    func testSecondCodexAppServerEnvironmentDropsWorkloadIdentityAndSQLiteOverrides() {
+        let home = URL(fileURLWithPath: "/secondary/profile", isDirectory: true)
+        let result = CodexProfile.secondaryEnvironment(home: home, base: [
+            "CODEX_HOME": "/primary/profile", "CODEX_SQLITE_HOME": "/primary/db",
+            "OPENAI_FEDERATION_RULE_ID": "rule", "OPENAI_IDENTITY_TOKEN_FILE": "/primary/token",
+            "OPENAI_IDENTITY_TOKEN_SOURCE": "spiffe", "OPENAI_SPIFFE_AUDIENCE": "audience", "OPENAI_SPIFFE_ID": "id",
+            "OPENAI_WORKLOAD_IDENTITY_CONTEXT": "context", "CODEX_ACCESS_TOKEN": "token", "PATH": "/bin"
+        ])
+        XCTAssertEqual(result, ["CODEX_HOME": home.path, "PATH": "/bin"])
     }
 
     func testCopilotLoginUsesGitHubCLIProfileWithoutInheritedTokens() throws {

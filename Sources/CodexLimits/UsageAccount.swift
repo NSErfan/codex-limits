@@ -60,6 +60,19 @@ enum UsageAccount: String, CaseIterable, Identifiable, Sendable {
         self == .secondaryCodex ? "\(rawValue).\(key)" : provider.preferenceKey(key)
     }
 
+    func historyLocation(at directory: URL, subscription: UsageSubscriptionKey?) -> UsageHistoryLocation? {
+        guard self == .secondaryCodex else {
+            return UsageHistoryLocation(directory: directory, syncSubdirectory: historySubdirectory, subscription: nil)
+        }
+        guard let subscription else { return nil }
+        let folder = "Subscriptions/\(subscription.rawValue)"
+        return UsageHistoryLocation(
+            directory: directory.appendingPathComponent(folder, isDirectory: true),
+            syncSubdirectory: "Codex 2/\(folder)",
+            subscription: subscription
+        )
+    }
+
     func fetchUsage() async throws -> UsageFetchResult {
         if self == .secondaryCodex {
             return .fetched(try await CodexClient.fetch(profile: .secondary))

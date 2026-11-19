@@ -43,6 +43,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     let fetchedAt: Date
     /// The signed-in account's email or username, when the provider reports one.
     let accountName: String?
+    let subscriptionKey: UsageSubscriptionKey?
 
     init(
         mainLimit: LimitReading,
@@ -50,7 +51,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         tokenHistory: [TokenDay],
         resetCredits: [ResetCredit],
         fetchedAt: Date,
-        accountName: String? = nil
+        accountName: String? = nil,
+        subscriptionKey: UsageSubscriptionKey? = nil
     ) {
         self.mainLimit = mainLimit
         self.otherLimits = otherLimits
@@ -58,6 +60,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         self.resetCredits = resetCredits
         self.fetchedAt = fetchedAt
         self.accountName = accountName
+        self.subscriptionKey = subscriptionKey
     }
 
     init(from decoder: Decoder) throws {
@@ -68,6 +71,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         resetCredits = try container.decodeIfPresent([ResetCredit].self, forKey: .resetCredits) ?? []
         fetchedAt = try container.decode(Date.self, forKey: .fetchedAt)
         accountName = try container.decodeIfPresent(String.self, forKey: .accountName)
+        subscriptionKey = try container.decodeIfPresent(UsageSubscriptionKey.self, forKey: .subscriptionKey)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -77,6 +81,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         case resetCredits
         case fetchedAt
         case accountName = "accountEmail"
+        case subscriptionKey
     }
 }
 

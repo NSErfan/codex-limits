@@ -27,7 +27,7 @@ final class CodexAccountsTests: XCTestCase {
         try FileManager.default.createDirectory(at: sharedHistory, withIntermediateDirectories: true)
         let now = Date()
         let primaryReading = Self.snapshot(at: now, remaining: 85, email: "first@example.test")
-        let secondaryReading = Self.snapshot(at: now, remaining: 19, email: "second@example.test")
+        let secondaryReading = Self.snapshot(at: now, remaining: 19, email: "second@example.test", workspace: "second-workspace")
         func historyDirectory(for account: UsageAccount) -> URL {
             directory.appendingPathComponent(account.localHistoryDirectoryName, isDirectory: true)
         }
@@ -40,8 +40,8 @@ final class CodexAccountsTests: XCTestCase {
         let providers = UsageProviders(defaults: defaults, codex: primary, secondCodex: secondary, widgetStore: nil)
 
         await primary.connectHistoryFolder(sharedHistory)
-        await secondary.connectHistoryFolder(sharedHistory)
         await providers.refreshAll()
+        await secondary.connectHistoryFolder(sharedHistory)
         XCTAssertEqual(primary.snapshot, primaryReading)
         XCTAssertEqual(secondary.snapshot, secondaryReading)
         XCTAssertEqual(primary.samples(for: .weekly).map(\.remainingPercent), [85])
@@ -51,7 +51,8 @@ final class CodexAccountsTests: XCTestCase {
         let sharedFiles = try XCTUnwrap(FileManager.default.enumerator(atPath: sharedHistory.path))
             .compactMap { $0 as? String }.filter { $0.hasSuffix(".json") }
         XCTAssertTrue(sharedFiles.contains { $0.hasPrefix("Windows/10080/") })
-        XCTAssertTrue(sharedFiles.contains { $0.hasPrefix("Codex 2/Windows/10080/") })
+        let secondaryKey = try XCTUnwrap(secondaryReading.subscriptionKey)
+        XCTAssertTrue(sharedFiles.contains { $0.hasPrefix("Codex 2/Subscriptions/\(secondaryKey.rawValue)/Windows/10080/") })
         XCTAssertEqual(store.read()?.window?.remainingPercent, 85)
 
         let collected = await BackgroundCollector.collectOnce(
@@ -130,12 +131,80 @@ final class CodexAccountsTests: XCTestCase {
         providers.setSecondCodexEnabled(false)
     }
 
-    private static func snapshot(at now: Date, remaining: Double, email: String) -> UsageSnapshot {
+    func testWorkspaceSwitchSeparatesCollectorHistoryAndSyncEvenWhenEmailMatches() async throws {
+        let suite = "CodexAccountsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite, isDirectory: true)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let local = directory.appendingPathComponent("local")
+        let sync = directory.appendingPathComponent("sync")
+        try FileManager.default.createDirectory(at: sync, withIntermediateDirectories: true)
+        let now = Date().addingTimeInterval(-600)
+        let email = "same@example.test"
+        let first = Self.snapshot(at: now, remaining: 80, email: email, workspace: "first")
+        let collector = Self.snapshot(at: now + 60, remaining: 42, email: email, workspace: "second")
+        let second = Self.snapshot(at: now + 120, remaining: 39, email: email, workspace: "second")
+        let unknown = Self.snapshot(at: now + 180, remaining: 12, email: email)
+        let returnToFirst = Self.snapshot(at: now + 240, remaining: 78, email: email, workspace: "first")
+        let source = SnapshotSequence([first, second, unknown, returnToFirst])
+        let monitor = UsageMonitor(account: .secondaryCodex, defaults: defaults, historyDirectory: local,
+                                   fetchUsage: { await source.next() }, startsAutomatically: false)
+        let legacy = UsageHistory(localDirectory: local, installationID: UUID().uuidString.lowercased())
+        let previousSample = try XCTUnwrap(Self.snapshot(at: now - 60, remaining: 97, email: email)
+            .sample(for: .weekly, provider: .codex))
+        _ = await legacy.record(previousSample)
+
+        await monitor.refresh()
+        await monitor.connectHistoryFolder(sync)
+        XCTAssertEqual(monitor.samples(for: .weekly).map(\.remainingPercent), [80])
+        XCTAssertEqual(monitor.syncFolderName, "sync")
+
+        let collected = await BackgroundCollector.collectOnce(
+            defaults: defaults, historyDirectory: local, account: .secondaryCodex, fetchUsage: { collector }
+        )
+        XCTAssertTrue(collected)
+        await monitor.refresh()
+        XCTAssertEqual(monitor.snapshot, second)
+        XCTAssertEqual(monitor.samples(for: .weekly).map(\.remainingPercent), [42, 39])
+        XCTAssertNil(monitor.syncFolderName)
+        let secondKey = try XCTUnwrap(second.subscriptionKey)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: sync.appendingPathComponent("Codex 2/Subscriptions/\(secondKey.rawValue)").path
+        ))
+
+        let recordedUnknown = await BackgroundCollector.collectOnce(
+            defaults: defaults, historyDirectory: local, account: .secondaryCodex, fetchUsage: { unknown }
+        )
+        XCTAssertFalse(recordedUnknown)
+        await monitor.refresh()
+        XCTAssertEqual(monitor.snapshot, unknown)
+        XCTAssertFalse(monitor.allowsHistorySync)
+        XCTAssertTrue(monitor.samples.isEmpty)
+        XCTAssertEqual(monitor.samples(for: .weekly).map(\.remainingPercent), [12])
+
+        await monitor.refresh()
+        XCTAssertEqual(monitor.samples(for: .weekly).map(\.remainingPercent), [80, 78])
+        XCTAssertEqual(monitor.syncFolderName, "sync")
+        let legacyState = await legacy.synchronize()
+        XCTAssertEqual(legacyState.samples.map(\.remainingPercent), [97])
+    }
+
+    private actor SnapshotSequence {
+        var snapshots: [UsageSnapshot]
+        init(_ snapshots: [UsageSnapshot]) { self.snapshots = snapshots }
+        func next() -> UsageSnapshot { snapshots.removeFirst() }
+    }
+
+    private static func snapshot(at now: Date, remaining: Double, email: String, workspace: String? = nil) -> UsageSnapshot {
         UsageSnapshot(
             mainLimit: LimitReading(limitId: "codex", name: "Codex", window: UsageWindow(
                 remainingPercent: remaining, resetsAt: now.addingTimeInterval(3600), durationMinutes: 10_080
             )),
-            otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now, accountName: email
+            otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now, accountName: email,
+            subscriptionKey: workspace.map { UsageSubscriptionKey(workspaceID: $0, accountName: email) }
         )
     }
 }
