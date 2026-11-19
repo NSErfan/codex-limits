@@ -9,20 +9,20 @@ struct ProviderUsageWindow: View {
         ScrollView {
             MenuContentView(
                 monitor: providers.selectedMonitor,
-                selectedProvider: Binding(
-                    get: { providers.selectedProvider },
-                    set: { provider in
-                        if providers.select(provider) { Task { await login.refresh(provider) } }
+                selectedAccount: Binding(
+                    get: { providers.selectedAccount },
+                    set: { account in
+                        if providers.selectAccount(account) { Task { await login.refresh(account) } }
                     }
                 ),
-                providerOptions: providers.enabledProviders,
-                onSignIn: { login.signIn(to: providers.selectedProvider) },
-                loginMessage: login.message(for: providers.selectedProvider),
-                isOpeningLogin: login.isOpening(providers.selectedProvider),
+                accountOptions: providers.enabledAccounts,
+                onSignIn: { login.signIn(to: providers.selectedAccount) },
+                loginMessage: login.message(for: providers.selectedAccount),
+                isOpeningLogin: login.isOpening(providers.selectedAccount),
                 showsFooterActions: false,
                 refreshesOnAppear: false
             )
-            .id(providers.selectedProvider)
+            .id(providers.selectedAccount)
         }
         .frame(width: 460)
         .environment(\.usageAccent, appearance.accent)

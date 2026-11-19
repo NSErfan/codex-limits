@@ -65,23 +65,46 @@ final class BackgroundCollectorTests: XCTestCase {
         defaults.set(["claude"], forKey: ProviderEnablement.disabledKey)
         let visited = VisitRecorder()
 
-        let collected = await BackgroundCollector.collectEnabledProviders(defaults: defaults) { provider in
+        let collected = await BackgroundCollector.collectEnabledAccounts(defaults: defaults) { provider in
             await visited.record(provider)
             return provider == .claude
         }
 
         let providers = await visited.providers
-        XCTAssertEqual(providers, [.codex, .copilot])
+        XCTAssertEqual(providers, [.primaryCodex, .copilot])
         XCTAssertFalse(collected, "Only turned-on providers count toward success")
 
         defaults.removeObject(forKey: ProviderEnablement.disabledKey)
-        let collectedWithClaude = await BackgroundCollector.collectEnabledProviders(defaults: defaults) { $0 == .claude }
+        let collectedWithClaude = await BackgroundCollector.collectEnabledAccounts(defaults: defaults) { $0 == .claude }
         XCTAssertTrue(collectedWithClaude)
     }
 
+    func testCollectorVisitsTheSecondCodexAccountOnlyWhileBothTogglesAreOn() async throws {
+        let suite = "BackgroundCollectorTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let visit: () async -> [UsageAccount] = {
+            let recorder = VisitRecorder()
+            _ = await BackgroundCollector.collectEnabledAccounts(defaults: defaults) { account in
+                await recorder.record(account)
+                return false
+            }
+            return await recorder.providers
+        }
+
+        let withoutSecondAccount = await visit()
+        XCTAssertEqual(withoutSecondAccount, [.primaryCodex, .claude, .copilot])
+        defaults.set(true, forKey: UsageAccount.secondCodexEnabledKey)
+        let withSecondAccount = await visit()
+        XCTAssertEqual(withSecondAccount, [.primaryCodex, .secondaryCodex, .claude, .copilot])
+        defaults.set(["codex"], forKey: ProviderEnablement.disabledKey)
+        let withoutCodex = await visit()
+        XCTAssertEqual(withoutCodex, [.claude, .copilot])
+    }
+
     private actor VisitRecorder {
-        private(set) var providers: [UsageProvider] = []
-        func record(_ provider: UsageProvider) { providers.append(provider) }
+        private(set) var providers: [UsageAccount] = []
+        func record(_ provider: UsageAccount) { providers.append(provider) }
     }
 
     func testCollectorInstallationIDIsStableAndDistinctFromTheApps() throws {

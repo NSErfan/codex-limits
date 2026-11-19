@@ -23,9 +23,8 @@ struct ProviderMenuLabel: View {
     }
 
     private var title: String {
-        displayMode == .iconOnly
-            ? menuBarText
-            : "\(monitor.provider.displayName) \(menuBarText)"
+        if displayMode != .iconOnly { return "\(monitor.account.displayName) \(menuBarText)" }
+        return monitor.account == .secondaryCodex ? "2 · \(menuBarText)" : menuBarText
     }
 
     private var limit: LimitReading? {
@@ -45,6 +44,6 @@ struct ProviderMenuLabel: View {
         let windowName = showsFixedWindow ? "\(usageWindow.title) " : ""
         let percentage = UsageMonitor.menuBarText(remainingPercent: limit?.window.remainingPercent)
         let status = limit == nil ? "usage unavailable" : "\(percentage) remaining"
-        return "\(monitor.provider.displayName): \(windowName)\(status)"
+        return "\(monitor.account.displayName): \(windowName)\(status)"
     }
 }

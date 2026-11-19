@@ -13,6 +13,8 @@ enum CodexClientError: UsageFetchError, Sendable {
     case appServerError(String)
     case mainLimitMissing
     case timedOut
+    case profileAlreadyInUse
+    case profileUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -26,14 +28,20 @@ enum CodexClientError: UsageFetchError, Sendable {
             "Codex didn’t return usage-limit information. Check that Codex CLI is signed in, then refresh."
         case .timedOut:
             "Codex didn’t respond in time. Refresh to try again."
+        case .profileAlreadyInUse:
+            "Codex and Codex 2 are using the same CLI profile. Start Codex Limits with a different CODEX_HOME for the first account."
+        case .profileUnavailable:
+            "Couldn’t open the Codex 2 profile folder. Check that Codex Limits can write to Application Support."
         }
     }
 
     var shouldRetryAutomatically: Bool {
         switch self {
-        case .invalidResponse, .appServerError, .timedOut:
+        case .invalidResponse, .timedOut:
             true
-        case .cliNotFound, .mainLimitMissing:
+        case .appServerError:
+            !requiresLogin
+        case .cliNotFound, .mainLimitMissing, .profileAlreadyInUse, .profileUnavailable:
             false
         }
     }
@@ -47,7 +55,10 @@ enum CodexClientError: UsageFetchError, Sendable {
                 || message.localizedCaseInsensitiveContains("log in")
                 || message.localizedCaseInsensitiveContains("unauthorized")
                 || message.localizedCaseInsensitiveContains("not authenticated")
-        case .invalidResponse, .timedOut:
+                || message.localizedCaseInsensitiveContains("authentication required")
+                || message.localizedCaseInsensitiveContains("requires a ChatGPT login")
+                || message.localizedCaseInsensitiveContains("requires a ChatGPT account")
+        case .invalidResponse, .timedOut, .profileAlreadyInUse, .profileUnavailable:
             false
         }
     }

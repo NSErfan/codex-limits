@@ -5,7 +5,7 @@ struct ProviderHistorySettings: View {
     @ObservedObject var monitor: UsageMonitor
 
     var body: some View {
-        Text("Choose a shared folder to combine \(monitor.provider.displayName) usage history from your Macs.")
+        Text("Choose a shared folder to combine \(monitor.account.displayName) usage history from your Macs.")
             .foregroundStyle(.secondary)
 
         if let folderName = monitor.syncFolderName {
@@ -17,7 +17,7 @@ struct ProviderHistorySettings: View {
             Button("Choose folder…", action: chooseHistoryFolder)
         }
 
-        Text("Use the same \(monitor.provider.displayName) account on every Mac connected to this folder.")
+        Text("Use the same \(monitor.account.displayName) account on every Mac connected to this folder.")
             .font(.caption)
             .foregroundStyle(.secondary)
         Text("Choose a private folder that only you can access.")

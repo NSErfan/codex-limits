@@ -9,7 +9,7 @@ struct ProviderAccountSettings: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(monitor.provider.displayName).fontWeight(.medium)
+                    Text(monitor.account.displayName).fontWeight(.medium)
                     Text(accountDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -19,11 +19,11 @@ struct ProviderAccountSettings: View {
                 }
                 Spacer()
                 Button("Refresh") {
-                    Task { await login.refresh(monitor.provider) }
+                    Task { await login.refresh(monitor.account) }
                 }
                 .disabled(monitor.isRefreshing)
-                Button("Sign in…") { login.signIn(to: monitor.provider) }
-                    .disabled(login.isOpening(monitor.provider))
+                Button("Sign in…") { login.signIn(to: monitor.account) }
+                    .disabled(login.isOpening(monitor.account))
             }
             if let error = monitor.errorMessage {
                 Text(error)
@@ -41,7 +41,7 @@ struct ProviderAccountSettings: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let message = login.message(for: monitor.provider) {
+            if let message = login.message(for: monitor.account) {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
             if monitor.requiresInstallation {

@@ -142,7 +142,7 @@ final class UsageRefreshTests: XCTestCase {
         }
 
         @MainActor func monitor(_ fetch: @escaping @Sendable () async throws -> UsageFetchResult) -> UsageMonitor {
-            UsageMonitor(provider: .claude, defaults: defaults, historyDirectory: directory,
+            UsageMonitor(account: .claude, defaults: defaults, historyDirectory: directory,
                          widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"), provider: .claude),
                          fetchResult: { try await fetch() }, recoveryDelaysNanoseconds: [], startsAutomatically: false)
         }

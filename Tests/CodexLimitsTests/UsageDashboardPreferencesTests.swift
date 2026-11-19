@@ -35,15 +35,15 @@ final class UsageDashboardPreferencesTests: XCTestCase {
         let keys = UsageProvider.allCases.flatMap { provider in
             provider.periods.flatMap { period in
                 ["chartRange", "burndownTarget", UsageMonitor.paceTargetCreditIDKey].map {
-                    UsageDashboardPreferences.key($0, provider: provider, period: period)
+                    UsageDashboardPreferences.key($0, account: UsageAccount(provider: provider), period: period)
                 }
             }
         }
         XCTAssertEqual(Set(keys).count, 15)
-        XCTAssertNotEqual(UsageDashboardPreferences.selectionKey(for: .codex), UsageDashboardPreferences.selectionKey(for: .claude))
+        XCTAssertNotEqual(UsageDashboardPreferences.selectionKey(for: .primaryCodex), UsageDashboardPreferences.selectionKey(for: .claude))
         try withDefaults { defaults in
-            let fiveHour = UsageDashboardPreferences.key("chartRange", provider: .claude, period: .fiveHour)
-            let weekly = UsageDashboardPreferences.key("chartRange", provider: .claude, period: .weekly)
+            let fiveHour = UsageDashboardPreferences.key("chartRange", account: .claude, period: .fiveHour)
+            let weekly = UsageDashboardPreferences.key("chartRange", account: .claude, period: .weekly)
             defaults.set(ChartRange.month.rawValue, forKey: fiveHour)
             defaults.set(ChartRange.week.rawValue, forKey: weekly)
             defaults.set(UsagePeriod.fiveHour.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: .claude))
@@ -142,7 +142,7 @@ final class UsageDashboardPreferencesTests: XCTestCase {
     }
 
     private func key(_ name: String, _ period: UsagePeriod) -> String {
-        UsageDashboardPreferences.key(name, provider: .claude, period: period)
+        UsageDashboardPreferences.key(name, account: .claude, period: period)
     }
 
     private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {

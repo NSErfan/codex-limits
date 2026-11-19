@@ -16,7 +16,7 @@ struct UsageDashboardView: View {
     @Environment(\.usageAccent) private var usageAccent
 
     init(
-        provider: UsageProvider,
+        account: UsageAccount,
         period: UsagePeriod,
         window: UsageWindow,
         snapshot: UsageSnapshot,
@@ -32,17 +32,17 @@ struct UsageDashboardView: View {
         _safetyBuffer = AppStorage(wrappedValue: 3, UsageMonitor.safetyBufferKey, store: defaults)
         _paceTargetCreditID = AppStorage(
             wrappedValue: "",
-            UsageDashboardPreferences.key(UsageMonitor.paceTargetCreditIDKey, provider: provider, period: period),
+            UsageDashboardPreferences.key(UsageMonitor.paceTargetCreditIDKey, account: account, period: period),
             store: defaults
         )
         _chartRange = AppStorage(
             wrappedValue: .window,
-            UsageDashboardPreferences.key("chartRange", provider: provider, period: period),
+            UsageDashboardPreferences.key("chartRange", account: account, period: period),
             store: defaults
         )
         _savedBurndownTarget = AppStorage(
             wrappedValue: Data(),
-            UsageDashboardPreferences.key("burndownTarget", provider: provider, period: period),
+            UsageDashboardPreferences.key("burndownTarget", account: account, period: period),
             store: defaults
         )
     }

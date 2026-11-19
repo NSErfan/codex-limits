@@ -40,7 +40,7 @@ final class MenuContentViewTests: XCTestCase {
         let snapshot = UsageSnapshot(mainLimit: weekly, otherLimits: [fiveHour], tokenHistory: [],
                                      resetCredits: [], fetchedAt: now)
         let monitor = UsageMonitor(
-            provider: provider, defaults: defaults, historyDirectory: directory,
+            account: UsageAccount(provider: provider), defaults: defaults, historyDirectory: directory,
             widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"), provider: provider),
             fetchUsage: { snapshot }, startsAutomatically: false
         )

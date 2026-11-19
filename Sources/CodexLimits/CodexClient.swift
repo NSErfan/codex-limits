@@ -4,13 +4,22 @@ import Foundation
 enum CodexClient {
     private static let retryDelayNanoseconds: UInt64 = 250_000_000
     private static let timeoutNanoseconds: UInt64 = 15_000_000_000
-    static func fetch() async throws -> UsageSnapshot {
-        try await fetch(
-            executablePaths: [ProviderExecutable.path(for: .codex)].compactMap { $0 },
+    static func fetch(account: UsageAccount = .primaryCodex) async throws -> UsageSnapshot {
+        guard let executable = ProviderExecutable.path(for: .codex) else { throw CodexClientError.cliNotFound }
+        let base = ProcessInfo.processInfo.environment
+        let environment: [String: String]
+        if account == .secondaryCodex {
+            try CodexProfile.prepareSecondaryHome(environment: base)
+            environment = CodexProfile.secondaryEnvironment(home: CodexProfile.secondaryHome, base: base)
+        } else {
+            environment = base
+        }
+        return try await fetch(
+            executablePaths: [executable],
             isExecutable: FileManager.default.isExecutableFile(atPath:),
             retryDelayNanoseconds: retryDelayNanoseconds,
             timeoutNanoseconds: timeoutNanoseconds,
-            makeConnection: makeLiveConnection(using:)
+            makeConnection: { makeLiveConnection(using: $0, environment: environment) }
         )
     }
 
@@ -105,6 +114,13 @@ enum CodexClient {
     static func makeLiveConnection(
         using executable: String
     ) -> CodexAppServerConnection {
+        makeLiveConnection(using: executable, environment: ProcessInfo.processInfo.environment)
+    }
+
+    static func makeLiveConnection(
+        using executable: String,
+        environment: [String: String]
+    ) -> CodexAppServerConnection {
         let process = Process()
         let input = Pipe()
         let output = Pipe()
@@ -114,7 +130,7 @@ enum CodexClient {
         // `node` through `/usr/bin/env`, so its directory must be on PATH.
         process.environment = spawnEnvironment(
             forExecutableAt: executable,
-            base: ProcessInfo.processInfo.environment
+            base: environment
         )
         process.standardInput = input
         process.standardOutput = output

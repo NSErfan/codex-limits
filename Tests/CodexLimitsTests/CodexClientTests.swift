@@ -2,6 +2,11 @@ import XCTest
 @testable import CodexLimits
 
 final class CodexClientTests: XCTestCase {
+    func testSignedOutAppServerRequiresLogin() {
+        let error = CodexClientError.appServerError("codex account authentication required to read rate limits")
+        XCTAssertTrue(error.requiresLogin)
+        XCTAssertFalse(error.shouldRetryAutomatically)
+    }
     func testEveryClientFailureHasAnActionableUserMessage() {
         let messages: [(CodexClientError, String)] = [
             (

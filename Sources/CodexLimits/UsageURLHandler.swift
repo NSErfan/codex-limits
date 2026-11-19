@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import CodexWidgetKit
 import SwiftUI
 
 @MainActor
@@ -12,17 +11,17 @@ final class UsageURLHandler: NSObject, NSApplicationDelegate {
     private var selection: AnyCancellable?
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let provider = urls.compactMap(Self.provider(from:)).last,
+        guard let account = urls.compactMap(Self.account(from:)).last,
               let providers, let login else { return }
-        // A link to a turned-off provider, such as its old widget, opens the current provider instead.
-        let selected = providers.select(provider)
-        if selected, let longestPeriod = provider.periods.last {
+        // Links from disabled accounts still open the window on an enabled one.
+        let selected = providers.selectAccount(account)
+        if selected, let longestPeriod = account.provider.periods.last {
             UserDefaults.standard.set(longestPeriod.rawValue,
-                                      forKey: UsageDashboardPreferences.selectionKey(for: provider))
+                                      forKey: UsageDashboardPreferences.selectionKey(for: account))
         }
         showUsageWindow()
         application.activate(ignoringOtherApps: true)
-        if selected { Task { await login.refresh(provider) } }
+        if selected { Task { await login.refresh(account) } }
     }
 
     private func showUsageWindow() {
@@ -37,18 +36,18 @@ final class UsageURLHandler: NSObject, NSApplicationDelegate {
             window.setContentSize(NSSize(width: 460, height: 740))
             window.center()
             usageWindow = NSWindowController(window: window)
-            selection = providers.$selectedProvider.sink { [weak self] provider in
-                self?.usageWindow?.window?.title = "\(provider.displayName) usage"
+            selection = providers.$selectedAccount.sink { [weak self] account in
+                self?.usageWindow?.window?.title = "\(account.displayName) usage"
             }
         }
         usageWindow?.showWindow(nil)
         usageWindow?.window?.makeKeyAndOrderFront(nil)
     }
 
-    nonisolated static func provider(from url: URL) -> UsageProvider? {
+    nonisolated static func account(from url: URL) -> UsageAccount? {
         guard url.scheme?.lowercased() == "codexlimits", url.host?.lowercased() == "usage",
               url.user == nil, url.password == nil, url.port == nil,
               url.pathComponents.count == 2 else { return nil }
-        return UsageProvider(rawValue: url.lastPathComponent)
+        return UsageAccount(rawValue: url.lastPathComponent)
     }
 }

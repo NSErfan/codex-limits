@@ -26,13 +26,13 @@ enum BackgroundCollector {
     private static func collectOnce() async -> Bool {
         // Must precede any preference or history access.
         LegacyBundleMigration.run()
-        return await collectEnabledProviders(defaults: .standard) { provider in
+        return await collectEnabledAccounts(defaults: .standard) { account in
             await collectOnce(
                 defaults: .standard,
-                historyDirectory: UsageMonitor.historyDirectory(provider: provider),
-                provider: provider,
+                historyDirectory: UsageMonitor.historyDirectory(account: account),
+                account: account,
                 fetchUsage: {
-                    switch try await scheduledFetch(provider: provider, fetch: { try await provider.fetchUsage() }) {
+                    switch try await scheduledFetch(provider: account.provider, fetch: { try await account.fetchUsage() }) {
                     case let .fetched(snapshot, _), let .cached(snapshot, _): snapshot
                     case let .deferred(error, _, _): throw error
                     }
@@ -41,14 +41,18 @@ enum BackgroundCollector {
         }
     }
 
-    /// Collects each provider that is on, in turn; true when any collection succeeded.
-    static func collectEnabledProviders(
+    /// Collects each enabled account, in turn; true when any collection succeeded.
+    static func collectEnabledAccounts(
         defaults: UserDefaults,
-        collect: (UsageProvider) async -> Bool
+        collect: (UsageAccount) async -> Bool
     ) async -> Bool {
         var collectedAny = false
-        for provider in ProviderEnablement.enabledProviders(in: defaults) {
-            let collected = await collect(provider)
+        let accounts = UsageAccount.enabledAccounts(
+            providers: ProviderEnablement.enabledProviders(in: defaults),
+            secondCodexEnabled: defaults.bool(forKey: UsageAccount.secondCodexEnabledKey)
+        )
+        for account in accounts {
+            let collected = await collect(account)
             collectedAny = collectedAny || collected
         }
         return collectedAny
@@ -74,10 +78,11 @@ enum BackgroundCollector {
         defaults: UserDefaults,
         historyDirectory: URL,
         widgetStore: WeeklyWidgetStore? = nil,
-        provider: UsageProvider = .codex,
+        account: UsageAccount = .primaryCodex,
         fetchUsage: @Sendable () async throws -> UsageSnapshot
     ) async -> Bool {
         guard let snapshot = try? await fetchUsage() else { return false }
+        let provider = account.provider
         let window = snapshot.mainLimit.window
         let sample = UsageSample(
             observedAt: snapshot.fetchedAt,
@@ -96,13 +101,15 @@ enum BackgroundCollector {
             provider: provider
         )
         let periods = await periodHistory.record(snapshot)
-        let store = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
-            directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true),
-            provider: provider
-        )
-        WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store,
-                                      safetyBuffer: defaults.object(forKey: UsageMonitor.safetyBufferKey) as? Double ?? 3,
-                                      provider: provider)
+        if account.publishesWeeklyWidget {
+            let store = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
+                directory: historyDirectory.appendingPathComponent("WeeklyWidget", isDirectory: true),
+                provider: provider
+            )
+            WeeklyWidgetPublisher.publish(snapshot, writer: .collector, store: store,
+                                          safetyBuffer: defaults.object(forKey: UsageMonitor.safetyBufferKey) as? Double ?? 3,
+                                          provider: provider)
+        }
         return recorded.errorMessage == nil && periods.errorMessage == nil
     }
 

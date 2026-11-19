@@ -6,13 +6,14 @@ import Foundation
 final class UsageProviders: ObservableObject {
     static let selectionKey = "selectedUsageProvider"
 
-    /// Always a provider that is on; change it with select(_:).
-    @Published private(set) var selectedProvider: UsageProvider {
-        didSet { defaults.set(selectedProvider.rawValue, forKey: Self.selectionKey) }
+    /// Always an account that is on; change it with selectAccount(_:).
+    @Published private(set) var selectedAccount: UsageAccount {
+        didSet { defaults.set(selectedAccount.rawValue, forKey: Self.selectionKey) }
     }
-    @Published private(set) var enabledProviders: [UsageProvider]
+    @Published private(set) var enabledAccounts: [UsageAccount]
 
     let codex: UsageMonitor
+    private let secondCodex: UsageMonitor
     let claude: UsageMonitor
     let copilot: UsageMonitor
     private let defaults: UserDefaults
@@ -21,11 +22,15 @@ final class UsageProviders: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     var selectedMonitor: UsageMonitor {
-        monitor(for: selectedProvider)
+        monitor(forAccount: selectedAccount)
     }
 
-    var monitors: [UsageMonitor] {
-        UsageProvider.allCases.map(monitor(for:))
+    var selectedProvider: UsageProvider { selectedAccount.provider }
+    var enabledProviders: [UsageProvider] { enabledAccounts.filter { $0 != .secondaryCodex }.map(\.provider) }
+    var isSecondCodexEnabled: Bool { defaults.bool(forKey: UsageAccount.secondCodexEnabledKey) }
+
+    private var monitors: [UsageMonitor] {
+        [codex, secondCodex, claude, copilot]
     }
 
     /// Monitors this object creates start only when their provider is on. Injected
@@ -33,6 +38,7 @@ final class UsageProviders: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         codex: UsageMonitor? = nil,
+        secondCodex: UsageMonitor? = nil,
         claude: UsageMonitor? = nil,
         copilot: UsageMonitor? = nil,
         widgetStore: WeeklyWidgetStore? = .shared(),
@@ -41,19 +47,20 @@ final class UsageProviders: ObservableObject {
         self.defaults = defaults
         self.widgetStore = widgetStore
         self.reloadWidgets = reloadWidgets
-        let enabled = ProviderEnablement.enabledProviders(in: defaults)
-        enabledProviders = enabled
-        func makeMonitor(_ provider: UsageProvider) -> UsageMonitor {
-            UsageMonitor(provider: provider, defaults: defaults, startsAutomatically: enabled.contains(provider))
+        let enabled = Self.enabledAccounts(in: defaults)
+        enabledAccounts = enabled
+        func makeMonitor(_ account: UsageAccount) -> UsageMonitor {
+            UsageMonitor(account: account, defaults: defaults, startsAutomatically: enabled.contains(account))
         }
-        self.codex = codex ?? makeMonitor(.codex)
+        self.codex = codex ?? makeMonitor(.primaryCodex)
+        self.secondCodex = secondCodex ?? makeMonitor(.secondaryCodex)
         self.claude = claude ?? makeMonitor(.claude)
         self.copilot = copilot ?? makeMonitor(.copilot)
-        let saved = defaults.string(forKey: Self.selectionKey).flatMap(UsageProvider.init(rawValue:))
-        selectedProvider = saved.flatMap { enabled.contains($0) ? $0 : nil } ?? enabled[0]
+        let saved = defaults.string(forKey: Self.selectionKey).flatMap(UsageAccount.init(rawValue:))
+        selectedAccount = saved.flatMap { enabled.contains($0) ? $0 : nil } ?? enabled[0]
 
         for monitor in monitors {
-            if !enabled.contains(monitor.provider) { monitor.stop() }
+            if !enabled.contains(monitor.account) { monitor.stop() }
             monitor.objectWillChange
                 .sink { [weak self] _ in self?.objectWillChange.send() }
                 .store(in: &cancellables)
@@ -65,22 +72,36 @@ final class UsageProviders: ObservableObject {
     }
 
     func monitor(for provider: UsageProvider) -> UsageMonitor {
-        switch provider {
-        case .codex: codex
+        monitor(forAccount: UsageAccount(provider: provider))
+    }
+
+    func monitor(forAccount account: UsageAccount) -> UsageMonitor {
+        switch account {
+        case .primaryCodex: codex
+        case .secondaryCodex: secondCodex
         case .claude: claude
         case .copilot: copilot
         }
     }
 
     func isEnabled(_ provider: UsageProvider) -> Bool {
-        enabledProviders.contains(provider)
+        isAccountEnabled(UsageAccount(provider: provider))
     }
 
-    /// Returns false, leaving the selection unchanged, for a provider that is off.
+    func isAccountEnabled(_ account: UsageAccount) -> Bool {
+        enabledAccounts.contains(account)
+    }
+
     @discardableResult
     func select(_ provider: UsageProvider) -> Bool {
-        guard isEnabled(provider) else { return false }
-        if selectedProvider != provider { selectedProvider = provider }
+        selectAccount(UsageAccount(provider: provider))
+    }
+
+    /// Returns false, leaving the selection unchanged, for an account that is off.
+    @discardableResult
+    func selectAccount(_ account: UsageAccount) -> Bool {
+        guard isAccountEnabled(account) else { return false }
+        if selectedAccount != account { selectedAccount = account }
         return true
     }
 
@@ -88,24 +109,43 @@ final class UsageProviders: ObservableObject {
     /// The last provider that is on can't be turned off.
     func setEnabled(_ enabled: Bool, for provider: UsageProvider) {
         guard ProviderEnablement.setEnabled(enabled, for: provider, in: defaults) else { return }
-        enabledProviders = ProviderEnablement.enabledProviders(in: defaults)
-        let monitor = monitor(for: provider)
-        if isEnabled(provider) {
+        updateEnabledAccounts()
+        shareEnablementWithWidgets()
+    }
+
+    func setSecondCodexEnabled(_ enabled: Bool) {
+        guard enabled != isSecondCodexEnabled else { return }
+        defaults.set(enabled, forKey: UsageAccount.secondCodexEnabledKey)
+        updateEnabledAccounts()
+    }
+
+    private func updateEnabledAccounts() {
+        let previous = enabledAccounts
+        let enabled = Self.enabledAccounts(in: defaults)
+        enabledAccounts = enabled
+        if !enabled.contains(selectedAccount) { selectedAccount = enabled[0] }
+        for account in previous where !enabled.contains(account) {
+            monitor(forAccount: account).stop()
+        }
+        for account in enabled where !previous.contains(account) {
+            let monitor = monitor(forAccount: account)
             Task { [weak self] in
-                // A quick off-on-off must not leave a turned-off provider running.
-                guard self?.isEnabled(provider) == true else { return }
+                guard self?.isAccountEnabled(account) == true else { return }
                 await monitor.start()
             }
-        } else {
-            monitor.stop()
-            if selectedProvider == provider { selectedProvider = enabledProviders[0] }
         }
-        shareEnablementWithWidgets()
+    }
+
+    private static func enabledAccounts(in defaults: UserDefaults) -> [UsageAccount] {
+        UsageAccount.enabledAccounts(
+            providers: ProviderEnablement.enabledProviders(in: defaults),
+            secondCodexEnabled: defaults.bool(forKey: UsageAccount.secondCodexEnabledKey)
+        )
     }
 
     func refreshAll() async {
         await withTaskGroup(of: Void.self) { group in
-            for monitor in monitors where isEnabled(monitor.provider) {
+            for monitor in enabledAccounts.map(monitor(forAccount:)) {
                 group.addTask { _ = await monitor.refresh() }
             }
         }
@@ -113,7 +153,7 @@ final class UsageProviders: ObservableObject {
 
     func updateSafetyBuffer(_ value: Double) {
         defaults.set(value, forKey: UsageMonitor.safetyBufferKey)
-        for monitor in monitors {
+        for monitor in monitors where monitor.account != .secondaryCodex || isSecondCodexEnabled {
             monitor.updateSafetyBuffer(value)
         }
     }

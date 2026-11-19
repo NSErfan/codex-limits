@@ -42,7 +42,20 @@ Turn providers you don't use on or off in **Settings → Providers**. A turned-o
 from the menu selector, **Accounts**, and **History sync**, and it isn't checked, including by the
 background helper. Its saved readings and history are kept for when you turn it back on, and its
 desktop widgets say **Turned off in Codex Limits** instead of showing an old reading. At least one
-provider stays on; when only one is on, the menu hides the provider selector.
+provider stays on. The menu hides the selector when only one account is available.
+
+### Track two Codex subscriptions
+
+In **Settings → Accounts**, turn on **Track a second Codex account**. Click **Sign in…** for
+**Codex 2** and choose the other ChatGPT account or workspace in your browser. Then choose
+**Codex** or **Codex 2** in the menu to see that subscription’s limits, charts, and pace.
+
+Both accounts refresh independently, including during background updates. Each has its own
+saved readings, history, and chart settings. Codex 2 uses its own CLI home at
+`~/Library/Application Support/com.github.nserfan.CodexLimits/CodexSecondaryProfile`;
+the Codex CLI manages its login there. Your existing CLI profile stays in use for the first account.
+Turning off Codex 2 stops its checks and keeps its sign-in and history. Desktop widgets and
+the Model Activity window continue to use the first Codex account.
 
 <details>
 <summary>Menu-bar appearance options</summary>
@@ -335,7 +348,7 @@ Review the resulting usage totals and dates before sharing.
 
 ## Desktop widgets
 
-Widgets cover Codex and Claude Code; Copilot's monthly allowance is shown in the app only.
+Widgets cover the first Codex account and Claude Code. Codex 2 and Copilot are shown in the app.
 
 **Claude + Codex allowance** shows both providers' account-wide weekly balances together.
 The small square keeps each balance and a compact **…% / day** suggested pace caption in view.

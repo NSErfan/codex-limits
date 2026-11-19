@@ -66,7 +66,7 @@ enum MenuPreviewRenderer {
         )
         defaults.set(try JSONEncoder().encode(State(snapshot: claudeSnapshot, samples: samples, previousStatus: nil)), forKey: "claude.usageState")
         let claudeMonitor = UsageMonitor(
-            provider: .claude, defaults: defaults,
+            account: .claude, defaults: defaults,
             historyDirectory: temporary.appendingPathComponent("claude"),
             widgetStore: WeeklyWidgetStore(directory: temporary.appendingPathComponent("claude-widget"), provider: .claude),
             fetchUsage: { claudeSnapshot }, startsAutomatically: false
@@ -94,7 +94,7 @@ enum MenuPreviewRenderer {
         let signedOutDefaults = UserDefaults(suiteName: signedOutSuite)!
         defer { signedOutDefaults.removePersistentDomain(forName: signedOutSuite) }
         let signedOutMonitor = UsageMonitor(
-            provider: .claude, defaults: signedOutDefaults,
+            account: .claude, defaults: signedOutDefaults,
             historyDirectory: temporary.appendingPathComponent("signed-out"),
             widgetStore: WeeklyWidgetStore(directory: temporary.appendingPathComponent("signed-out-widget"), provider: .claude),
             fetchUsage: { throw ClaudeClientError.credentialsMissing }, startsAutomatically: false
@@ -115,7 +115,7 @@ enum MenuPreviewRenderer {
         .background(Color.gray.opacity(0.15))
         try render(menus, to: output.appendingPathComponent("menu-window.png"))
         let creditPreference = UsageDashboardPreferences.key(UsageMonitor.paceTargetCreditIDKey,
-                                                              provider: .codex, period: .weekly)
+                                                              account: .primaryCodex, period: .weekly)
         defaults.set("sample-reset", forKey: creditPreference)
         try render(menus, to: output.appendingPathComponent("menu-banked-reset-target.png"))
         defaults.set("", forKey: creditPreference)
@@ -171,7 +171,7 @@ enum MenuPreviewRenderer {
         providers.setEnabled(false, for: .claude)
         try render(HStack(alignment: .top, spacing: 24) {
             ForEach([ColorScheme.dark, .light], id: \.self) { scheme in
-                MenuContentView(monitor: monitor, providerOptions: providers.enabledProviders,
+                MenuContentView(monitor: monitor, accountOptions: providers.enabledAccounts,
                                 refreshesOnAppear: false, defaults: defaults)
                     .defaultAppStorage(defaults)
                     .environment(\.colorScheme, scheme)
@@ -344,7 +344,7 @@ enum MenuPreviewRenderer {
         defaults.set(try JSONEncoder().encode(State(snapshot: snapshot, samples: samples, previousStatus: nil)),
                      forKey: UsageProvider.copilot.preferenceKey("usageState"))
         return UsageMonitor(
-            provider: .copilot, defaults: defaults, historyDirectory: directory,
+            account: .copilot, defaults: defaults, historyDirectory: directory,
             widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"), provider: .copilot),
             fetchUsage: { snapshot }, startsAutomatically: false
         )
@@ -414,7 +414,7 @@ enum MenuPreviewRenderer {
                 }
                 defaults.set(try JSONEncoder().encode(State(snapshot: snapshot, samples: samples, previousStatus: nil)),
                              forKey: provider.preferenceKey("usageState"))
-                let monitor = UsageMonitor(provider: provider, defaults: defaults, historyDirectory: directory,
+                let monitor = UsageMonitor(account: UsageAccount(provider: provider), defaults: defaults, historyDirectory: directory,
                                            widgetStore: WeeklyWidgetStore(directory: directory.appendingPathComponent("widget"),
                                                                          provider: provider),
                                            fetchUsage: { snapshot }, startsAutomatically: false)
@@ -423,7 +423,7 @@ enum MenuPreviewRenderer {
                     try renderMenuBarLabels(monitor: monitor, to: output)
                 }
                 for period in provider.periods where !missingFiveHour || period == .weekly {
-                    defaults.set(period.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: provider))
+                    defaults.set(period.rawValue, forKey: UsageDashboardPreferences.selectionKey(for: UsageAccount(provider: provider)))
                     let comparison = HStack(alignment: .top, spacing: 24) {
                         menu(monitor: monitor, defaults: defaults, scheme: .dark)
                         menu(monitor: monitor, defaults: defaults, scheme: .light)

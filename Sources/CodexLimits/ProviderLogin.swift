@@ -11,14 +11,16 @@ enum ProviderLogin {
         }
     }
 
-    @MainActor static func open(for provider: UsageProvider) async throws {
+    @MainActor static func open(for account: UsageAccount) async throws {
+        let provider = account.provider
         guard let executable = ProviderExecutable.path(for: provider) else {
             throw LaunchError.cliNotFound(provider)
         }
         guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
             throw LaunchError.terminalUnavailable
         }
-        let commandFile = try writeCommand(for: provider, executable: executable)
+        if account == .secondaryCodex { try CodexProfile.prepareSecondaryHome() }
+        let commandFile = try writeCommand(for: account, executable: executable)
         do {
             _ = try await NSWorkspace.shared.open(
                 [commandFile], withApplicationAt: terminal,
@@ -31,11 +33,16 @@ enum ProviderLogin {
     }
 
     static func command(
-        for provider: UsageProvider, executable: String,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        for account: UsageAccount, executable: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        secondaryHome: URL = CodexProfile.secondaryHome
     ) -> String {
+        let provider = account.provider
+        let isSecondary = account == .secondaryCodex
+        let environment = isSecondary ? CodexProfile.secondaryEnvironment(home: secondaryHome, base: environment) : environment
         let profileKeys = profileKeys(for: provider)
-        let unsetKeys = profileKeys.filter { environment[$0] == nil } + credentialKeys(for: provider)
+        let inheritedCredentialKeys = isSecondary ? CodexProfile.credentialEnvironmentKeys : credentialKeys(for: provider)
+        let unsetKeys = profileKeys.filter { environment[$0] == nil } + inheritedCredentialKeys
         let profile = profileKeys.compactMap { key in
             environment[key].map { "\(key)=\($0)" }
         }
@@ -69,24 +76,24 @@ enum ProviderLogin {
         }
     }
 
-    private static func writeCommand(for provider: UsageProvider, executable: String) throws -> URL {
+    private static func writeCommand(for account: UsageAccount, executable: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodexLimits-Login-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: false,
             attributes: [.posixPermissions: 0o700]
         )
-        let file = directory.appendingPathComponent("Sign in to \(provider.displayName).command")
+        let file = directory.appendingPathComponent("Sign in to \(account.displayName).command")
         let script = """
         #!/bin/zsh -l
         /bin/rm -f -- "$0"
         /bin/rmdir -- \(shellQuote(directory.path))
         export PATH=\(shellQuote(URL(fileURLWithPath: executable).deletingLastPathComponent().path)):/opt/homebrew/bin:/usr/local/bin:$PATH
         cd -- \(shellQuote(FileManager.default.currentDirectoryPath)) || exit 1
-        \(command(for: provider, executable: executable))
+        \(command(for: account, executable: executable))
         login_result=$?
         if [ "$login_result" -eq 0 ]; then
-          /usr/bin/open 'codexlimits://usage/\(provider.rawValue)'
+          /usr/bin/open 'codexlimits://usage/\(account.rawValue)'
         fi
         exit "$login_result"
         """

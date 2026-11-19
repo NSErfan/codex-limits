@@ -244,7 +244,7 @@ final class UsageProvidersTests: XCTestCase {
         let counter = FetchCounter()
         let snapshot = Self.snapshot(provider: .claude, remainingPercent: 44)
         let claude = UsageMonitor(
-            provider: .claude, defaults: context.defaults,
+            account: .claude, defaults: context.defaults,
             historyDirectory: context.directory.appendingPathComponent("claude", isDirectory: true),
             widgetStore: context.widgetStore(for: .claude),
             fetchUsage: {
@@ -445,7 +445,7 @@ final class UsageProvidersTests: XCTestCase {
             fetchUsage: @escaping @Sendable () async throws -> UsageSnapshot
         ) -> UsageMonitor {
             UsageMonitor(
-                provider: provider,
+                account: UsageAccount(provider: provider),
                 defaults: defaults,
                 historyDirectory: directory.appendingPathComponent(provider.rawValue, isDirectory: true),
                 historyNow: { UsageProvidersTests.fixtureNow },

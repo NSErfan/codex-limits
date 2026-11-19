@@ -241,7 +241,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
                 defaults: context.defaults,
                 historyDirectory: context.historyDirectory(provider: provider),
                 widgetStore: context.widgetStore(provider: provider),
-                provider: provider,
+                account: UsageAccount(provider: provider),
                 fetchUsage: { snapshot }
             )
 
@@ -482,7 +482,7 @@ final class UsagePeriodHistoryTests: XCTestCase {
             fetch: @escaping @Sendable () async throws -> UsageFetchResult
         ) -> UsageMonitor {
             let historyNow = now
-            return UsageMonitor(provider: provider, defaults: defaults,
+            return UsageMonitor(account: UsageAccount(provider: provider), defaults: defaults,
                                 historyDirectory: historyDirectory(provider: provider), historyNow: { historyNow },
                                 widgetStore: widgetStore ?? self.widgetStore(provider: provider), fetchResult: { try await fetch() },
                                 recoveryDelaysNanoseconds: [], startsAutomatically: false)

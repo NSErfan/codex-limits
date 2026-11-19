@@ -2,12 +2,12 @@ import CodexWidgetKit
 import Foundation
 
 enum UsageDashboardPreferences {
-    static func selectionKey(for provider: UsageProvider) -> String {
-        provider.preferenceKey("usagePeriod")
+    static func selectionKey(for account: UsageAccount) -> String {
+        account.preferenceKey("usagePeriod")
     }
 
-    static func key(_ name: String, provider: UsageProvider, period: UsagePeriod) -> String {
-        provider.preferenceKey("period.\(period.rawValue).\(name)")
+    static func key(_ name: String, account: UsageAccount, period: UsagePeriod) -> String {
+        account.preferenceKey("period.\(period.rawValue).\(name)")
     }
 
     static func selectedPeriod(savedValue: String, snapshot: UsageSnapshot, provider: UsageProvider) -> UsagePeriod? {
@@ -38,7 +38,7 @@ enum UsageDashboardPreferences {
     }
 
     private static func migrateValue(_ name: String, to period: UsagePeriod, provider: UsageProvider, defaults: UserDefaults) {
-        let destination = key(name, provider: provider, period: period)
+        let destination = key(name, account: UsageAccount(provider: provider), period: period)
         guard defaults.object(forKey: destination) == nil,
               let existing = defaults.object(forKey: provider.preferenceKey(name)) else { return }
         defaults.set(existing, forKey: destination)
@@ -56,7 +56,7 @@ enum UsageDashboardPreferences {
               let window = snapshot.limit(for: period, provider: provider)?.window,
               let migrated = BurndownTarget(date: target.date, window: window, now: now),
               let migratedData = try? JSONEncoder().encode(migrated) else { return }
-        let destination = key("burndownTarget", provider: provider, period: period)
+        let destination = key("burndownTarget", account: UsageAccount(provider: provider), period: period)
         guard defaults.object(forKey: destination) == nil else { return }
         defaults.set(migratedData, forKey: destination)
     }

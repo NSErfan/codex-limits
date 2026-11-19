@@ -1,22 +1,21 @@
 import AppKit
 import Combine
-import CodexWidgetKit
 
 @MainActor
 final class ProviderLoginSession: ObservableObject {
-    @Published private var messages: [UsageProvider: String] = [:]
-    @Published private var openingProviders: Set<UsageProvider> = []
-    private var pendingLogins: [UsageProvider: Date] = [:]
-    private var refreshingProviders: Set<UsageProvider> = []
+    @Published private var messages: [UsageAccount: String] = [:]
+    @Published private var openingAccounts: Set<UsageAccount> = []
+    private var pendingLogins: [UsageAccount: Date] = [:]
+    private var refreshingAccounts: Set<UsageAccount> = []
     private var activation: AnyCancellable?
     private var enablement: AnyCancellable?
     private let providers: UsageProviders
-    private let openLogin: @MainActor (UsageProvider) async throws -> Void
+    private let openLogin: @MainActor (UsageAccount) async throws -> Void
     private let now: () -> Date
 
     init(
         providers: UsageProviders,
-        openLogin: @escaping @MainActor (UsageProvider) async throws -> Void = {
+        openLogin: @escaping @MainActor (UsageAccount) async throws -> Void = {
             try await ProviderLogin.open(for: $0)
         },
         now: @escaping () -> Date = { Date() }
@@ -28,57 +27,55 @@ final class ProviderLoginSession: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor in await self?.refreshPendingLogins() }
             }
-        enablement = providers.$enabledProviders
+        enablement = providers.$enabledAccounts
             .sink { [weak self] enabled in self?.forgetSignIns(except: enabled) }
     }
 
-    func message(for provider: UsageProvider) -> String? { messages[provider] }
+    func message(for account: UsageAccount) -> String? { messages[account] }
 
-    func isOpening(_ provider: UsageProvider) -> Bool { openingProviders.contains(provider) }
+    func isOpening(_ account: UsageAccount) -> Bool { openingAccounts.contains(account) }
 
-    func signIn(to provider: UsageProvider) {
-        guard !isOpening(provider) else { return }
+    func signIn(to account: UsageAccount) {
+        guard providers.isAccountEnabled(account), !isOpening(account) else { return }
         let attemptStartedAt = now()
-        openingProviders.insert(provider)
-        messages[provider] = nil
+        openingAccounts.insert(account)
+        messages[account] = nil
         Task {
-            defer { openingProviders.remove(provider) }
+            defer { openingAccounts.remove(account) }
             do {
-                try await openLogin(provider)
-                guard providers.isEnabled(provider) else { return }
-                pendingLogins[provider] = attemptStartedAt
-                messages[provider] = "Finish signing in in Terminal, then refresh usage."
+                try await openLogin(account)
+                guard providers.isAccountEnabled(account) else { return }
+                pendingLogins[account] = attemptStartedAt
+                messages[account] = "Finish signing in in Terminal, then refresh usage."
             } catch {
-                messages[provider] = error.localizedDescription
+                if providers.isAccountEnabled(account) { messages[account] = error.localizedDescription }
             }
         }
     }
 
-    /// A sign-in started before its provider was turned off no longer needs finishing.
-    private func forgetSignIns(except enabled: [UsageProvider]) {
-        for provider in UsageProvider.allCases where !enabled.contains(provider) {
-            pendingLogins[provider] = nil
-            messages[provider] = nil
-        }
+    /// Once an account is off, a pending sign-in should no longer trigger checks.
+    private func forgetSignIns(except enabled: [UsageAccount]) {
+        pendingLogins = pendingLogins.filter { enabled.contains($0.key) }
+        messages = messages.filter { enabled.contains($0.key) }
     }
 
     func refreshPendingLogins() async {
-        for provider in pendingLogins.keys {
-            await refresh(provider)
+        for account in pendingLogins.keys {
+            await refresh(account)
         }
     }
 
-    func refresh(_ provider: UsageProvider) async {
-        guard providers.isEnabled(provider), refreshingProviders.insert(provider).inserted else { return }
-        defer { refreshingProviders.remove(provider) }
-        let monitor = providers.monitor(for: provider)
+    func refresh(_ account: UsageAccount) async {
+        guard providers.isAccountEnabled(account), refreshingAccounts.insert(account).inserted else { return }
+        defer { refreshingAccounts.remove(account) }
+        let monitor = providers.monitor(forAccount: account)
         let didFetch = await monitor.refresh()
-        let hasReadingAfterLogin = pendingLogins[provider].map { startedAt in
+        let hasReadingAfterLogin = pendingLogins[account].map { startedAt in
             !monitor.requiresLogin && monitor.snapshot.map { $0.fetchedAt >= startedAt } == true
         } ?? false
         if didFetch || hasReadingAfterLogin {
-            pendingLogins[provider] = nil
-            messages[provider] = nil
+            pendingLogins[account] = nil
+            messages[account] = nil
         }
     }
 }

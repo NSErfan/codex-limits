@@ -26,8 +26,19 @@ struct SettingsView: View {
             }
 
             Section("Accounts") {
-                ForEach(providers.enabledProviders) { provider in
-                    ProviderAccountSettings(monitor: providers.monitor(for: provider), login: login)
+                ForEach(providers.enabledAccounts) { account in
+                    ProviderAccountSettings(monitor: providers.monitor(forAccount: account), login: login)
+                }
+                if providers.isEnabled(.codex) {
+                    Toggle("Track a second Codex account", isOn: Binding(
+                        get: { providers.isSecondCodexEnabled },
+                        set: providers.setSecondCodexEnabled
+                    ))
+                    if providers.isSecondCodexEnabled {
+                        Text("Sign in to Codex 2 with your other account. Desktop widgets show the first Codex account.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Text(accountsCaption)
                     .font(.caption)
@@ -117,9 +128,9 @@ struct SettingsView: View {
             }
 
             Section("History sync") {
-                ProviderPicker(
-                    selection: Binding(get: { providers.selectedProvider }, set: { providers.select($0) }),
-                    options: providers.enabledProviders
+                AccountPicker(
+                    selection: Binding(get: { providers.selectedAccount }, set: { providers.selectAccount($0) }),
+                    options: providers.enabledAccounts
                 )
                 ProviderHistorySettings(monitor: providers.selectedMonitor)
             }

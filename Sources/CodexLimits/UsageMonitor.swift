@@ -8,7 +8,8 @@ final class UsageMonitor: ObservableObject {
     nonisolated static let safetyBufferKey = "safetyBuffer"
     nonisolated static let paceTargetCreditIDKey = "paceTargetCreditID"
 
-    let provider: UsageProvider
+    let account: UsageAccount
+    var provider: UsageProvider { account.provider }
     @Published private(set) var requiresLogin = false
     @Published private(set) var requiresInstallation = false
     @Published private(set) var snapshot: UsageSnapshot?
@@ -21,9 +22,9 @@ final class UsageMonitor: ObservableObject {
     @Published private(set) var syncFolderName: String?
     @Published private(set) var syncErrorMessage: String?
 
-    private var stateKey: String { provider.preferenceKey("usageState") }
+    private var stateKey: String { account.preferenceKey("usageState") }
     private static let historyInstallationIDKey = "historyInstallationID"
-    private var historySyncBookmarkKey: String { provider.preferenceKey("historySyncBookmark") }
+    private var historySyncBookmarkKey: String { account.preferenceKey("historySyncBookmark") }
     private let defaults: UserDefaults
     private let fetchUsage: @Sendable () async throws -> UsageFetchResult
     private let recoveryDelaysNanoseconds: [UInt64]
@@ -43,7 +44,7 @@ final class UsageMonitor: ObservableObject {
     private var historyConnectionActive = false
 
     init(
-        provider: UsageProvider = .codex,
+        account: UsageAccount = .primaryCodex,
         defaults: UserDefaults = .standard,
         historyDirectory: URL? = nil,
         historyNow: @escaping @Sendable () -> Date = { Date() },
@@ -60,23 +61,26 @@ final class UsageMonitor: ObservableObject {
         },
         startsAutomatically: Bool = true
     ) {
-        self.provider = provider
+        self.account = account
         self.defaults = defaults
-        self.widgetStore = widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
-            directory: (historyDirectory ?? Self.historyDirectory(provider: provider))
-                .appendingPathComponent("WeeklyWidget", isDirectory: true),
-            provider: provider
-        )
+        let provider = account.provider
+        let localHistory = historyDirectory ?? Self.historyDirectory(account: account)
+        self.widgetStore = account.publishesWeeklyWidget
+            ? widgetStore ?? .shared(provider: provider) ?? WeeklyWidgetStore(
+                directory: localHistory.appendingPathComponent("WeeklyWidget", isDirectory: true),
+                provider: provider
+            )
+            : nil
         if let fetchResult {
             self.fetchUsage = fetchResult
         } else if let fetchUsage {
             self.fetchUsage = { .fetched(try await fetchUsage()) }
         } else {
-            self.fetchUsage = { try await provider.fetchUsage() }
+            self.fetchUsage = { try await account.fetchUsage() }
         }
         self.recoveryDelaysNanoseconds = recoveryDelaysNanoseconds
         self.sleepBeforeRecovery = sleepBeforeRecovery
-        if let data = defaults.data(forKey: provider.preferenceKey("usageState")),
+        if let data = defaults.data(forKey: account.preferenceKey("usageState")),
            let state = try? JSONDecoder().decode(StoredState.self, from: data) {
             snapshot = state.snapshot
             samples = state.samples
@@ -93,14 +97,15 @@ final class UsageMonitor: ObservableObject {
             defaults.set(installationID, forKey: Self.historyInstallationIDKey)
         }
         history = UsageHistory(
-            localDirectory: historyDirectory ?? Self.historyDirectory(provider: provider),
+            localDirectory: localHistory,
             installationID: installationID,
             now: historyNow
         )
         periodHistory = UsagePeriodHistory(
-            localDirectory: historyDirectory ?? Self.historyDirectory(provider: provider),
+            localDirectory: localHistory,
             installationID: installationID,
             provider: provider,
+            historySubdirectory: account.historySubdirectory,
             now: historyNow
         )
         if provider.periods.contains(.weekly) {
@@ -351,7 +356,7 @@ final class UsageMonitor: ObservableObject {
     }
 
     func updatePaceTarget(_ selectedCreditID: String) {
-        defaults.set(selectedCreditID, forKey: provider.preferenceKey(Self.paceTargetCreditIDKey))
+        defaults.set(selectedCreditID, forKey: account.preferenceKey(Self.paceTargetCreditIDKey))
         recalculate(selectedCreditID: selectedCreditID)
         persist()
     }
@@ -359,7 +364,7 @@ final class UsageMonitor: ObservableObject {
     func connectHistoryFolder(_ directory: URL) async {
         await prepareHistory()
         await stopHistorySync()
-        let state = await history.connect(to: directory, subdirectory: provider.historySubdirectory)
+        let state = await history.connect(to: directory, subdirectory: account.historySubdirectory)
         apply(state)
         historyConnectionActive = state.folderName != nil
         guard historyConnectionActive else { return }
@@ -412,7 +417,7 @@ final class UsageMonitor: ObservableObject {
                 resetCredits: snapshot.resetCredits,
                 now: snapshot.fetchedAt,
                 selectedCreditID: selectedCreditID
-                    ?? defaults.string(forKey: provider.preferenceKey(Self.paceTargetCreditIDKey))
+                    ?? defaults.string(forKey: account.preferenceKey(Self.paceTargetCreditIDKey))
             )
         )
         forecast = result
@@ -459,7 +464,7 @@ final class UsageMonitor: ObservableObject {
         }
 
         configuredSyncDirectory = directory
-        let connectedState = await history.connect(to: directory, subdirectory: provider.historySubdirectory)
+        let connectedState = await history.connect(to: directory, subdirectory: account.historySubdirectory)
         historyConnectionActive = connectedState.folderName != nil
         let periodState = historyConnectionActive ? await periodHistory.connect(to: directory) : nil
         apply(connectedState, periodState: periodState, configuredFolderName: directory.lastPathComponent)
@@ -492,7 +497,7 @@ final class UsageMonitor: ObservableObject {
 
     private func exchangeHistory() async -> (legacy: UsageHistory.State, periods: UsagePeriodHistory.State) {
         if let configuredSyncDirectory, !historyConnectionActive {
-            let state = await history.connect(to: configuredSyncDirectory, subdirectory: provider.historySubdirectory)
+            let state = await history.connect(to: configuredSyncDirectory, subdirectory: account.historySubdirectory)
             historyConnectionActive = state.folderName != nil
             let periods = historyConnectionActive
                 ? await periodHistory.connect(to: configuredSyncDirectory)
@@ -556,7 +561,7 @@ final class UsageMonitor: ObservableObject {
         return lhs.resetsAt < rhs.resetsAt
     }
 
-    nonisolated static func historyDirectory(provider: UsageProvider = .codex) -> URL {
+    nonisolated static func historyDirectory(account: UsageAccount) -> URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -566,7 +571,7 @@ final class UsageMonitor: ObservableObject {
                 Bundle.main.bundleIdentifier ?? LegacyBundleMigration.legacyIdentifier,
                 isDirectory: true
             )
-            .appendingPathComponent(provider.localHistoryDirectoryName, isDirectory: true)
+            .appendingPathComponent(account.localHistoryDirectoryName, isDirectory: true)
     }
 }
 

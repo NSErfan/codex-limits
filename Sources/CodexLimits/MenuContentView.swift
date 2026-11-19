@@ -4,8 +4,8 @@ import SwiftUI
 
 struct MenuContentView: View {
     @ObservedObject var monitor: UsageMonitor
-    @Binding var selectedProvider: UsageProvider
-    var providerOptions: [UsageProvider]
+    @Binding var selectedAccount: UsageAccount
+    var accountOptions: [UsageAccount]
     var onSignIn: () -> Void
     var loginMessage: String?
     var isOpeningLogin: Bool
@@ -21,8 +21,8 @@ struct MenuContentView: View {
 
     init(
         monitor: UsageMonitor,
-        selectedProvider: Binding<UsageProvider>? = nil,
-        providerOptions: [UsageProvider] = UsageProvider.allCases,
+        selectedAccount: Binding<UsageAccount>? = nil,
+        accountOptions: [UsageAccount] = UsageProvider.allCases.map(UsageAccount.init(provider:)),
         onSignIn: @escaping () -> Void = {},
         loginMessage: String? = nil,
         isOpeningLogin: Bool = false,
@@ -34,20 +34,20 @@ struct MenuContentView: View {
         self.monitor = monitor
         self.defaults = defaults
         self.settingsWindowPresenter = settingsWindowPresenter
-        _selectedProvider = selectedProvider ?? .constant(monitor.provider)
-        self.providerOptions = providerOptions
+        _selectedAccount = selectedAccount ?? .constant(monitor.account)
+        self.accountOptions = accountOptions
         self.onSignIn = onSignIn
         self.loginMessage = loginMessage
         self.isOpeningLogin = isOpeningLogin
         self.showsFooterActions = showsFooterActions
         self.refreshesOnAppear = refreshesOnAppear
-        _savedPeriod = AppStorage(wrappedValue: "", UsageDashboardPreferences.selectionKey(for: monitor.provider), store: defaults)
+        _savedPeriod = AppStorage(wrappedValue: "", UsageDashboardPreferences.selectionKey(for: monitor.account), store: defaults)
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            ProviderPicker(selection: $selectedProvider, options: providerOptions)
-                .frame(maxWidth: 320)
+            AccountPicker(selection: $selectedAccount, options: accountOptions)
+                .frame(maxWidth: accountOptions.count > 3 ? 400 : 320)
             if let snapshot = monitor.snapshot {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     dashboard(snapshot: snapshot, now: context.date)
@@ -64,7 +64,7 @@ struct MenuContentView: View {
             if refreshesOnAppear { await monitor.refresh() }
         }
         .onChange(of: monitor.snapshot, initial: true) { _, snapshot in
-            if let snapshot {
+            if let snapshot, monitor.account != .secondaryCodex {
                 UsageDashboardPreferences.migrateLegacyPreferences(snapshot: snapshot, provider: monitor.provider, defaults: defaults)
             }
         }
@@ -89,10 +89,18 @@ struct MenuContentView: View {
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 7) {
                 ProviderIcon(provider: monitor.provider, size: 14)
-                Text(monitor.provider.displayName.uppercased())
+                Text(monitor.account.displayName.uppercased())
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .tracking(2)
                 Spacer()
+                if monitor.provider == .codex, accountOptions.contains(.secondaryCodex),
+                   let email = snapshot.accountName {
+                    Text(monitor.requiresLogin ? "Last account: \(email)" : email)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(email)
+                }
                 refreshButton
             }
             .foregroundStyle(.secondary)
@@ -105,7 +113,7 @@ struct MenuContentView: View {
             }
 
             if let period, let limit = snapshot.limit(for: period, provider: monitor.provider) {
-                UsageDashboardView(provider: monitor.provider, period: period, window: limit.window,
+                UsageDashboardView(account: monitor.account, period: period, window: limit.window,
                                    snapshot: snapshot, samples: monitor.samples(for: period), now: now, defaults: defaults)
                     .id(period)
             } else {
@@ -205,7 +213,7 @@ struct MenuContentView: View {
 
     private var footerActions: some View {
         HStack(spacing: 16) {
-            if monitor.provider == .codex {
+            if monitor.account == .primaryCodex {
                 activityButton
             }
             Button {
@@ -251,7 +259,7 @@ struct MenuContentView: View {
         VStack(spacing: 12) {
             if monitor.isRefreshing {
                 ProgressView()
-                Text("Checking \(monitor.provider.displayName) usage…")
+                Text("Checking \(monitor.account.displayName) usage…")
                     .foregroundStyle(.secondary)
             } else {
                 Image(systemName: "exclamationmark.triangle")
@@ -277,7 +285,7 @@ struct MenuContentView: View {
     private var signInControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             if monitor.requiresLogin {
-                Button("Sign in to \(monitor.provider.displayName)…", action: onSignIn)
+                Button("Sign in to \(monitor.account.displayName)…", action: onSignIn)
                     .disabled(isOpeningLogin)
                 if let loginMessage {
                     Text(loginMessage)

@@ -35,12 +35,40 @@ final class ProviderLoginTests: XCTestCase {
 
     func testCodexLoginPreservesOnlyCodexProfile() {
         XCTAssertEqual(
-            ProviderLogin.command(for: .codex, executable: "/opt/homebrew/bin/codex", environment: [
+            ProviderLogin.command(for: .primaryCodex, executable: "/opt/homebrew/bin/codex", environment: [
                 "CODEX_HOME": "/Users/test profile/.codex",
                 "CLAUDE_CONFIG_DIR": "/unused"
             ]),
             "'/usr/bin/env' 'CODEX_HOME=/Users/test profile/.codex' '/opt/homebrew/bin/codex' 'login'"
         )
+    }
+
+    func testSecondCodexLoginUsesItsOwnProfileEvenWhenTerminalHasPrimaryCredentials() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = directory.appendingPathComponent("codex")
+        try """
+        #!/bin/sh
+        printf '%s\\n' "$CODEX_HOME" "${CODEX_API_KEY-unset}" "${CODEX_ACCESS_TOKEN-unset}" "$@"
+        """.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let secondaryHome = directory.appendingPathComponent("second account's profile", isDirectory: true)
+        let inherited = ["CODEX_HOME": "/primary/profile", "CODEX_API_KEY": "test-key", "CODEX_ACCESS_TOKEN": "test-token"]
+        let output = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-c", ProviderLogin.command(
+            for: .secondaryCodex, executable: executable.path, environment: inherited, secondaryHome: secondaryHome
+        )]
+        process.environment = inherited
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        let result = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertEqual(result, "\(secondaryHome.path)\nunset\nunset\nlogin\n")
     }
 
     func testCopilotLoginUsesGitHubCLIProfileWithoutInheritedTokens() throws {

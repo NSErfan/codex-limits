@@ -3,9 +3,10 @@ import XCTest
 @testable import CodexLimits
 
 final class UsageURLHandlerTests: XCTestCase {
-    func testWidgetLinksSelectTheirProvider() {
-        XCTAssertEqual(UsageURLHandler.provider(from: URL(string: "codexlimits://usage/codex")!), .codex)
-        XCTAssertEqual(UsageURLHandler.provider(from: URL(string: "codexlimits://usage/claude")!), .claude)
+    func testWidgetAndLoginLinksSelectTheirAccount() {
+        XCTAssertEqual(UsageURLHandler.account(from: URL(string: "codexlimits://usage/codex")!), .primaryCodex)
+        XCTAssertEqual(UsageURLHandler.account(from: URL(string: "codexlimits://usage/codex-secondary")!), .secondaryCodex)
+        XCTAssertEqual(UsageURLHandler.account(from: URL(string: "codexlimits://usage/claude")!), .claude)
     }
 
     func testUnrelatedRoutesDoNotChangeProvider() {
@@ -16,7 +17,7 @@ final class UsageURLHandlerTests: XCTestCase {
             "codexlimits://usage"
         ]
         for link in invalidLinks {
-            XCTAssertNil(UsageURLHandler.provider(from: URL(string: link)!), link)
+            XCTAssertNil(UsageURLHandler.account(from: URL(string: link)!), link)
         }
     }
 }

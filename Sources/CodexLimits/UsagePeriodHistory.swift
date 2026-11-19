@@ -9,6 +9,7 @@ actor UsagePeriodHistory {
 
     private let histories: [UsagePeriod: UsageHistory]
     private let provider: UsageProvider
+    private let historySubdirectory: String?
     private var syncDirectory: URL?
     private var connectedPeriods: Set<UsagePeriod> = []
 
@@ -16,9 +17,11 @@ actor UsagePeriodHistory {
         localDirectory: URL,
         installationID: String,
         provider: UsageProvider,
+        historySubdirectory: String? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.provider = provider
+        self.historySubdirectory = historySubdirectory ?? provider.historySubdirectory
         histories = Dictionary(uniqueKeysWithValues: provider.periods.map { period in
             (period, UsageHistory(
                 localDirectory: localDirectory.appendingPathComponent(Self.subdirectory(for: period)),
@@ -74,7 +77,7 @@ actor UsagePeriodHistory {
         var states: [UsagePeriod: UsageHistory.State] = [:]
         for period in provider.periods {
             if let syncDirectory, !connectedPeriods.contains(period) {
-                let path = [provider.historySubdirectory, Self.subdirectory(for: period)]
+                let path = [historySubdirectory, Self.subdirectory(for: period)]
                     .compactMap { $0 }.joined(separator: "/")
                 let state = await histories[period]?.connect(to: syncDirectory, subdirectory: path)
                 if state?.folderName != nil { connectedPeriods.insert(period) }
