@@ -241,6 +241,8 @@ enum CodexClient {
         let subscriptionKey = (reportedWorkspace ?? activeWorkspace).flatMap { workspace in
             accountName.map { UsageSubscriptionKey(workspaceID: workspace, accountName: $0) }
         }
+        let historyRequiresCLIUpdate = account?.account?.type == "chatgpt"
+            && account?.reportsWorkspaceRouting == false && !rateResult.reportsAccountID
         return UsageSnapshot(
             mainLimit: LimitReading(limitId: "codex", name: "Codex", window: mainWindow),
             otherLimits: others,
@@ -248,7 +250,8 @@ enum CodexClient {
             resetCredits: resetCredits(from: rateResult.rateLimitResetCredits, fetchedAt: fetchedAt),
             fetchedAt: fetchedAt,
             accountName: accountName,
-            subscriptionKey: subscriptionKey
+            subscriptionKey: subscriptionKey,
+            historyRequiresCLIUpdate: historyRequiresCLIUpdate
         )
     }
 
@@ -582,6 +585,18 @@ private struct RPCResponse<Result: Decodable>: Decodable {
 private struct AccountResult: Decodable {
     let account: Account?
     let workspaceRouting: WorkspaceRouting?
+    let reportsWorkspaceRouting: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case account, workspaceRouting
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        account = try values.decodeIfPresent(Account.self, forKey: .account)
+        workspaceRouting = try values.decodeIfPresent(WorkspaceRouting.self, forKey: .workspaceRouting)
+        reportsWorkspaceRouting = values.contains(.workspaceRouting)
+    }
 
     struct Account: Decodable {
         let type: String
@@ -595,9 +610,23 @@ private struct AccountResult: Decodable {
 
 private struct RateLimitsResult: Decodable {
     let accountId: String?
+    let reportsAccountID: Bool
     let rateLimits: RateLimitSnapshot
     let rateLimitsByLimitId: [String: RateLimitSnapshot]?
     let rateLimitResetCredits: ResetCredits?
+
+    private enum CodingKeys: String, CodingKey {
+        case accountId, rateLimits, rateLimitsByLimitId, rateLimitResetCredits
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        accountId = try values.decodeIfPresent(String.self, forKey: .accountId)
+        reportsAccountID = values.contains(.accountId)
+        rateLimits = try values.decode(RateLimitSnapshot.self, forKey: .rateLimits)
+        rateLimitsByLimitId = try values.decodeIfPresent([String: RateLimitSnapshot].self, forKey: .rateLimitsByLimitId)
+        rateLimitResetCredits = try values.decodeIfPresent(ResetCredits.self, forKey: .rateLimitResetCredits)
+    }
 }
 
 private struct ResetCredits: Decodable {

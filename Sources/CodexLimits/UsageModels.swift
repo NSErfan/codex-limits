@@ -44,6 +44,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     /// The signed-in account's email or username, when the provider reports one.
     let accountName: String?
     let subscriptionKey: UsageSubscriptionKey?
+    let historyRequiresCLIUpdate: Bool
 
     init(
         mainLimit: LimitReading,
@@ -52,7 +53,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         resetCredits: [ResetCredit],
         fetchedAt: Date,
         accountName: String? = nil,
-        subscriptionKey: UsageSubscriptionKey? = nil
+        subscriptionKey: UsageSubscriptionKey? = nil,
+        historyRequiresCLIUpdate: Bool = false
     ) {
         self.mainLimit = mainLimit
         self.otherLimits = otherLimits
@@ -61,6 +63,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         self.fetchedAt = fetchedAt
         self.accountName = accountName
         self.subscriptionKey = subscriptionKey
+        self.historyRequiresCLIUpdate = historyRequiresCLIUpdate
     }
 
     init(from decoder: Decoder) throws {
@@ -72,6 +75,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         fetchedAt = try container.decode(Date.self, forKey: .fetchedAt)
         accountName = try container.decodeIfPresent(String.self, forKey: .accountName)
         subscriptionKey = try container.decodeIfPresent(UsageSubscriptionKey.self, forKey: .subscriptionKey)
+        historyRequiresCLIUpdate = try container.decodeIfPresent(Bool.self, forKey: .historyRequiresCLIUpdate) ?? false
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -82,6 +86,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         case fetchedAt
         case accountName = "accountEmail"
         case subscriptionKey
+        case historyRequiresCLIUpdate
     }
 }
 

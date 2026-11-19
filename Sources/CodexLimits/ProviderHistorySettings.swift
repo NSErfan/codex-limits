@@ -16,10 +16,13 @@ struct ProviderHistorySettings: View {
         } else {
             Button("Choose folder…", action: chooseHistoryFolder)
                 .disabled(!monitor.allowsHistorySync)
-            if !monitor.allowsHistorySync {
-                Text("Refresh usage after Codex reports your account and workspace to enable history sync.")
+            if let message = monitor.historyAvailabilityMessage {
+                Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if monitor.historyRequiresCLIUpdate {
+                Link("Update Codex CLI", destination: ProviderLogin.installationURL(for: .codex))
             }
         }
 

@@ -58,6 +58,29 @@ final class AccountEmailTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(UsageSubscriptionKey.self, from: JSONEncoder().encode(first)), first)
     }
 
+    func testCodexIdentifiesLegacyProtocolWithoutTreatingMissingValuesAsAnOutdatedCLI() throws {
+        let account = #""account":{"type":"chatgpt","email":"fixture@example.test"}"#
+        func decode(_ metadata: String?, rateLimits: String = Self.rateLimitsResponse) throws -> UsageSnapshot {
+            try CodexClient.decode(
+                rateLimitsResponse: Data(rateLimits.utf8), usageResponse: nil, fetchedAt: .now,
+                accountResponse: metadata.map { Data("{\"result\":{\($0)}}".utf8) }
+            )
+        }
+
+        let legacy = try decode(account)
+        XCTAssertEqual(legacy.mainLimit.window.remainingPercent, 80)
+        XCTAssertNil(legacy.subscriptionKey)
+        XCTAssertTrue(legacy.historyRequiresCLIUpdate)
+        XCTAssertTrue(try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(legacy)).historyRequiresCLIUpdate)
+
+        XCTAssertFalse(try decode(account + #","workspaceRouting":null"#).historyRequiresCLIUpdate)
+        let recentRateLimits = Self.rateLimitsResponse.replacingOccurrences(
+            of: #""rateLimits":"#, with: #""accountId":null,"rateLimits":"#
+        )
+        XCTAssertFalse(try decode(account, rateLimits: recentRateLimits).historyRequiresCLIUpdate)
+        XCTAssertFalse(try decode(nil).historyRequiresCLIUpdate)
+    }
+
     func testOptionalCodexAccountFailureDoesNotDiscardUsage() async throws {
         for accountResponse in [
             #"{"id":4,"error":{"code":-32601,"message":"Method not found"}}"#,

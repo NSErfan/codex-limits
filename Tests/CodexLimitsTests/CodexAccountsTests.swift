@@ -147,7 +147,7 @@ final class CodexAccountsTests: XCTestCase {
         let first = Self.snapshot(at: now, remaining: 80, email: email, workspace: "first")
         let collector = Self.snapshot(at: now + 60, remaining: 42, email: email, workspace: "second")
         let second = Self.snapshot(at: now + 120, remaining: 39, email: email, workspace: "second")
-        let unknown = Self.snapshot(at: now + 180, remaining: 12, email: email)
+        let unknown = Self.snapshot(at: now + 180, remaining: 12, email: email, historyRequiresCLIUpdate: true)
         let returnToFirst = Self.snapshot(at: now + 240, remaining: 78, email: email, workspace: "first")
         let source = SnapshotSequence([first, second, unknown, returnToFirst])
         let monitor = UsageMonitor(account: .secondaryCodex, defaults: defaults, historyDirectory: local,
@@ -182,12 +182,16 @@ final class CodexAccountsTests: XCTestCase {
         await monitor.refresh()
         XCTAssertEqual(monitor.snapshot, unknown)
         XCTAssertFalse(monitor.allowsHistorySync)
+        XCTAssertTrue(monitor.historyRequiresCLIUpdate)
+        XCTAssertTrue(monitor.refreshMessage?.contains("Update Codex CLI") == true)
         XCTAssertTrue(monitor.samples.isEmpty)
         XCTAssertEqual(monitor.samples(for: .weekly).map(\.remainingPercent), [12])
 
         await monitor.refresh()
         XCTAssertEqual(monitor.samples(for: .weekly).map(\.remainingPercent), [80, 78])
         XCTAssertEqual(monitor.syncFolderName, "sync")
+        XCTAssertFalse(monitor.historyRequiresCLIUpdate)
+        XCTAssertNil(monitor.refreshMessage)
         let legacyState = await legacy.synchronize()
         XCTAssertEqual(legacyState.samples.map(\.remainingPercent), [97])
     }
@@ -198,13 +202,16 @@ final class CodexAccountsTests: XCTestCase {
         func next() -> UsageSnapshot { snapshots.removeFirst() }
     }
 
-    private static func snapshot(at now: Date, remaining: Double, email: String, workspace: String? = nil) -> UsageSnapshot {
+    private static func snapshot(
+        at now: Date, remaining: Double, email: String, workspace: String? = nil, historyRequiresCLIUpdate: Bool = false
+    ) -> UsageSnapshot {
         UsageSnapshot(
             mainLimit: LimitReading(limitId: "codex", name: "Codex", window: UsageWindow(
                 remainingPercent: remaining, resetsAt: now.addingTimeInterval(3600), durationMinutes: 10_080
             )),
             otherLimits: [], tokenHistory: [], resetCredits: [], fetchedAt: now, accountName: email,
-            subscriptionKey: workspace.map { UsageSubscriptionKey(workspaceID: $0, accountName: email) }
+            subscriptionKey: workspace.map { UsageSubscriptionKey(workspaceID: $0, accountName: email) },
+            historyRequiresCLIUpdate: historyRequiresCLIUpdate
         )
     }
 }

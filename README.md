@@ -58,7 +58,8 @@ saved readings, history, and chart settings. Codex 2 uses its own CLI home at
 the Codex CLI manages its login there. Your existing CLI profile stays in use for the first account.
 Codex 2 records history and remembers sync folders for each identified subscription separately.
 If the CLI doesn’t report the account and workspace, live limits are still shown but history and
-sync pause. History recorded by older versions without an identity stays on disk and is not imported.
+sync pause. If Codex Limits asks you to update the CLI, follow [the Codex update instructions](https://developers.openai.com/codex/cli)
+and refresh Codex 2. History recorded by older versions without an identity stays on disk and is not imported.
 Turning off Codex 2 stops its checks and keeps its sign-in and history. Desktop widgets show
 the **Codex** account regardless of menu order. To open its own **Activity** window, select
 **Codex 2** in the menu and click **Activity**.

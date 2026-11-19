@@ -126,6 +126,16 @@ final class UsageMonitor: ObservableObject {
 
     var weeklyWidgetSnapshot: WeeklyWidgetSnapshot? { widgetStore?.read() }
     var allowsHistorySync: Bool { account != .secondaryCodex || snapshot?.subscriptionKey != nil }
+    var historyRequiresCLIUpdate: Bool { !allowsHistorySync && snapshot?.historyRequiresCLIUpdate == true }
+
+    var historyAvailabilityMessage: String? {
+        guard !allowsHistorySync else { return nil }
+        guard snapshot != nil else { return "Load Codex 2 usage to enable history sync." }
+        if historyRequiresCLIUpdate {
+            return "This version of Codex CLI can’t identify the subscription. Update Codex CLI, then refresh Codex 2."
+        }
+        return "History is paused until Codex reports the signed-in account and workspace."
+    }
 
     var currentWindowSamples: [UsageSample] {
         Self.windowSamples(samples, reset: snapshot?.mainLimit.window.resetsAt)
@@ -249,7 +259,7 @@ final class UsageMonitor: ObservableObject {
                 nextAutomaticRefresh = nextRefreshAt
                 await accept(newSnapshot, exchangeErrorMessage: exchangeErrorMessage)
                 errorMessage = nil
-                refreshMessage = allowsHistorySync ? nil : "History is paused until Codex reports the signed-in account and workspace."
+                refreshMessage = historyAvailabilityMessage
                 requiresLogin = false
                 requiresInstallation = false
                 return true
