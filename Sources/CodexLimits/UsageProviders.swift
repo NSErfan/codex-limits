@@ -5,6 +5,12 @@ import Foundation
 @MainActor
 final class UsageProviders: ObservableObject {
     static let selectionKey = "selectedUsageProvider"
+    static let accountOrderKey = "usageAccountOrder"
+
+    enum MoveDirection: Int {
+        case earlier = -1
+        case later = 1
+    }
 
     /// Always an account that is on; change it with selectAccount(_:).
     @Published private(set) var selectedAccount: UsageAccount {
@@ -119,6 +125,18 @@ final class UsageProviders: ObservableObject {
         updateEnabledAccounts()
     }
 
+    func moveAccount(_ account: UsageAccount, _ direction: MoveDirection) {
+        guard let current = enabledAccounts.firstIndex(of: account) else { return }
+        let target = current + direction.rawValue
+        guard enabledAccounts.indices.contains(target) else { return }
+        let other = enabledAccounts[target]
+        var order = Self.accountOrder(in: defaults)
+        guard let source = order.firstIndex(of: account), let destination = order.firstIndex(of: other) else { return }
+        order.swapAt(source, destination)
+        defaults.set(order.map(\.rawValue), forKey: Self.accountOrderKey)
+        enabledAccounts = Self.enabledAccounts(in: defaults)
+    }
+
     private func updateEnabledAccounts() {
         let previous = enabledAccounts
         let enabled = Self.enabledAccounts(in: defaults)
@@ -137,10 +155,17 @@ final class UsageProviders: ObservableObject {
     }
 
     private static func enabledAccounts(in defaults: UserDefaults) -> [UsageAccount] {
-        UsageAccount.enabledAccounts(
+        let enabled = Set(UsageAccount.enabledAccounts(
             providers: ProviderEnablement.enabledProviders(in: defaults),
             secondCodexEnabled: defaults.bool(forKey: UsageAccount.secondCodexEnabledKey)
-        )
+        ))
+        return accountOrder(in: defaults).filter(enabled.contains)
+    }
+
+    private static func accountOrder(in defaults: UserDefaults) -> [UsageAccount] {
+        let saved = (defaults.stringArray(forKey: accountOrderKey) ?? []).compactMap(UsageAccount.init(rawValue:))
+        var seen: Set<UsageAccount> = []
+        return (saved + UsageAccount.allCases).filter { seen.insert($0).inserted }
     }
 
     func refreshAll() async {

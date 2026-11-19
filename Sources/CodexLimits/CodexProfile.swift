@@ -7,7 +7,10 @@
 
 import Foundation
 
-enum CodexProfile {
+enum CodexProfile: Sendable {
+    case primary
+    case secondary
+
     static let credentialEnvironmentKeys = [
         "CODEX_API_KEY", "OPENAI_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_ACCESS_TOKEN",
         "OPENAI_IDENTITY_TOKEN_FILE", "OPENAI_SERVICE_ACCOUNT_ID"
@@ -19,16 +22,32 @@ enum CodexProfile {
             .appendingPathComponent("CodexSecondaryProfile", isDirectory: true)
     }
 
+    func home(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        switch self {
+        case .primary:
+            environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
+                ?? URL.homeDirectory.appendingPathComponent(".codex", isDirectory: true)
+        case .secondary:
+            Self.secondaryHome
+        }
+    }
+
+    static func validateSecondaryHome(
+        _ home: URL = secondaryHome,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws {
+        let primary = Self.primary.home(environment: environment)
+        guard primary.resolvingSymlinksInPath().standardizedFileURL.path
+            != home.resolvingSymlinksInPath().standardizedFileURL.path else {
+            throw CodexClientError.profileAlreadyInUse
+        }
+    }
+
     static func prepareSecondaryHome(
         _ home: URL = secondaryHome,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) throws {
-        let primary = environment["CODEX_HOME"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
-            ?? URL.homeDirectory.appendingPathComponent(".codex", isDirectory: true)
-        let resolvedPrimary = primary.resolvingSymlinksInPath().standardizedFileURL.path
-        guard resolvedPrimary != home.resolvingSymlinksInPath().standardizedFileURL.path else {
-            throw CodexClientError.profileAlreadyInUse
-        }
+        try validateSecondaryHome(home, environment: environment)
         do {
             try FileManager.default.createDirectory(
                 at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]

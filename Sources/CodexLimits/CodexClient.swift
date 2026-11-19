@@ -4,11 +4,11 @@ import Foundation
 enum CodexClient {
     private static let retryDelayNanoseconds: UInt64 = 250_000_000
     private static let timeoutNanoseconds: UInt64 = 15_000_000_000
-    static func fetch(account: UsageAccount = .primaryCodex) async throws -> UsageSnapshot {
+    static func fetch(profile: CodexProfile = .primary) async throws -> UsageSnapshot {
         guard let executable = ProviderExecutable.path(for: .codex) else { throw CodexClientError.cliNotFound }
         let base = ProcessInfo.processInfo.environment
         let environment: [String: String]
-        if account == .secondaryCodex {
+        if profile == .secondary {
             try CodexProfile.prepareSecondaryHome(environment: base)
             environment = CodexProfile.secondaryEnvironment(home: CodexProfile.secondaryHome, base: base)
         } else {

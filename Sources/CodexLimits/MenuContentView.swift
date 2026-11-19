@@ -213,8 +213,8 @@ struct MenuContentView: View {
 
     private var footerActions: some View {
         HStack(spacing: 16) {
-            if monitor.account == .primaryCodex {
-                activityButton
+            if let profile = monitor.account.codexProfile {
+                activityButton(for: profile)
             }
             Button {
                 if let settingsWindowPresenter {
@@ -241,9 +241,9 @@ struct MenuContentView: View {
         }
     }
 
-    private var activityButton: some View {
+    private func activityButton(for profile: CodexProfile) -> some View {
         Button {
-            openWindow(id: "model-activity")
+            openWindow(id: ModelActivityWindow.sceneID(for: profile))
             NSApp.activate(ignoringOtherApps: true)
         } label: {
             Label("Activity", systemImage: "chart.bar.xaxis")
@@ -252,7 +252,7 @@ struct MenuContentView: View {
         }
         .buttonStyle(.borderless)
         .help("Explore usage by model and reasoning effort.")
-        .accessibilityLabel("Open model activity")
+        .accessibilityLabel("Open model activity for \(monitor.account.displayName)")
     }
 
     private var emptyState: some View {

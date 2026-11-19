@@ -26,9 +26,7 @@ final class ModelActivityStore: ObservableObject {
     private var anchor: Date
 
     init(home: URL? = nil, previewEvents: [ModelActivityEvent] = [], now: Date = Date()) {
-        let configured = ProcessInfo.processInfo.environment["CODEX_HOME"]
-        self.home = home ?? configured.map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true)
+        self.home = home ?? CodexProfile.primary.home()
         anchor = now
         let range = now.addingTimeInterval(-30 * 86_400) ... now
         timeline = ModelActivityTimeline(events: previewEvents, range: range,

@@ -9,12 +9,15 @@ struct ModelActivityView: View {
     @State private var selectedModel: String?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.usageAccent) private var usageAccent
+    private let title: String
     private let loadsAutomatically: Bool
     private let samples: [UsageSample]
     private let window: UsageWindow?
 
-    init(store: ModelActivityStore? = nil, loadsAutomatically: Bool = true, samples: [UsageSample] = [], window: UsageWindow? = nil) {
-        _store = StateObject(wrappedValue: store ?? ModelActivityStore())
+    init(store: ModelActivityStore? = nil, home: URL? = nil, title: String = "Model activity",
+         loadsAutomatically: Bool = true, samples: [UsageSample] = [], window: UsageWindow? = nil) {
+        _store = StateObject(wrappedValue: store ?? ModelActivityStore(home: home))
+        self.title = title
         self.loadsAutomatically = loadsAutomatically
         self.samples = samples
         self.window = window
@@ -159,7 +162,7 @@ struct ModelActivityView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Model activity").font(.system(size: 26, weight: .medium, design: .rounded))
+                Text(title).font(.system(size: 26, weight: .medium, design: .rounded))
                 Spacer()
                 Group {
                     if store.isLoading {

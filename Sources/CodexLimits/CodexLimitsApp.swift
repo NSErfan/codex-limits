@@ -51,18 +51,25 @@ struct CodexLimitsApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Model activity", id: "model-activity") {
-            ModelActivityWindow(monitor: providers.codex, isProviderEnabled: providers.isEnabled(.codex))
-                .environment(\.usageAccent, appearance.accent)
-        }
-        .defaultSize(width: 1_080, height: 880)
-        .windowResizability(.contentMinSize)
+        activityWindow(for: .primary)
+        activityWindow(for: .secondary)
 
         Settings {
             SettingsView(providers: providers, appearance: appearance, login: login)
                 .environment(\.usageAccent, appearance.accent)
                 .background(SettingsWindowRegistration(presenter: settingsWindowPresenter))
         }
+    }
+
+    private func activityWindow(for profile: CodexProfile) -> some Scene {
+        let account: UsageAccount = profile == .secondary ? .secondaryCodex : .primaryCodex
+        return Window(ModelActivityWindow.title(for: profile), id: ModelActivityWindow.sceneID(for: profile)) {
+            ModelActivityWindow(profile: profile, monitor: providers.monitor(forAccount: account),
+                                isAccountEnabled: providers.isAccountEnabled(account))
+                .environment(\.usageAccent, appearance.accent)
+        }
+        .defaultSize(width: 1_080, height: 880)
+        .windowResizability(.contentMinSize)
     }
 }
 

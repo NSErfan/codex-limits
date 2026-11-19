@@ -8,7 +8,7 @@
 import CodexWidgetKit
 import Foundation
 
-enum UsageAccount: String, Identifiable, Sendable {
+enum UsageAccount: String, CaseIterable, Identifiable, Sendable {
     case primaryCodex = "codex"
     case secondaryCodex = "codex-secondary"
     case claude
@@ -35,6 +35,14 @@ enum UsageAccount: String, Identifiable, Sendable {
     }
 
     var displayName: String { self == .secondaryCodex ? "Codex 2" : provider.displayName }
+    var codexProfile: CodexProfile? {
+        switch self {
+        case .primaryCodex: .primary
+        case .secondaryCodex: .secondary
+        case .claude, .copilot: nil
+        }
+    }
+
     var publishesWeeklyWidget: Bool { self != .secondaryCodex && provider.periods.contains(.weekly) }
     var historySubdirectory: String? { self == .secondaryCodex ? "Codex 2" : provider.historySubdirectory }
     var localHistoryDirectoryName: String {
@@ -54,7 +62,7 @@ enum UsageAccount: String, Identifiable, Sendable {
 
     func fetchUsage() async throws -> UsageFetchResult {
         if self == .secondaryCodex {
-            return .fetched(try await CodexClient.fetch(account: self))
+            return .fetched(try await CodexClient.fetch(profile: .secondary))
         }
         return try await provider.fetchUsage()
     }

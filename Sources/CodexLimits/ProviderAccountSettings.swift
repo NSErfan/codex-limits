@@ -4,10 +4,18 @@ import SwiftUI
 struct ProviderAccountSettings: View {
     @ObservedObject var monitor: UsageMonitor
     @ObservedObject var login: ProviderLoginSession
+    var moveEarlier: (() -> Void)?
+    var moveLater: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                if moveEarlier != nil || moveLater != nil {
+                    VStack(spacing: 2) {
+                        orderButton("Move \(monitor.account.displayName) up", symbol: "chevron.up", action: moveEarlier)
+                        orderButton("Move \(monitor.account.displayName) down", symbol: "chevron.down", action: moveLater)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(monitor.account.displayName).fontWeight(.medium)
                     Text(accountDescription)
@@ -49,6 +57,18 @@ struct ProviderAccountSettings: View {
                     .font(.caption)
             }
         }
+    }
+
+    private func orderButton(_ title: String, symbol: String, action: (() -> Void)?) -> some View {
+        Button {
+            action?()
+        } label: {
+            Image(systemName: symbol).frame(width: 22, height: 20)
+        }
+        .buttonStyle(.borderless)
+        .disabled(action == nil)
+        .accessibilityLabel(title)
+        .help(title)
     }
 
     private var accountDescription: String {

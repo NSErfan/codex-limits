@@ -91,6 +91,45 @@ final class CodexAccountsTests: XCTestCase {
         }
     }
 
+    func testAccountOrderSurvivesRelaunchAndKeepsHiddenAccountsInPlace() throws {
+        let suite = "CodexAccountsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite, isDirectory: true)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: UsageAccount.secondCodexEnabledKey)
+        defaults.set(["unknown", "codex", "codex"], forKey: UsageProviders.accountOrderKey)
+
+        func makeProviders() -> UsageProviders {
+            func monitor(_ account: UsageAccount) -> UsageMonitor {
+                let path = directory.appendingPathComponent(account.rawValue, isDirectory: true)
+                return UsageMonitor(account: account, defaults: defaults, historyDirectory: path,
+                    widgetStore: WeeklyWidgetStore(directory: path, provider: account.provider),
+                    startsAutomatically: false)
+            }
+            return UsageProviders(defaults: defaults, codex: monitor(.primaryCodex), secondCodex: monitor(.secondaryCodex),
+                                  claude: monitor(.claude), copilot: monitor(.copilot), widgetStore: nil)
+        }
+
+        let providers = makeProviders()
+        XCTAssertEqual(providers.enabledAccounts, [.primaryCodex, .secondaryCodex, .claude, .copilot])
+        XCTAssertTrue(providers.selectAccount(.copilot))
+        let selected = providers.selectedMonitor
+
+        providers.moveAccount(.secondaryCodex, .earlier)
+        providers.moveAccount(.secondaryCodex, .earlier)
+        providers.moveAccount(.copilot, .earlier)
+        XCTAssertEqual(providers.enabledAccounts, [.secondaryCodex, .primaryCodex, .copilot, .claude])
+        XCTAssertTrue(providers.selectedMonitor === selected)
+        XCTAssertEqual(makeProviders().enabledAccounts, providers.enabledAccounts)
+
+        providers.setSecondCodexEnabled(false)
+        providers.moveAccount(.copilot, .earlier)
+        XCTAssertEqual(providers.enabledAccounts, [.copilot, .primaryCodex, .claude])
+        providers.setSecondCodexEnabled(true)
+        XCTAssertEqual(providers.enabledAccounts, [.secondaryCodex, .copilot, .primaryCodex, .claude])
+        providers.setSecondCodexEnabled(false)
+    }
+
     private static func snapshot(at now: Date, remaining: Double, email: String) -> UsageSnapshot {
         UsageSnapshot(
             mainLimit: LimitReading(limitId: "codex", name: "Codex", window: UsageWindow(

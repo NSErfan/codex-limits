@@ -2,6 +2,29 @@ import XCTest
 @testable import CodexLimits
 
 final class ModelActivityStoreTests: XCTestCase {
+    @MainActor func testRefreshingBothProfilesKeepsTheirLocalActivitySeparate() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = directory.appendingPathComponent("codex")
+        let second = directory.appendingPathComponent("codex-2")
+        try writeSession(home: first, folder: "sessions", model: "first-model", tokens: 25)
+        try writeSession(home: second, folder: "archived_sessions", model: "second-model", tokens: 75)
+
+        let primary = ModelActivityStore(home: first)
+        let secondary = ModelActivityStore(home: second)
+        await primary.refresh()
+        await secondary.refresh()
+
+        XCTAssertEqual(primary.models, ["first-model"])
+        XCTAssertEqual(primary.detail(at: nil).total, 25)
+        XCTAssertEqual(secondary.models, ["second-model"])
+        XCTAssertEqual(secondary.detail(at: nil).total, 75)
+        let environment = ["CODEX_HOME": first.path]
+        XCTAssertEqual(UsageAccount.primaryCodex.codexProfile?.home(environment: environment).path, first.path)
+        XCTAssertEqual(UsageAccount.secondaryCodex.codexProfile?.home(environment: environment).path,
+                       CodexProfile.secondaryHome.path)
+    }
+
     @MainActor func testBurndownFollowsPeriodWhileFiltersKeepTheObservedCurve() {
         let now = Date(timeIntervalSince1970: 1_789_000_000)
         let store = ModelActivityStore(now: now)
@@ -90,6 +113,18 @@ final class ModelActivityStoreTests: XCTestCase {
     private func event(_ date: Date, _ tokens: Int64) -> ModelActivityEvent {
         .init(id: date.description, date: date, group: .init(model: "a", effort: "high"),
               tokens: .init(input: tokens, output: 0, cached: 0, total: tokens))
+    }
+
+    private func writeSession(home: URL, folder: String, model: String, tokens: Int) throws {
+        let sessions = home.appendingPathComponent(folder)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let timestamp = Date().addingTimeInterval(-60).ISO8601Format()
+        let session = """
+        {"type":"turn_context","payload":{"model":"\(model)","effort":"high","turn_id":"shared"}}
+        {"type":"event_msg","timestamp":"\(timestamp)","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\(tokens),"output_tokens":0,"cached_input_tokens":0,"total_tokens":\(tokens)},"last_token_usage":{"input_tokens":\(tokens),"output_tokens":0,"cached_input_tokens":0,"total_tokens":\(tokens)}}}}
+
+        """
+        try session.write(to: sessions.appendingPathComponent("session.jsonl"), atomically: true, encoding: .utf8)
     }
 
 }

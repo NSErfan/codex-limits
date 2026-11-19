@@ -33,8 +33,10 @@ struct ModelActivityAppPresence: NSViewRepresentable {
     }
 
     @MainActor final class Coordinator: NSObject {
+        // Activation belongs to the app, so a window closing can only restore it after the last one leaves.
+        private static var activeCoordinators: Set<ObjectIdentifier> = []
+        private static var previousPolicy: NSApplication.ActivationPolicy?
         private weak var window: NSWindow?
-        private var previousPolicy: NSApplication.ActivationPolicy?
 
         func attach(_ window: NSWindow) {
             guard self.window !== window else { return }
@@ -57,16 +59,17 @@ struct ModelActivityAppPresence: NSViewRepresentable {
         }
 
         private func showInSwitcher() {
-            guard previousPolicy == nil else { return }
-            previousPolicy = NSApp.activationPolicy()
+            guard Self.activeCoordinators.insert(ObjectIdentifier(self)).inserted,
+                  Self.activeCoordinators.count == 1 else { return }
+            Self.previousPolicy = NSApp.activationPolicy()
             NSApp.setActivationPolicy(.regular)
         }
 
         private func restorePolicy() {
-            if let previousPolicy {
-                NSApp.setActivationPolicy(previousPolicy)
-                self.previousPolicy = nil
-            }
+            guard Self.activeCoordinators.remove(ObjectIdentifier(self)) != nil,
+                  Self.activeCoordinators.isEmpty, let previousPolicy = Self.previousPolicy else { return }
+            NSApp.setActivationPolicy(previousPolicy)
+            Self.previousPolicy = nil
         }
 
         @objc private func windowWillClose(_ notification: Notification) { restorePolicy() }

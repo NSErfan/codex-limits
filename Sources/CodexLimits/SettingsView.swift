@@ -27,7 +27,12 @@ struct SettingsView: View {
 
             Section("Accounts") {
                 ForEach(providers.enabledAccounts) { account in
-                    ProviderAccountSettings(monitor: providers.monitor(forAccount: account), login: login)
+                    accountSettings(account)
+                }
+                if providers.enabledAccounts.count > 1 {
+                    Text("Use the arrows to change the order of accounts in the menu.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if providers.isEnabled(.codex) {
                     Toggle("Track a second Codex account", isOn: Binding(
@@ -35,7 +40,7 @@ struct SettingsView: View {
                         set: providers.setSecondCodexEnabled
                     ))
                     if providers.isSecondCodexEnabled {
-                        Text("Sign in to Codex 2 with your other account. Desktop widgets show the first Codex account.")
+                        Text("Sign in to Codex 2 with your other account. Desktop widgets show Codex.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -144,6 +149,15 @@ struct SettingsView: View {
 
     private var menuBarWindowProviders: [UsageProvider] {
         providers.enabledProviders.filter { MenuBarUsageWindow.options(for: $0).count > 1 }
+    }
+
+    private func accountSettings(_ account: UsageAccount) -> some View {
+        ProviderAccountSettings(
+            monitor: providers.monitor(forAccount: account),
+            login: login,
+            moveEarlier: account != providers.enabledAccounts.first ? { providers.moveAccount(account, .earlier) } : nil,
+            moveLater: account != providers.enabledAccounts.last ? { providers.moveAccount(account, .later) } : nil
+        )
     }
 
     private func providerToggle(_ provider: UsageProvider) -> some View {

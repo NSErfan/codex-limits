@@ -44,6 +44,8 @@ background helper. Its saved readings and history are kept for when you turn it 
 desktop widgets say **Turned off in Codex Limits** instead of showing an old reading. At least one
 provider stays on. The menu hides the selector when only one account is available.
 
+In **Settings → Accounts**, use the up and down arrows next to each account to change the menu order.
+
 ### Track two Codex subscriptions
 
 In **Settings → Accounts**, turn on **Track a second Codex account**. Click **Sign in…** for
@@ -54,8 +56,9 @@ Both accounts refresh independently, including during background updates. Each h
 saved readings, history, and chart settings. Codex 2 uses its own CLI home at
 `~/Library/Application Support/com.github.nserfan.CodexLimits/CodexSecondaryProfile`;
 the Codex CLI manages its login there. Your existing CLI profile stays in use for the first account.
-Turning off Codex 2 stops its checks and keeps its sign-in and history. Desktop widgets and
-the Model Activity window continue to use the first Codex account.
+Turning off Codex 2 stops its checks and keeps its sign-in and history. Desktop widgets show
+the **Codex** account regardless of menu order. To open its own **Activity** window, select
+**Codex 2** in the menu and click **Activity**.
 
 <details>
 <summary>Menu-bar appearance options</summary>
@@ -288,10 +291,11 @@ Install the app in `/Applications` before enabling background collection, since 
 
 ## Model and effort activity
 
-Open **Activity** from the Codex menu to inspect local Codex token activity in
-a separate, resizable window. Activity is available while Codex is on; turning Codex off closes it. While Activity is open (including minimized), Codex
-Limits appears in the Dock and Command-Tab. Closing Activity restores menu-bar-only
-mode. Choose Window, 7 days, or 30 days, then group events
+Open **Activity** from either Codex account in the menu to inspect its local token activity
+in a separate, resizable window. Turning off an account closes its Activity window. As long
+as any Activity window is open (including minimized), Codex Limits appears in the Dock and
+Command-Tab. Closing the last one restores menu-bar-only mode. Choose Current period, 7 days,
+or 30 days, then group events
 into 30-minute, hourly, six-hour, or daily intervals. Model and reasoning-effort
 checkboxes filter the graphs, detail rows, and both pie charts; **Reset filters** restores all
 activity. A remaining-limit burndown graph stays above the token timeline, using
@@ -329,9 +333,17 @@ missing logs, and metadata missing from older Codex versions can leave gaps;
 missing model/effort fields appear as **Unknown**. Events are assigned to their
 recorded timestamp, not spread over an inferred execution duration.
 
-The window streams usage metadata from `sessions/` and `archived_sessions/` under
-`CODEX_HOME` when set, otherwise `~/.codex`. It does not save or display conversation
-content, modify logs, or send activity data anywhere. Repeated cumulative counters
+Each Codex account has its own Activity window and allowance history. The window streams usage
+metadata from `sessions/` and `archived_sessions/` in that account's CLI home. For **Codex**,
+that's `CODEX_HOME` when set, otherwise `~/.codex`. For **Codex 2**, run the CLI with its
+separate profile to record sessions there:
+
+```sh
+CODEX_HOME="$HOME/Library/Application Support/com.github.nserfan.CodexLimits/CodexSecondaryProfile" codex
+```
+
+The app does not save or display conversation content, modify logs, or send activity data
+anywhere. Repeated cumulative counters
 and copied turn events are deduplicated. It caches unchanged files in memory and
 refreshes once a minute while the window is open; the first scan of a large history
 can take several seconds. The main menu and desktop widgets do not scan these logs.
@@ -348,7 +360,7 @@ Review the resulting usage totals and dates before sharing.
 
 ## Desktop widgets
 
-Widgets cover the first Codex account and Claude Code. Codex 2 and Copilot are shown in the app.
+Widgets cover Codex and Claude Code. Codex 2 and Copilot are shown in the app.
 
 **Claude + Codex allowance** shows both providers' account-wide weekly balances together.
 The small square keeps each balance and a compact **…% / day** suggested pace caption in view.
